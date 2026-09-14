@@ -42,6 +42,7 @@ import com.mdportnov.monk.shared.data.nextMidnightMillis
 import com.mdportnov.monk.shared.data.nowMillis
 import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.ThemeMode
+import com.mdportnov.monk.shared.ui.theme.supportsDynamicColor
 import com.mdportnov.monk.shared.ui.components.Hint
 import com.mdportnov.monk.shared.ui.components.LabeledRow
 import com.mdportnov.monk.shared.ui.components.MonkCard
@@ -184,6 +185,11 @@ fun SettingsScreen(store: MonkStore, modifier: Modifier = Modifier) {
                         onClick = { store.updateConfig { it.copy(theme = mode) } },
                         shape = SegmentedButtonDefaults.itemShape(i, modes.size),
                     ) { Text(label) }
+                }
+            }
+            if (supportsDynamicColor()) {
+                LabeledRow(title = s.dynamicColor, subtitle = s.dynamicColorHint) {
+                    Switch(checked = config.dynamicColor, onCheckedChange = { on -> store.updateConfig { it.copy(dynamicColor = on) } })
                 }
             }
         }

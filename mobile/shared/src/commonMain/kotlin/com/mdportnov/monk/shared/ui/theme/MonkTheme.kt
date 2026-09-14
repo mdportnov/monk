@@ -124,13 +124,22 @@ private fun monkTypography(family: FontFamily) = Typography(
 @Composable
 fun MonkTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val strings = remember { stringsForSystem() }
     val family = montserrat()
+    val dynamic = if (dynamicColor) platformDynamicColorScheme(darkTheme) else null
+    // Material You keeps its own surfaces but our accent semantics stay: tertiary must read as
+    // "walked away" (green-ish) and error as "blocked", so those two are pinned.
+    val scheme = when {
+        dynamic == null -> if (darkTheme) DarkScheme else LightScheme
+        darkTheme -> dynamic.copy(tertiary = MonkColors.Mint, error = MonkColors.Rose)
+        else -> dynamic.copy(tertiary = LightScheme.tertiary, error = LightScheme.error)
+    }
     CompositionLocalProvider(LocalStrings provides strings) {
         MaterialTheme(
-            colorScheme = if (darkTheme) DarkScheme else LightScheme,
+            colorScheme = scheme,
             shapes = MonkShapes,
             typography = monkTypography(family),
             content = content,

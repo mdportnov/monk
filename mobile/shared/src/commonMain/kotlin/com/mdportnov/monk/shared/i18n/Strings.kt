@@ -138,6 +138,8 @@ class Strings(private val ru: Boolean) {
     val themeSystem get() = t("System", "Как в системе")
     val themeLight get() = t("Light", "Светлая")
     val themeDark get() = t("Dark", "Тёмная")
+    val dynamicColor get() = t("Wallpaper colors", "Цвета обоев")
+    val dynamicColorHint get() = t("Material You palette from your wallpaper. Off = Monk's own blue and violet.", "Палитра Material You из ваших обоев. Выкл = фирменные синий и фиолетовый Monk.")
     val data get() = t("Data", "Данные")
     val resetStats get() = t("Reset statistics", "Сбросить статистику")
     val resetStatsConfirm get() = t("Delete all statistics? Apps and settings stay.", "Удалить всю статистику? Приложения и настройки останутся.")

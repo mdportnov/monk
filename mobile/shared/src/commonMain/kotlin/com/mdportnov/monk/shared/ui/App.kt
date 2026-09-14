@@ -10,6 +10,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,17 +41,26 @@ class Navigator {
     fun pop() { if (canGoBack) { forward = false; stack = stack.dropLast(1) } }
 }
 
+/** Resolves the user's theme choice against the system setting. */
 @Composable
-fun MonkApp(onBackHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> }) {
+fun resolveDarkTheme(mode: ThemeMode): Boolean = when (mode) {
+    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
+
+@Composable
+fun MonkApp(
+    onBackHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
+    /** Lets the host paint window background and system bars to match; called on every change. */
+    onThemeResolved: (dark: Boolean) -> Unit = {},
+) {
     val nav = remember { Navigator() }
     onBackHandler(nav.canGoBack) { nav.pop() }
     val config by MonkRuntime.store.config.collectAsStateWithLifecycle()
-    val dark = when (config.theme) {
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    }
-    MonkTheme(darkTheme = dark) {
+    val dark = resolveDarkTheme(config.theme)
+    LaunchedEffect(dark) { onThemeResolved(dark) }
+    MonkTheme(darkTheme = dark, dynamicColor = config.dynamicColor) {
         Surface(Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = nav.current,

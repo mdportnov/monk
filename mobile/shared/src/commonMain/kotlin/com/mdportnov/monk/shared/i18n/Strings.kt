@@ -22,14 +22,9 @@ class Strings(private val ru: Boolean) {
         "Monk needs it to notice which app is in front. It never reads screen content.",
         "Нужна, чтобы Monk видел, какое приложение открыто. Содержимое экрана не читается.",
     )
-    val setupOverlay get() = t("Display over other apps", "Поверх других приложений")
-    val setupOverlayHint get() = t(
-        "Optional. Makes the pause screen appear reliably on some phones.",
-        "Необязательно. На некоторых телефонах помогает экрану паузы появляться надёжно.",
-    )
     val setupRestricted get() = t(
-        "Android 13+: if the switch is greyed out, open App info → ⋮ → Allow restricted settings first.",
-        "Android 13+: если переключатель серый, сначала откройте О приложении → ⋮ → Разрешить ограниченные настройки.",
+        "Android 13+: the switch is greyed out for sideloaded apps. Tap it once anyway, then open App info → ⋮ → Allow restricted settings, and come back.",
+        "Android 13+: для установленных вручную приложений переключатель серый. Всё равно нажмите его один раз, затем откройте О приложении → ⋮ → Разрешить ограниченные настройки и вернитесь.",
     )
     val enable get() = t("Enable", "Включить")
     val grant get() = t("Grant", "Разрешить")
@@ -69,6 +64,7 @@ class Strings(private val ru: Boolean) {
     val defaultsHint get() = t("Used by apps without their own setting.", "Для приложений без своих настроек.")
     val scheduleTitle get() = t("Schedule", "Расписание")
     val scheduleHint get() = t("Protect only inside this window. Off = always.", "Защита только в этом окне. Выкл = всегда.")
+    val scheduleAllDay get() = t("Same start and end = the whole day.", "Одинаковые начало и конец = весь день.")
     val from get() = t("From", "С")
     val to get() = t("To", "До")
     val about get() = t("About", "О приложении")
@@ -89,7 +85,8 @@ class Strings(private val ru: Boolean) {
 
     val interceptBreathe get() = t("Breathe", "Вдох. Выдох.")
     val interceptQuestion get() = t("Do you really want to open", "Правда хотите открыть")
-    val interceptBlocked get() = t("is blocked", "под запретом")
+    fun interceptBlockedTitle(label: String) = t("$label is blocked", "$label под запретом")
+    fun interceptQuestionApp(label: String) = t("$label?", "$label?")
     val interceptBlockedHint get() = t("You chose this earlier. Future you says thanks.", "Вы сами так решили. Будущий вы скажет спасибо.")
     val interceptNotNow get() = t("Not now", "Не сейчас")
     val interceptBack get() = t("Back to focus", "Вернуться к делу")

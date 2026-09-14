@@ -20,10 +20,26 @@ android {
         compose = true
     }
 
+    // Stable release key: Android refuses an in-place update signed with a different key, and a
+    // reinstall wipes the watch list. Wire it via env vars or gradle.properties; without it the
+    // release build falls back to the debug key for local runs only.
+    val keystorePath = System.getenv("MONK_KEYSTORE_FILE")
+        ?: providers.gradleProperty("MONK_KEYSTORE_FILE").orNull
+    signingConfigs {
+        create("release") {
+            if (keystorePath != null) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("MONK_KEYSTORE_PASSWORD") ?: providers.gradleProperty("MONK_KEYSTORE_PASSWORD").orNull
+                keyAlias = System.getenv("MONK_KEY_ALIAS") ?: providers.gradleProperty("MONK_KEY_ALIAS").orNull
+                keyPassword = System.getenv("MONK_KEY_PASSWORD") ?: providers.gradleProperty("MONK_KEY_PASSWORD").orNull
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystorePath != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
 

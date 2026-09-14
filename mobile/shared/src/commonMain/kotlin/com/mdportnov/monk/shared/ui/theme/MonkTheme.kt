@@ -8,6 +8,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.mdportnov.monk.shared.i18n.LocalStrings
@@ -87,7 +88,8 @@ fun MonkTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    CompositionLocalProvider(LocalStrings provides stringsForSystem()) {
+    val strings = remember { stringsForSystem() }
+    CompositionLocalProvider(LocalStrings provides strings) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkScheme else LightScheme,
             shapes = MonkShapes,

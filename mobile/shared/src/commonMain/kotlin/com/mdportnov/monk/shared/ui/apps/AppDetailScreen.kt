@@ -21,11 +21,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,10 +46,8 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
     val s = strings
     val config by store.config.collectAsStateWithLifecycle()
     val app = config.app(packageName)
-    if (app == null) {
-        onClose()
-        return
-    }
+    LaunchedEffect(app == null) { if (app == null) onClose() }
+    if (app == null) return
     Scaffold(
         topBar = {
             TopAppBar(

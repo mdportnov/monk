@@ -41,6 +41,9 @@ import com.mdportnov.monk.shared.platform.AppIcon
 import com.mdportnov.monk.shared.ui.theme.MonkColors
 import com.mdportnov.monk.shared.ui.theme.MonkTheme
 import kotlinx.coroutines.delay
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 
 /**
  * The splash that lands on top of a watched app. Always dark: it is meant to feel like a pause,
@@ -59,10 +62,14 @@ fun InterceptScreen(
     MonkTheme(darkTheme = true) {
         val s = strings
         var remaining by remember(packageName, delaySeconds) { mutableIntStateOf(if (mode == BlockMode.DELAY) delaySeconds else 0) }
-        LaunchedEffect(packageName, delaySeconds) {
-            while (remaining > 0) {
-                delay(1000)
-                remaining--
+        // Ticks only while RESUMED: pulling the notification shade over the pause must not wait it out.
+        val lifecycle = LocalLifecycleOwner.current.lifecycle
+        LaunchedEffect(packageName, delaySeconds, lifecycle) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                while (remaining > 0) {
+                    delay(1000)
+                    remaining--
+                }
             }
         }
         val ready = mode == BlockMode.DELAY && remaining == 0
@@ -86,7 +93,7 @@ fun InterceptScreen(
                     Spacer(Modifier.height(40.dp))
                     if (mode == BlockMode.BLOCK) {
                         Text(
-                            "$label ${s.interceptBlocked}",
+                            s.interceptBlockedTitle(label),
                             style = MaterialTheme.typography.headlineSmall,
                             color = MonkColors.Fog,
                             textAlign = TextAlign.Center,
@@ -107,7 +114,7 @@ fun InterceptScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            if (remaining > 0) label else "$label?",
+                            if (remaining > 0) label else s.interceptQuestionApp(label),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,

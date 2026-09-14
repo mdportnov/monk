@@ -74,6 +74,8 @@ fun SettingsScreen(store: MonkStore, modifier: Modifier = Modifier) {
                         val on = day in config.schedule.days
                         FilterChip(
                             selected = on,
+                            // At least one day stays selected: an empty set would silently pause protection forever.
+                            enabled = !(on && config.schedule.days.size == 1),
                             onClick = {
                                 store.updateConfig {
                                     val days = if (on) it.schedule.days - day else it.schedule.days + day
@@ -91,6 +93,7 @@ fun SettingsScreen(store: MonkStore, modifier: Modifier = Modifier) {
                 TimePickerRow(s.to, config.schedule.endMinute) { m ->
                     store.updateConfig { it.copy(schedule = it.schedule.copy(endMinute = m)) }
                 }
+                Text(s.scheduleAllDay, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 

@@ -8,9 +8,7 @@ import com.mdportnov.monk.shared.model.InstalledApp
 data class PermissionStatus(
     /** The accessibility service that watches foreground apps. Required. */
     val accessibilityEnabled: Boolean,
-    /** "Display over other apps". Optional, makes the interception more reliable on some OEMs. */
-    val overlayGranted: Boolean,
-    /** Sideloaded apps on Android 13+ need "Allow restricted settings" before the service can be enabled. */
+    /** APKs installed from a downloaded file on Android 13+ need "Allow restricted settings" first. */
     val mayNeedRestrictedSettingsUnlock: Boolean,
 )
 
@@ -20,7 +18,6 @@ interface MonkPlatform {
     suspend fun installedApps(): List<InstalledApp>
     fun permissions(): PermissionStatus
     fun openAccessibilitySettings()
-    fun openOverlaySettings()
     fun openAppInfo()
 }
 

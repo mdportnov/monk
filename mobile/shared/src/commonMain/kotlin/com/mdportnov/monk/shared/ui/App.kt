@@ -29,10 +29,12 @@ sealed interface Route {
 class Navigator {
     var stack by mutableStateOf<List<Route>>(listOf(Route.Main))
         private set
+    var forward by mutableStateOf(true)
+        private set
     val current get() = stack.last()
     val canGoBack get() = stack.size > 1
-    fun push(route: Route) { stack = stack + route }
-    fun pop() { if (canGoBack) stack = stack.dropLast(1) }
+    fun push(route: Route) { forward = true; stack = stack + route }
+    fun pop() { if (canGoBack) { forward = false; stack = stack.dropLast(1) } }
 }
 
 @Composable
@@ -44,8 +46,7 @@ fun MonkApp(onBackHandler: @Composable (enabled: Boolean, onBack: () -> Unit) ->
             AnimatedContent(
                 targetState = nav.current,
                 transitionSpec = {
-                    val forward = nav.stack.indexOf(targetState) >= nav.stack.indexOf(initialState)
-                    val dir = if (forward) 1 else -1
+                    val dir = if (nav.forward) 1 else -1
                     (slideInHorizontally { dir * it / 6 } + fadeIn()) togetherWith
                         (slideOutHorizontally { -dir * it / 6 } + fadeOut())
                 },

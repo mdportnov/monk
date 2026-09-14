@@ -35,6 +35,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -87,7 +89,7 @@ fun HomeScreen(
                 item { UnsupportedCard() }
             } else {
                 item { StatusCard(config, permissions, onToggle = { on -> store.updateConfig { it.copy(enabled = on) } }) }
-                if (!permissions.accessibilityEnabled || !permissions.overlayGranted) {
+                if (!permissions.accessibilityEnabled) {
                     item { SetupCard(permissions, platform) }
                 }
             }
@@ -136,7 +138,14 @@ fun MonkMark(size: androidx.compose.ui.unit.Dp) {
 @Composable
 private fun StatusCard(config: MonkConfig, permissions: PermissionStatus, onToggle: (Boolean) -> Unit) {
     val s = strings
-    val moment = localMoment()
+    // Re-evaluated once a minute so "Paused by schedule" flips on its own.
+    var moment by remember { mutableStateOf(localMoment()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            moment = localMoment()
+        }
+    }
     val scheduleActive = config.schedule.isActive(moment.dayIso, moment.minuteOfDay)
     val effective = config.enabled && permissions.accessibilityEnabled
     val subtitle = when {
@@ -152,9 +161,7 @@ private fun StatusCard(config: MonkConfig, permissions: PermissionStatus, onTogg
     }
     MonkCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).clip(CircleShape).let { it }.then(Modifier), contentAlignment = Alignment.Center) {
-                Surface(color = dotColor, shape = CircleShape, modifier = Modifier.size(10.dp)) {}
-            }
+            Surface(color = dotColor, shape = CircleShape, modifier = Modifier.size(10.dp)) {}
             Spacer(Modifier.size(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(s.protection, style = MaterialTheme.typography.titleMedium)
@@ -182,18 +189,10 @@ private fun SetupCard(permissions: PermissionStatus, platform: MonkPlatform) {
             action = s.enable,
             onAction = platform::openAccessibilitySettings,
         )
-        if (!permissions.accessibilityEnabled && permissions.mayNeedRestrictedSettingsUnlock) {
+        if (permissions.mayNeedRestrictedSettingsUnlock) {
             Text(s.setupRestricted, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TextButton(onClick = platform::openAppInfo) { Text(s.appInfo) }
         }
-        PermissionRow(
-            title = s.setupOverlay,
-            hint = s.setupOverlayHint,
-            granted = permissions.overlayGranted,
-            grantedLabel = s.granted,
-            action = s.grant,
-            onAction = platform::openOverlaySettings,
-        )
     }
 }
 

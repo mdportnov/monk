@@ -1,15 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Lists every launchable app in "Add apps". Sideloaded build; Play would ask for a justification. -->
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-    <!-- Optional: lets the pause screen start from the background on OEMs that ignore the
-         accessibility-service exemption. Requested from the setup card, never at launch. -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Package visibility (Android 11+): launchable apps for "Add apps" and icons, home apps
+         and keyboards for the service's ignore list. No QUERY_ALL_PACKAGES. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+        <intent>
+            <action android:name="android.view.InputMethod" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+        </intent>
+    </queries>
 
+    <!-- No INTERNET permission on purpose: nothing leaves the device. -->
+
+    <!-- allowBackup=false: the watch list would otherwise ride along in Google Drive backups,
+         which contradicts the "everything stays on the device" promise in the About card. -->
     <application
         android:name=".MonkApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:supportsRtl="true"
@@ -19,7 +36,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -36,7 +53,7 @@
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:showOnLockScreen="false"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.Monk.Intercept" />
 
         <service

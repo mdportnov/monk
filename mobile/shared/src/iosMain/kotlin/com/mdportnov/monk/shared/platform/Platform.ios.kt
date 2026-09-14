@@ -29,9 +29,8 @@ class UserDefaultsStore : KeyValueStore {
 object IosPlatform : MonkPlatform {
     override val supportsBlocking = false
     override suspend fun installedApps(): List<InstalledApp> = emptyList()
-    override fun permissions() = PermissionStatus(accessibilityEnabled = false, overlayGranted = false, mayNeedRestrictedSettingsUnlock = false)
+    override fun permissions() = PermissionStatus(accessibilityEnabled = false, mayNeedRestrictedSettingsUnlock = false)
     override fun openAccessibilitySettings() = Unit
-    override fun openOverlaySettings() = Unit
     override fun openAppInfo() = Unit
 }
 

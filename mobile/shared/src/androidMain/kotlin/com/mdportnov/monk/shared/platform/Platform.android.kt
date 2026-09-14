@@ -33,19 +33,20 @@ class SharedPrefsStore(context: Context) : KeyValueStore {
 
 actual fun systemLanguage(): String = Locale.getDefault().language
 
-private val iconCache = HashMap<String, ImageBitmap>()
+private val iconCache = java.util.concurrent.ConcurrentHashMap<String, ImageBitmap>()
 
 @Composable
 actual fun AppIcon(packageName: String, size: Dp, modifier: Modifier) {
     val context = LocalContext.current
-    val bitmap by produceState<ImageBitmap?>(iconCache[packageName], packageName) {
+    val px = (size.value * context.resources.displayMetrics.density).toInt().coerceAtLeast(48)
+    val key = "$packageName@$px"
+    val bitmap by produceState<ImageBitmap?>(iconCache[key], key) {
         if (value == null) {
             value = withContext(Dispatchers.IO) {
                 runCatching {
-                    val px = (size.value * context.resources.displayMetrics.density).toInt().coerceAtLeast(48)
                     val drawable: Drawable = context.packageManager.getApplicationIcon(packageName)
                     drawable.toBitmap(px, px).asImageBitmap()
-                }.getOrNull()?.also { iconCache[packageName] = it }
+                }.getOrNull()?.also { iconCache[key] = it }
             }
         }
     }

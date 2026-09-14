@@ -75,6 +75,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -109,6 +110,7 @@ import com.mdportnov.monk.shared.ui.components.UpdateCard
 import com.mdportnov.monk.shared.model.ScreenTimeReport
 import com.mdportnov.monk.shared.ui.stats.rememberScreenTime
 import androidx.compose.foundation.clickable
+import com.mdportnov.monk.shared.ui.LocalHeaderAnchor
 import com.mdportnov.monk.shared.ui.Route
 import com.mdportnov.monk.shared.ui.LocalOpenRoute
 import com.mdportnov.monk.shared.ui.LocalHostActions
@@ -151,6 +153,12 @@ fun HomeScreen(
     // Screen time of the watched apps for the week card; re-read with the heartbeat so "today" keeps moving.
     val watchedPackages = remember(config.apps) { config.apps.map { it.packageName }.toSet() }
     val screenTime = rememberScreenTime(platform, days = 7, packages = watchedPackages, granted = permissions.usageAccessGranted, tick = now / 60_000)
+
+    // The bar's condensed heading lifts out of the status card; tell the anchor whether this page
+    // has one at all, so the setup state keeps the wordmark instead of an empty bar.
+    val hasStatusCard = platform.supportsBlocking && permissions.accessibilityEnabled
+    val anchor = LocalHeaderAnchor.current
+    SideEffect { anchor?.cardPresent = hasStatusCard }
 
     // The "Add apps" pill floats over the list; without room of its own it would sit on the last
     // row for good, since a short list cannot be scrolled clear of it.

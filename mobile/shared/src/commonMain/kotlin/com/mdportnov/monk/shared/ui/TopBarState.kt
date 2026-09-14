@@ -34,6 +34,12 @@ class HeaderAnchor(val scrollPx: () -> Float) {
      * has no card, −∞ once it has scrolled past, +∞ while it is still below the viewport.
      */
     var cardTop: (() -> Float?)? = null
+    /**
+     * Whether the page currently puts a status card in its list at all. Without it [cardTop]
+     * cannot tell "no card on this page" from "scrolled past the card": both leave the list
+     * without a status item, and a setup-state page would lose its wordmark on the first scroll.
+     */
+    var cardPresent by mutableStateOf(false)
     var cardX = 0f
     var cardWidth = 0f
     /** Card padding, glyph half-size, header row height, where the bar ends, and the lead-in before contact. */

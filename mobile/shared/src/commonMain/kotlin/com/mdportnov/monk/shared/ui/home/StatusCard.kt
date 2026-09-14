@@ -530,8 +530,12 @@ private fun MorphRow(
                     transformOrigin = TransformOrigin(0f, 0f)
                     scaleX = s
                     scaleY = s
-                    translationX = lerp(ax, bx, p)
-                    translationY = lerp(row + a.y - statusTop, b.y, p)
+                    // Once the card has scrolled past, its row is at −∞ and there is nothing left to
+                    // travel from: the line belongs to the bar outright. Lerping from infinity would
+                    // give NaN and place the whole row nowhere — an empty bar.
+                    val settled = !row.isFinite()
+                    translationX = if (settled) bx else lerp(ax, bx, p)
+                    translationY = if (settled) b.y else lerp(row + a.y - statusTop, b.y, p)
                     alpha = when {
                         fade > 0f -> smoothstep(0.45f, 0.75f, p)
                         fade < 0f -> 1f - smoothstep(0.35f, 0.65f, p)

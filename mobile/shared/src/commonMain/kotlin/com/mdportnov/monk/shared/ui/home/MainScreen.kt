@@ -152,6 +152,8 @@ fun MainScreen(
                 val info = list.layoutInfo
                 val item = info.visibleItemsInfo.firstOrNull { it.key == "status" }
                 when {
+                    // No status card on the page at all: card mode is off and the wordmark stands.
+                    !home.cardPresent -> null
                     item != null -> padTop + item.offset
                     (info.visibleItemsInfo.firstOrNull()?.index ?: 0) > 0 -> Float.NEGATIVE_INFINITY
                     else -> null

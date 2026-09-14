@@ -85,7 +85,7 @@ fun StatsScreen(store: MonkStore, platform: MonkPlatform, scrollState: ScrollSta
     val intercepted = days.sumOf { it.intercepted }
     val away = days.sumOf { it.turnedAway }
     val opened = days.sumOf { it.opened }
-    val labels = remember(config.apps, config.archivedApps) { (config.archivedApps + config.apps).associate { it.packageName to it.label } }
+    val labels = remember(config.apps, config.archivedApps, stats.labels) { stats.labels + (config.archivedApps + config.apps).associate { it.packageName to it.label } }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),

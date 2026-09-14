@@ -48,3 +48,14 @@ class UninstallArchiveTest {
         assertNull(store.config.value.archived("com.example.ig")?.uninstalledAt)
     }
 }
+
+class ScheduleConsistencyTest {
+    @Test
+    fun scheduleReportsWhenItComesBack() {
+        val s = com.mdportnov.monk.shared.model.Schedule(enabled = true, days = setOf(1, 2, 3, 4, 5, 6, 7), startMinute = 9 * 60, endMinute = 18 * 60)
+        assertEquals(false, s.isActive(1, 7 * 60))
+        assertEquals(120, s.minutesToNextChange(1, 7 * 60))
+        assertEquals(true, s.isActive(1, 10 * 60))
+        assertNull(com.mdportnov.monk.shared.model.Schedule(enabled = false).minutesToNextChange(1, 7 * 60))
+    }
+}

@@ -230,7 +230,8 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
 
     override fun schedule(delayMs: Long, action: () -> Unit) {
         cancelScheduled()
-        scheduled = Runnable { scheduled = null; action() }.also { handler.postDelayed(it, delayMs) }
+        Log.d(TAG, "re-judge ${gate.lastForeground} in ${delayMs}ms")
+        scheduled = Runnable { scheduled = null; Log.d(TAG, "re-judging ${gate.lastForeground} on timer"); action() }.also { handler.postDelayed(it, delayMs) }
     }
 
     override fun cancelScheduled() {

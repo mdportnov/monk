@@ -3,7 +3,11 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
-## 1.7.1
+## 1.7.2
+
+- One truth for the protection state everywhere: the card, the compact bar, the shade tiles and the notification agree. Off by schedule says when it comes back, the switch turns Monk off without a countdown then, breaks are refused while the schedule has protection off, focus stays available.
+- A break ended by focus, strict mode or switching off still counts for the half-hour cooldown; switching to Block drops a live "open for" allowance; app rows show the mode in force right now; forgotten apps keep their names in stats.
+
 
 - Fixed: after returning to the app the glass bar could stay drawn, empty, over a fully open home screen.
 

@@ -52,6 +52,8 @@ class Strings(private val ru: Boolean) {
     val lockedStayOn get() = t("Locked apps stay protected.", "Запертые приложения остаются под защитой.")
     fun focusNoStop(time: String) = t("Focus runs until $time and cannot be stopped.", "Фокус идёт до $time, остановить его нельзя.")
     fun strictNoChange(time: String) = t("Strict mode until $time: nothing can be softened.", "Строгий режим до $time: смягчить ничего нельзя.")
+    val endsBreakNote get() = t("The running break ends right away.", "Текущий перерыв закончится сразу.")
+    val turnsOnNote get() = t("Protection turns on and stays on afterwards.", "Защита включится и останется включённой.")
     val inhale get() = t("inhale", "вдох")
     val exhale get() = t("exhale", "выдох")
     fun focusUntil(time: String) = t("Focus until $time", "Фокус до $time")
@@ -72,6 +74,8 @@ class Strings(private val ru: Boolean) {
     fun appsWatched(n: Int) = t(if (n == 1) "1 app on your list gets a pause" else "$n apps on your list get a pause", "$n ${plural(n, "приложение из списка ждёт", "приложения из списка ждут", "приложений из списка ждут")} паузы")
     val offNudge get() = t("Every app on your list opens freely. The switch brings the pause back.", "Все приложения из списка открываются свободно. Переключатель вернёт паузу.")
     val scheduleOffNudge get() = t("Off by schedule; it comes back on its own.", "Выключена по расписанию; включится сама.")
+    fun scheduleBackAt(time: String) = t("Off by schedule · back at $time. The switch turns Monk off for good.", "Выключена по расписанию · вернётся в $time. Переключатель выключит Monk совсем.")
+    val scheduleOffShort get() = t("Off by schedule", "Выключена по расписанию")
     fun lockedCount(n: Int) = t(if (n == 1) "1 locked" else "$n locked", "Заперто: $n")
 
     // Onboarding / help
@@ -102,14 +106,16 @@ class Strings(private val ru: Boolean) {
     val howStatesBody get() = t(
         "On — the apps on your list open only through the pause screen.\n" +
             "Break — protection is off for a set time; starting one takes a ten-second breath, and the next break waits half an hour after the last.\n" +
-            "Focus — every app on your list is blocked outright until the timer ends; it cannot be stopped early.\n" +
-            "Strict mode — until the chosen time nothing can be softened: no off, no break, no removing apps.\n" +
+            "Focus — every app on your list is blocked outright until the timer ends; it cannot be stopped early, and it works even outside protection hours.\n" +
+            "Off by schedule — outside protection hours everything opens and no break can start; the switch still turns Monk off for good.\n" +
+            "Strict mode — until the chosen time nothing can be softened: no off, no break, no removing apps; protection hours still apply.\n" +
             "Locked app — ignores off and breaks; only removing it from the list frees it.\n" +
             "Off — everything opens; switching off takes the same ten-second breath.",
         "Включена — приложения из списка открываются только через экран паузы.\n" +
             "Перерыв — защита выключена на время; перед стартом десять секунд выдоха, следующий перерыв — через полчаса после прошлого.\n" +
-            "Фокус — все приложения из списка полностью закрыты до конца таймера, остановить его нельзя.\n" +
-            "Строгий режим — до выбранного времени ничего нельзя смягчить: ни выключить, ни взять перерыв, ни убрать приложение.\n" +
+            "Фокус — все приложения из списка полностью закрыты до конца таймера, остановить его нельзя; работает и вне часов защиты.\n" +
+            "Выключена по расписанию — вне часов защиты всё открывается, перерыв взять нельзя; переключатель по-прежнему выключает Monk совсем.\n" +
+            "Строгий режим — до выбранного времени ничего нельзя смягчить: ни выключить, ни взять перерыв, ни убрать приложение; часы защиты при этом действуют.\n" +
             "Запертое приложение — не замечает ни выключения, ни перерывов; освободить его можно, только удалив из списка.\n" +
             "Выключена — всё открывается; перед выключением те же десять секунд выдоха.",
     )

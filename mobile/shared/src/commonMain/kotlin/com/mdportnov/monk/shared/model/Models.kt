@@ -61,6 +61,15 @@ data class BlockedApp(
     /** The strictest rule open right now, or null. */
     fun activeRule(dayIso: Int, minuteOfDay: Int): TimeRule? =
         rules.filter { it.isActive(dayIso, minuteOfDay) }.minByOrNull { it.mode.ordinal }
+
+    /** A pause screen can show for this app at some hour: the delay and the allowance mean something. */
+    val hasPauseScreen get() = mode == BlockMode.DELAY || rules.any { it.mode == RuleMode.PAUSE }
+
+    /** The app can be opened at some hour, so a daily limit can be reached. */
+    val canOpen get() = mode == BlockMode.DELAY || rules.any { it.mode != RuleMode.BLOCK }
+
+    /** The limit is set and there is an hour at which it counts. */
+    val limitApplies get() = dailyLimit != null && canOpen
 }
 
 /** Weekly window arithmetic shared by the global schedule and per-app rules. */
@@ -115,6 +124,10 @@ data class Schedule(
     /** Handles windows that cross midnight (22:00 → 07:00). Day is checked at the window start. */
     fun isActive(dayIso: Int, minuteOfDay: Int): Boolean =
         !enabled || TimeWindow.isActive(days, startMinute, endMinute, dayIso, minuteOfDay)
+
+    /** Wall-clock minutes until the schedule flips next, or null when it never does. */
+    fun minutesToNextChange(dayIso: Int, minuteOfDay: Int): Int? =
+        if (!enabled) null else TimeWindow.minutesToNextChange(days, startMinute, endMinute, dayIso, minuteOfDay)
 }
 
 @Serializable
@@ -187,6 +200,27 @@ data class MonkConfig(
      */
     fun canStartBreak(now: Long) = enabled && !isStrict(now) && !isFocus(now) && !isPaused(now) && now >= nextBreakAt(now)
 
+    /** [canStartBreak], and there is something to soften: outside the schedule a break is void. */
+    fun canStartBreak(now: Long, dayIso: Int, minuteOfDay: Int) = canStartBreak(now) && schedule.isActive(dayIso, minuteOfDay)
+
+    /**
+     * The one state every surface shows, in order of what actually decides the verdict: a focus
+     * session blocks even outside the schedule and even on a break; the schedule turns
+     * everything below it off, a running break included, so "off by schedule" is what the user
+     * sees until the schedule comes back; strict mode only stops softening.
+     */
+    fun state(now: Long, dayIso: Int, minuteOfDay: Int): ProtectionState = when {
+        !enabled -> ProtectionState.OFF
+        isFocus(now) -> ProtectionState.FOCUS
+        !schedule.isActive(dayIso, minuteOfDay) -> ProtectionState.SCHEDULED_OFF
+        isPaused(now) -> ProtectionState.BREAK
+        isStrict(now) -> ProtectionState.STRICT
+        else -> ProtectionState.ON
+    }
+
+    /** The break is over from now on, by hand: the cooldown counts from this moment. */
+    fun endingBreak(now: Long): MonkConfig = if (isPaused(now)) copy(pausedUntil = 0, lastBreakEndedAt = now) else this
+
     /**
      * Every running timer moved by [deltaMillis]: commitments are measured in elapsed time, so
      * when the wall clock jumps the deadlines jump with it and nothing ends early or late.
@@ -208,6 +242,8 @@ data class MonkConfig(
         const val BREAK_COOLDOWN_MS = 30 * 60_000L
     }
 }
+
+enum class ProtectionState { OFF, FOCUS, SCHEDULED_OFF, BREAK, STRICT, ON }
 
 @Serializable
 data class AppDayStats(
@@ -238,6 +274,8 @@ data class DayStats(
 @Serializable
 data class Stats(
     val days: List<DayStats> = emptyList(),
+    /** Last known label per package, so an app forgotten from the list still has a name in its rows. */
+    val labels: Map<String, String> = emptyMap(),
 ) {
     val totalIntercepted get() = days.sumOf { it.intercepted }
     val totalTurnedAway get() = days.sumOf { it.turnedAway }

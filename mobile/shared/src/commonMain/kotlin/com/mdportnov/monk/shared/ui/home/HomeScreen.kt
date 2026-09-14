@@ -55,6 +55,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.outlined.PhoneIphone
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -88,6 +89,8 @@ import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.BlockMode
 import com.mdportnov.monk.shared.model.BlockedApp
 import com.mdportnov.monk.shared.model.MonkConfig
+import com.mdportnov.monk.shared.model.ProtectionState
+import com.mdportnov.monk.shared.model.RuleMode
 import com.mdportnov.monk.shared.model.InstalledApp
 import com.mdportnov.monk.shared.model.SuggestedApps
 import com.mdportnov.monk.shared.model.Stats
@@ -132,6 +135,8 @@ fun HomeScreen(
             now = nowMillis()
         }
     }
+    // Timers move when the wall clock is set by hand (the service shifts them): re-read the clock too.
+    LaunchedEffect(config.focusUntil, config.strictUntil, config.pausedUntil) { now = nowMillis() }
     LifecycleResumeEffect(Unit) {
         platform.refreshPermissions()
         now = nowMillis()
@@ -175,10 +180,13 @@ fun HomeScreen(
             }
             items(apps, key = { it.packageName }) { app ->
                 Box(itemMotion()) {
+                val moment = localMoment()
+                // A Block window open now wins over the allowance in the policy: no "open until" then.
+                val ruleBlocked = app.activeRule(moment.dayIso, moment.minuteOfDay)?.mode == RuleMode.BLOCK
                 AppRow(
                     app = app,
                     config = config,
-                    allowedUntil = allowances[app.packageName]?.takeIf { it > now },
+                    allowedUntil = allowances[app.packageName]?.takeIf { it > now && !ruleBlocked },
                     opensToday = stats.opensToday(today, app.packageName),
                     onEndAllowance = { store.revokeAllowance(app.packageName) },
                     onClick = { onOpenApp(app.packageName) },
@@ -256,9 +264,10 @@ private fun TodayCard(config: MonkConfig, stats: Stats, now: Long, today: String
     val s = strings
     val day = stats.day(today)
     val quote = remember(today, config.language) { Quotes.of(config.language, localMoment().dayOfYear) }
-    val running: Pair<String, Long>? = when {
-        config.isFocus(now) -> s.focus to config.focusUntil
-        config.isPaused(now) -> s.pauseFor to config.pausedUntil
+    val moment = localMoment()
+    val running: Pair<String, Long>? = when (config.state(now, moment.dayIso, moment.minuteOfDay)) {
+        ProtectionState.FOCUS -> s.focus to config.focusUntil
+        ProtectionState.BREAK -> s.pauseFor to config.pausedUntil
         else -> null
     }
     MonkCard(onClick = onOpenStats) {
@@ -599,7 +608,7 @@ private fun AppRow(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         ModeChip(app, config)
                         val limit = app.dailyLimit
-                        if (limit != null) {
+                        if (limit != null && app.limitApplies) {
                             val exhausted = opensToday >= limit
                             Pill(
                                 s.limitToday(opensToday, limit),
@@ -625,14 +634,26 @@ private fun AppRow(
     }
 }
 
+/** What the app does right now: a rule open at this hour overrides the mode, as it does in the policy. */
 @Composable
 fun ModeChip(app: BlockedApp, config: MonkConfig) {
     val s = strings
-    val block = app.mode == BlockMode.BLOCK
-    val content = if (block) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val moment = localMoment()
+    val rule = app.activeRule(moment.dayIso, moment.minuteOfDay)
+    val block = if (rule != null) rule.mode == RuleMode.BLOCK else app.mode == BlockMode.BLOCK
+    val free = rule?.mode == RuleMode.FREE
+    val content = when {
+        block -> MaterialTheme.colorScheme.error
+        free -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.primary
+    }
     Pill(
-        if (block) s.modeBlock else s.pauseChip(config.delayFor(app)),
+        when {
+            block -> s.modeBlock
+            free -> s.ruleFree
+            else -> s.pauseChip(config.delayFor(app))
+        },
         content,
-        icon = { Icon(if (block) Icons.Outlined.Block else Icons.Outlined.HourglassEmpty, null, Modifier.size(14.dp), tint = content) },
+        icon = { Icon(if (block) Icons.Outlined.Block else if (free) Icons.Outlined.Schedule else Icons.Outlined.HourglassEmpty, null, Modifier.size(14.dp), tint = content) },
     )
 }

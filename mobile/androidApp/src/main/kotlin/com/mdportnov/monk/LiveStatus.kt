@@ -7,8 +7,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.mdportnov.monk.shared.data.localMoment
 import com.mdportnov.monk.shared.i18n.stringsFor
 import com.mdportnov.monk.shared.model.MonkConfig
+import com.mdportnov.monk.shared.model.ProtectionState
 
 /**
  * An ongoing notification with the focus / break countdown, opt-in. On Android 16 it asks to be
@@ -22,9 +24,11 @@ object LiveStatus {
     fun sync(context: Context, config: MonkConfig) {
         val nm = context.getSystemService(NotificationManager::class.java)
         val now = System.currentTimeMillis()
-        val (until, isFocus) = when {
-            config.isFocus(now) -> config.focusUntil to true
-            config.isPaused(now) -> config.pausedUntil to false
+        val m = localMoment()
+        // The same state the home card shows: a break the schedule has already overtaken is not a break.
+        val (until, isFocus) = when (config.state(now, m.dayIso, m.minuteOfDay)) {
+            ProtectionState.FOCUS -> config.focusUntil to true
+            ProtectionState.BREAK -> config.pausedUntil to false
             else -> null to false
         }
         if (!config.liveStatus || until == null || !MonkNotifications.granted(context)) {

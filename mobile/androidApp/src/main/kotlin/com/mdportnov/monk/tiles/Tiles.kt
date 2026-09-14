@@ -8,6 +8,8 @@ import android.service.quicksettings.TileService
 import com.mdportnov.monk.MonkAccessibilityService
 import com.mdportnov.monk.monkGraph
 import com.mdportnov.monk.shared.data.formatClock
+import com.mdportnov.monk.shared.data.localMoment
+import com.mdportnov.monk.shared.model.ProtectionState
 import com.mdportnov.monk.shared.i18n.stringsForSystem
 import com.mdportnov.monk.shared.ui.components.COUNTDOWN_CONFIRM_SECONDS
 import kotlinx.coroutines.CoroutineScope
@@ -63,8 +65,9 @@ class PauseTileService : MonkTileService(TileRegistry.PAUSE) {
         val store = monkGraph.store
         val now = System.currentTimeMillis()
         val c = store.config.value
-        if (c.isPaused(now)) { store.resumeProtection(); return }
-        if (!c.canStartBreak(now)) return
+        val m = localMoment()
+        if (c.state(now, m.dayIso, m.minuteOfDay) == ProtectionState.BREAK) { store.resumeProtection(); return }
+        if (!store.canStartBreak(now)) return
         val s = stringsForSystem()
         val until = now + 15 * 60_000L
         val dialog = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
@@ -90,13 +93,20 @@ class PauseTileService : MonkTileService(TileRegistry.PAUSE) {
         val s = stringsForSystem()
         val now = System.currentTimeMillis()
         val c = monkGraph.store.config.value
+        val m = localMoment()
         tile.label = s.tilePause
-        when {
-            c.isStrict(now) || c.isFocus(now) -> { tile.state = Tile.STATE_UNAVAILABLE; tile.subtitleCompat(s.strictLocked) }
-            c.isPaused(now) -> { tile.state = Tile.STATE_ACTIVE; tile.subtitleCompat(s.pausedUntil(formatClock(c.pausedUntil))) }
-            !c.enabled -> { tile.state = Tile.STATE_UNAVAILABLE; tile.subtitleCompat(s.protectionOff) }
-            !c.canStartBreak(now) -> { tile.state = Tile.STATE_UNAVAILABLE; tile.subtitleCompat(s.breakCooldown(formatClock(c.nextBreakAt(now)))) }
-            else -> { tile.state = Tile.STATE_INACTIVE; tile.subtitleCompat(s.pause15) }
+        // Same state as the home card; the tile adds only the break-specific reasons for "no".
+        when (c.state(now, m.dayIso, m.minuteOfDay)) {
+            ProtectionState.FOCUS -> { tile.state = Tile.STATE_UNAVAILABLE; tile.subtitleCompat(s.focusUntil(formatClock(c.focusUntil))) }
+            ProtectionState.STRICT -> { tile.state = Tile.STATE_UNAVAILABLE; tile.subtitleCompat(s.strictLocked) }
+            ProtectionState.BREAK -> { tile.state = Tile.STATE_ACTIVE; tile.subtitleCompat(s.pausedUntil(formatClock(c.pausedUntil))) }
+            ProtectionState.OFF -> { tile.state = Tile.STATE_UNAVAILABLE; tile.subtitleCompat(s.protectionOff) }
+            ProtectionState.SCHEDULED_OFF -> { tile.state = Tile.STATE_UNAVAILABLE; tile.subtitleCompat(s.scheduleOffShort) }
+            ProtectionState.ON -> if (c.canStartBreak(now)) {
+                tile.state = Tile.STATE_INACTIVE; tile.subtitleCompat(s.pause15)
+            } else {
+                tile.state = Tile.STATE_UNAVAILABLE; tile.subtitleCompat(s.breakCooldown(formatClock(c.nextBreakAt(now))))
+            }
         }
         tile.updateTile()
     }
@@ -106,12 +116,15 @@ class PauseTileService : MonkTileService(TileRegistry.PAUSE) {
 class FocusTileService : MonkTileService(TileRegistry.FOCUS) {
     override fun onClick() {
         val now = System.currentTimeMillis()
-        if (monkGraph.store.config.value.isFocus(now)) return
+        val c = monkGraph.store.config.value
+        if (c.isFocus(now)) return
         val s = stringsForSystem()
         val until = now + 30 * 60_000L
+        // Starting focus ends a running break and turns protection on: say so where it applies.
+        val notes = listOfNotNull(s.endsBreakNote.takeIf { c.isPaused(now) }, s.turnsOnNote.takeIf { !c.enabled })
         val dialog = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(s.focusConfirmTitle)
-            .setMessage(s.focusConfirmBody(formatClock(until)))
+            .setMessage((listOf(s.focusConfirmBody(formatClock(until))) + notes).joinToString("\n\n"))
             .setPositiveButton(s.start) { _, _ ->
                 monkGraph.store.startFocus(until)
                 // The app under a live pause screen must be judged again right away.

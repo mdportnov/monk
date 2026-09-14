@@ -105,6 +105,7 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
     val permissions by platform.permissions.collectAsStateWithLifecycle()
     val host = LocalHostActions.current
     val strict = config.isStrict(nowMillis())
+    val paused = config.isPaused(nowMillis())
     var strictCandidate by rememberSaveable { mutableStateOf<Long?>(null) }
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     var showHelp by rememberSaveable { mutableStateOf(false) }
@@ -399,7 +400,13 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
         AlertDialog(
             onDismissRequest = { strictCandidate = null },
             title = { Text(s.strictConfirmTitle) },
-            text = { Text(s.strictConfirmBody(formatClock(until))) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(s.strictConfirmBody(formatClock(until)))
+                    if (paused) Hint(s.endsBreakNote)
+                    if (!config.enabled) Hint(s.turnsOnNote)
+                }
+            },
             confirmButton = { TextButton(onClick = { haptic.confirm(); store.enableStrict(until); strictCandidate = null }) { Text(s.confirm) } },
             dismissButton = { TextButton(onClick = { strictCandidate = null }) { Text(s.cancel) } },
         )

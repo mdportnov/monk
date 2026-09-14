@@ -93,7 +93,7 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
             actions = {
                 // Removal is the one door a lock leaves open: it is the whole point of the lock.
                 IconButton(onClick = { confirmRemove = true }, enabled = !strictGlobal) {
-                    Icon(Icons.Outlined.DeleteOutline, s.remove, tint = MaterialTheme.colorScheme.error)
+                    Icon(Icons.Outlined.DeleteOutline, s.remove, tint = if (strictGlobal) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.error)
                 }
             },
         )
@@ -146,7 +146,9 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
                 }
             }
 
-            if (app.mode == BlockMode.DELAY) {
+            // The pause length and the allowance matter wherever a pause screen can show, the
+            // limit wherever the app can open at all: a Block app with a Pause or Free window included.
+            if (app.hasPauseScreen) {
                 SectionTitle(s.delayLength)
                 SettingsGroup {
                     SettingRow(title = s.useDefault, subtitle = s.currently("${config.defaultDelaySeconds} ${s.seconds}")) {
@@ -188,7 +190,9 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
                         )
                     }
                 }
+            }
 
+            if (app.canOpen) {
                 SectionTitle(s.dailyLimit)
                 SettingsGroup {
                     SettingRow(title = s.noLimit, subtitle = s.dailyLimitHint) {

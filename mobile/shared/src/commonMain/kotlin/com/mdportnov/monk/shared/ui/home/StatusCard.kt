@@ -93,6 +93,7 @@ import com.mdportnov.monk.shared.data.nextMidnightMillis
 import com.mdportnov.monk.shared.data.nowMillis
 import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.MonkConfig
+import com.mdportnov.monk.shared.model.ProtectionState
 import com.mdportnov.monk.shared.platform.PermissionStatus
 import com.mdportnov.monk.shared.ui.Motion
 import com.mdportnov.monk.shared.ui.rememberFrameClock
@@ -195,7 +196,11 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
                             },
                             onToggle = { on ->
                                 haptics.toggle(on)
-                                if (on) store.updateConfig { it.copy(enabled = true, pausedUntil = 0) } else confirmOff = true
+                                when {
+                                    on -> store.switchOn()
+                                    !scheduleActive -> store.switchOff()
+                                    else -> confirmOff = true
+                                }
                             },
                         )
                     }
@@ -220,12 +225,14 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
                         Text(notice.orEmpty(), style = MaterialTheme.typography.bodySmall, color = palette.content)
                     }
                 }
+                // A break only makes sense while the schedule has protection on; a focus session
+                // blocks regardless of the schedule, so it stays on offer.
                 if (showControls && config.enabled && permissions.accessibilityEnabled && !focus) {
-                    if (paused) {
+                    if (paused && scheduleActive) {
                         AuroraChip(s.resume, palette, icon = Icons.Outlined.Shield, modifier = Modifier.fillMaxWidth()) { store.resumeProtection() }
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (!strict && config.canStartBreak(now)) {
+                            if (!strict && config.canStartBreak(now, moment.dayIso, moment.minuteOfDay)) {
                                 ActionStrip(
                                     Icons.Outlined.Coffee, s.pauseFor, s.breakWhat, palette,
                                     listOf(
@@ -235,7 +242,7 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
                                         s.pauseDay to { breakCandidate = nextMidnightMillis() },
                                     ),
                                 )
-                            } else if (!strict) {
+                            } else if (!strict && scheduleActive && !paused) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Icon(Icons.Outlined.Coffee, null, tint = palette.muted, modifier = Modifier.size(16.dp))
                                     Text(s.breakCooldown(formatClock(config.nextBreakAt(now))), style = MaterialTheme.typography.bodySmall, color = palette.muted)
@@ -303,21 +310,21 @@ private class Look(
     val total: Long? = null,
 )
 
+/** One look per [ProtectionState]; the state itself is the model's call, so every surface agrees. */
 @Composable
 private fun lookFor(config: MonkConfig, now: Long): Look {
     val s = strings
     val moment = localMoment()
-    val scheduleActive = config.schedule.isActive(moment.dayIso, moment.minuteOfDay)
-    val strict = config.isStrict(now)
-    val paused = config.isPaused(now)
-    val focus = config.isFocus(now)
-    return when {
-        !config.enabled -> Look(Mood.Off, Icons.Outlined.PowerSettingsNew, s.protection, s.protectionOff, s.offNudge)
-        focus -> Look(Mood.Focus, Icons.Outlined.CenterFocusStrong, s.focus, null, "${s.until(formatClock(config.focusUntil))} · ${s.cannotStop}", config.focusUntil, config.focusStartedAt.takeIf { it > 0 }?.let { config.focusUntil - it })
-        paused -> Look(Mood.Break, Icons.Outlined.Coffee, s.pauseFor, null, "${s.until(formatClock(config.pausedUntil))} · ${s.comesBackItself}", config.pausedUntil, config.pauseStartedAt.takeIf { it > 0 }?.let { config.pausedUntil - it })
-        !scheduleActive -> Look(Mood.Scheduled, Icons.Outlined.Schedule, s.protection, s.protectionOff, s.scheduleOffNudge)
-        strict -> Look(Mood.Strict, Icons.Outlined.Lock, s.protection, s.protectionOn, s.strictUntil(formatClock(config.strictUntil)))
-        else -> Look(Mood.On, Icons.Outlined.Shield, s.protection, s.protectionOn, if (config.apps.isEmpty()) null else s.appsWatched(config.apps.size))
+    return when (config.state(now, moment.dayIso, moment.minuteOfDay)) {
+        ProtectionState.OFF -> Look(Mood.Off, Icons.Outlined.PowerSettingsNew, s.protection, s.protectionOff, s.offNudge)
+        ProtectionState.FOCUS -> Look(Mood.Focus, Icons.Outlined.CenterFocusStrong, s.focus, null, "${s.until(formatClock(config.focusUntil))} · ${s.cannotStop}", config.focusUntil, config.focusStartedAt.takeIf { it > 0 }?.let { config.focusUntil - it })
+        ProtectionState.BREAK -> Look(Mood.Break, Icons.Outlined.Coffee, s.pauseFor, null, "${s.until(formatClock(config.pausedUntil))} · ${s.comesBackItself}", config.pausedUntil, config.pauseStartedAt.takeIf { it > 0 }?.let { config.pausedUntil - it })
+        ProtectionState.SCHEDULED_OFF -> Look(
+            Mood.Scheduled, Icons.Outlined.Schedule, s.protection, s.protectionOff,
+            config.schedule.minutesToNextChange(moment.dayIso, moment.minuteOfDay)?.let { s.scheduleBackAt(formatClock(now + it * 60_000L)) } ?: s.scheduleOffNudge,
+        )
+        ProtectionState.STRICT -> Look(Mood.Strict, Icons.Outlined.Lock, s.protection, s.protectionOn, s.strictUntil(formatClock(config.strictUntil)))
+        ProtectionState.ON -> Look(Mood.On, Icons.Outlined.Shield, s.protection, s.protectionOn, if (config.apps.isEmpty()) null else s.appsWatched(config.apps.size))
     }
 }
 
@@ -362,6 +369,7 @@ internal fun CompactStatus(store: MonkStore, anchor: HeaderAnchor) {
     var now by remember { mutableLongStateOf(nowMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(30_000); now = nowMillis() } }
     val look = lookFor(config, now)
+    val scheduleActive = remember(config.schedule, now) { localMoment().let { config.schedule.isActive(it.dayIso, it.minuteOfDay) } }
     val palette = paletteFor(look.mood)
     SideEffect { anchor.tint = palette.accent }
     val accent by animateColorAsState(palette.accent, Motion.standard(Motion.Long), label = "accent")
@@ -423,7 +431,11 @@ internal fun CompactStatus(store: MonkStore, anchor: HeaderAnchor) {
                 onLockedTap = { haptics.reject() },
                 onToggle = { on ->
                     haptics.toggle(on)
-                    if (on) store.updateConfig { it.copy(enabled = true, pausedUntil = 0) } else confirmOff = true
+                    when {
+                        on -> store.switchOn()
+                        !scheduleActive -> store.switchOff()
+                        else -> confirmOff = true
+                    }
                 },
             )
         },

@@ -5,7 +5,9 @@ import com.mdportnov.monk.shared.model.BlockPolicy
 import com.mdportnov.monk.shared.model.BlockedApp
 import com.mdportnov.monk.shared.model.DayStats
 import com.mdportnov.monk.shared.model.Decision
+import com.mdportnov.monk.shared.model.BlockMode
 import com.mdportnov.monk.shared.model.MonkConfig
+import com.mdportnov.monk.shared.model.RuleMode
 import com.mdportnov.monk.shared.model.Stats
 import com.mdportnov.monk.shared.model.TimeRule
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,8 +55,11 @@ class MonkStore(
         kv.putString(KEY_CONFIG, json.encodeToString(MonkConfig.serializer(), next))
     }
 
-    fun upsertApp(app: BlockedApp) = updateConfig { c ->
-        c.copy(apps = c.apps.filter { it.packageName != app.packageName } + app)
+    /** Switching an app to Block ends its live allowance: "never opens" starts now, not in five minutes. */
+    fun upsertApp(app: BlockedApp) {
+        val before = _config.value.app(app.packageName)
+        updateConfig { c -> c.copy(apps = c.apps.filter { it.packageName != app.packageName } + app) }
+        if (app.mode == BlockMode.BLOCK && before?.mode != BlockMode.BLOCK) revokeAllowance(app.packageName)
     }
 
     /**
@@ -117,8 +122,13 @@ class MonkStore(
         c.copy(archivedApps = c.archivedApps.filter { it.packageName != packageName })
     }
 
-    fun upsertRule(packageName: String, rule: TimeRule) = updateConfig { c ->
-        c.copy(apps = c.apps.map { a -> if (a.packageName == packageName) a.copy(rules = a.rules.filter { it.id != rule.id } + rule) else a })
+    /** A Block window that is open right now wins over the allowance in the policy; drop it so the list says the same. */
+    fun upsertRule(packageName: String, rule: TimeRule) {
+        updateConfig { c ->
+            c.copy(apps = c.apps.map { a -> if (a.packageName == packageName) a.copy(rules = a.rules.filter { it.id != rule.id } + rule) else a })
+        }
+        val m = localMoment()
+        if (rule.mode == RuleMode.BLOCK && rule.isActive(m.dayIso, m.minuteOfDay)) revokeAllowance(packageName)
     }
 
     fun removeRule(packageName: String, ruleId: Long) = updateConfig { c ->
@@ -145,25 +155,29 @@ class MonkStore(
         return nowMillis() + wallMinutesToMillis(minutes)
     }
 
-    /** Starts a break if [MonkConfig.canStartBreak] allows one right now. Returns whether it did. */
+    /** Whether a break may start right now: on, inside the schedule, nothing stronger running, cooldown over. */
+    fun canStartBreak(now: Long = nowMillis()): Boolean = localMoment().let { _config.value.canStartBreak(now, it.dayIso, it.minuteOfDay) }
+
+    /** Starts a break if [canStartBreak] allows one right now. Returns whether it did. */
     fun pauseProtection(untilMillis: Long): Boolean {
         val now = nowMillis()
-        if (!_config.value.canStartBreak(now)) return false
+        if (!canStartBreak(now)) return false
         updateConfig { it.copy(pausedUntil = untilMillis, pauseStartedAt = now) }
         return true
     }
 
-    fun resumeProtection() = updateConfig { c ->
-        if (!c.isPaused(nowMillis())) c else c.copy(pausedUntil = 0, lastBreakEndedAt = nowMillis())
-    }
+    fun resumeProtection() = updateConfig { it.endingBreak(nowMillis()) }
 
     /** The master switch, off. Strict mode and a focus session keep it on; locked apps ignore it anyway. */
     fun switchOff(): Boolean {
         val now = nowMillis()
         if (_config.value.isStrict(now) || _config.value.isFocus(now)) return false
-        updateConfig { it.copy(enabled = false, pausedUntil = 0) }
+        updateConfig { it.endingBreak(now).copy(enabled = false) }
         return true
     }
+
+    /** The master switch, on. A break, if one was somehow running, ends here too. */
+    fun switchOn() = updateConfig { it.endingBreak(nowMillis()).copy(enabled = true) }
 
     /** The wall clock jumped by [deltaMillis]: every deadline follows it, allowances included. */
     fun shiftTimers(deltaMillis: Long) {
@@ -174,15 +188,22 @@ class MonkStore(
         kv.putString(KEY_ALLOW, json.encodeToString(allowSerializer, next))
     }
 
-    /** One-way, like strict mode: a focus session cannot be cut short. Live allowances are dropped. */
+    /**
+     * One-way, like strict mode: a focus session cannot be cut short. Live allowances are dropped,
+     * a running break ends (and its cooldown starts), and protection turns on to stay.
+     */
     fun startFocus(untilMillis: Long) {
-        updateConfig { it.copy(focusUntil = untilMillis, focusStartedAt = nowMillis(), pausedUntil = 0, enabled = true) }
+        val now = nowMillis()
+        updateConfig { it.endingBreak(now).copy(focusUntil = untilMillis, focusStartedAt = now, enabled = true) }
         _allowances.value = emptyMap()
         kv.putString(KEY_ALLOW, json.encodeToString(allowSerializer, emptyMap()))
     }
 
-    /** One-way while it lasts: there is deliberately no `disableStrict`. */
-    fun enableStrict(untilMillis: Long) = updateConfig { it.copy(strictUntil = untilMillis, pausedUntil = 0, enabled = true) }
+    /** One-way while it lasts: there is deliberately no `disableStrict`. Ends a running break and turns protection on. */
+    fun enableStrict(untilMillis: Long) {
+        val now = nowMillis()
+        updateConfig { it.endingBreak(now).copy(strictUntil = untilMillis, enabled = true) }
+    }
 
     fun grantAllowance(packageName: String, minutes: Int, now: Long = nowMillis()) {
         val next = _allowances.value.filterValues { it > now } + (packageName to now + minutes * 60_000L)
@@ -240,7 +261,11 @@ class MonkStore(
         val current = _stats.value
         val d0 = current.day(date)
         val d1 = day(d0).let { d -> d.copy(byApp = d.byApp + (packageName to app(d.byApp[packageName] ?: AppDayStats()))) }
-        val next = Stats(days = (current.days.filter { it.date != date } + d1).sortedBy { it.date }.takeLast(90))
+        val label = _config.value.app(packageName)?.label
+        val next = Stats(
+            days = (current.days.filter { it.date != date } + d1).sortedBy { it.date }.takeLast(90),
+            labels = if (label == null) current.labels else current.labels + (packageName to label),
+        )
         _stats.value = next
         statsKv.putString(KEY_STATS, statsJson.encodeToString(Stats.serializer(), next))
     }

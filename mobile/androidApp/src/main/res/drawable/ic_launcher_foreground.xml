@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The "m_" mark from assets/logo.svg, scaled from its 32-unit box into the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.9"
+        android:scaleY="1.9"
+        android:translateX="23.6"
+        android:translateY="23.6">
+        <path
+            android:pathData="M7.9,20.6 V14.9 C7.9,12.7 9.1,11.7 10.75,11.7 C12.4,11.7 13.6,12.7 13.6,14.9 V20.6 M13.6,14.9 C13.6,12.7 14.8,11.7 16.45,11.7 C18.1,11.7 19.3,12.7 19.3,14.9 V20.6"
+            android:strokeColor="#E8ECF1"
+            android:strokeWidth="2.5"
+            android:strokeLineCap="round" />
+        <path android:pathData="M22.3,20.6 L25.6,20.6"
+            android:strokeWidth="2.5"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="22.3" android:startY="20.6"
+                    android:endX="25.6" android:endY="20.6">
+                    <item android:offset="0" android:color="#7AA2F7" />
+                    <item android:offset="1" android:color="#BB9AF7" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+</vector>

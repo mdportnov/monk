@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_label">Monk — пауза приложений</string>
+    <string name="accessibility_service_description">Monk использует эту службу только чтобы узнать, какое приложение вышло на передний план, и показать экран паузы или запрета для выбранных приложений. Содержимое экрана не читается, не записывается и никуда не передаётся.</string>
+</resources>

@@ -50,6 +50,10 @@ docs/                      design docs
 assets/                    install.sh, systemd units
 ```
 
+## Mobile app (`mobile/`)
+
+Kotlin Multiplatform + Compose Multiplatform app, independent of the Rust crate (no shared code, no FFI). Android is the working target (accessibility service + intercept screen); iOS builds the UI only with stubbed blocking. See `mobile/README.md` for layout and build commands. Gradle, not `just`: `cd mobile && ./gradlew :androidApp:assembleDebug`.
+
 ## Build, Test, Lint
 
 Use the `justfile`:

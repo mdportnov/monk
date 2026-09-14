@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Monk</string>
+    <string name="accessibility_service_label">Monk — app pause</string>
+    <string name="accessibility_service_description">Monk uses this service only to notice which app comes to the foreground, so it can show a pause or block screen for the apps you chose. It does not read, record or transmit anything on your screen.</string>
+</resources>

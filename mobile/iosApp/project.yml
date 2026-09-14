@@ -1,0 +1,32 @@
+# XcodeGen spec for the Monk iOS shell. Regenerate with: xcodegen -s project.yml
+# The shell only hosts the shared Compose UI; blocking is a stub on iOS (see shared/src/iosMain).
+name: iosApp
+options:
+  bundleIdPrefix: com.mdportnov
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    sources:
+      - iosApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdportnov.monk
+        PRODUCT_NAME: Monk
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        FRAMEWORK_SEARCH_PATHS: "$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+        OTHER_LDFLAGS: "$(inherited) -framework MonkShared"
+    preBuildScripts:
+      - name: Build Kotlin framework
+        script: |
+          cd "$SRCROOT/.."
+          ./gradlew :shared:embedAndSignAppleFrameworkForXcode

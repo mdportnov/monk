@@ -6,7 +6,9 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
@@ -62,7 +64,7 @@ class InterceptOverlay(private val service: AccessibilityService) {
             setContent {
                 // A service window gets no system-bar insets: pad by hand so the buttons clear
                 // the gesture area and the orb clears the status bar.
-                Box(Modifier.fillMaxSize().padding(top = 32.dp, bottom = 40.dp)) {
+                Box(Modifier.fillMaxSize().background(Color(0xFF0B0D12)).padding(top = 32.dp, bottom = 40.dp)) {
                 InterceptScreen(
                     packageName = session.packageName,
                     label = session.app.label,

@@ -3,6 +3,12 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.3.0
+
+- A face of its own: Montserrat, white cards on a tinted ground, a wordmark with the gradient underscore.
+- Status pills instead of chips in app rows, editorial section titles, a 7-day sparkline on the week card.
+- Weekday labels under the daily chart, animated list changes.
+
 ## 1.2.0
 
 - Quick Settings tiles: "Monk pause" (15 min, toggle) and "Monk focus" (25 min, confirmed).

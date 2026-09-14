@@ -4,15 +4,26 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.mdportnov.monk.shared.i18n.LocalStrings
 import com.mdportnov.monk.shared.i18n.stringsForSystem
+import com.mdportnov.monk.shared.resources.Montserrat_Bold
+import com.mdportnov.monk.shared.resources.Montserrat_Medium
+import com.mdportnov.monk.shared.resources.Montserrat_Regular
+import com.mdportnov.monk.shared.resources.Montserrat_SemiBold
+import com.mdportnov.monk.shared.resources.Res
+import org.jetbrains.compose.resources.Font
 
 object MonkColors {
     val Ink = Color(0xFF0B0D12)
@@ -35,16 +46,16 @@ private val DarkScheme = darkColorScheme(
     tertiary = MonkColors.Mint,
     background = MonkColors.Ink,
     onBackground = MonkColors.Fog,
-    surface = Color(0xFF11151D),
+    surface = Color(0xFF0F131A),
     onSurface = MonkColors.Fog,
     surfaceVariant = Color(0xFF1B2130),
     onSurfaceVariant = Color(0xFFA9B1C3),
     surfaceContainer = Color(0xFF161B26),
-    surfaceContainerHigh = Color(0xFF1B2130),
-    surfaceContainerHighest = Color(0xFF222A3B),
-    surfaceContainerLow = Color(0xFF0F131A),
+    surfaceContainerHigh = Color(0xFF1C2231),
+    surfaceContainerHighest = Color(0xFF242C3D),
+    surfaceContainerLow = Color(0xFF11151D),
     outline = Color(0xFF3A4358),
-    outlineVariant = Color(0xFF262D3D),
+    outlineVariant = Color(0xFF232A3A),
     error = MonkColors.Rose,
     onError = MonkColors.Ink,
 )
@@ -59,28 +70,55 @@ private val LightScheme = lightColorScheme(
     secondaryContainer = Color(0xFFEBDDFF),
     onSecondaryContainer = Color(0xFF2A1450),
     tertiary = Color(0xFF3E7A1F),
-    background = Color(0xFFF6F7FB),
+    background = Color(0xFFF1F3F9),
     onBackground = Color(0xFF12151C),
-    surface = Color(0xFFFFFFFF),
+    surface = Color(0xFFF1F3F9),
     onSurface = Color(0xFF12151C),
     surfaceVariant = Color(0xFFE6E9F2),
-    onSurfaceVariant = Color(0xFF4C5468),
-    surfaceContainer = Color(0xFFF0F2F8),
-    surfaceContainerHigh = Color(0xFFE9ECF4),
-    surfaceContainerHighest = Color(0xFFE2E6F0),
-    surfaceContainerLow = Color(0xFFF9FAFD),
+    onSurfaceVariant = Color(0xFF5A6177),
+    surfaceContainer = Color(0xFFFFFFFF),
+    surfaceContainerHigh = Color(0xFFF7F8FC),
+    surfaceContainerHighest = Color(0xFFE9ECF4),
+    surfaceContainerLow = Color(0xFFF7F8FC),
     outline = Color(0xFFB9C0D0),
-    outlineVariant = Color(0xFFDDE1EA),
+    outlineVariant = Color(0xFFE3E6EE),
     error = Color(0xFFC62B4A),
     onError = Color.White,
 )
 
 private val MonkShapes = Shapes(
-    extraSmall = RoundedCornerShape(6.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(32.dp),
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(28.dp),
+    extraLarge = RoundedCornerShape(36.dp),
+)
+
+@Composable
+private fun montserrat(): FontFamily = FontFamily(
+    Font(Res.font.Montserrat_Regular, FontWeight.Normal),
+    Font(Res.font.Montserrat_Medium, FontWeight.Medium),
+    Font(Res.font.Montserrat_SemiBold, FontWeight.SemiBold),
+    Font(Res.font.Montserrat_Bold, FontWeight.Bold),
+)
+
+@Composable
+private fun monkTypography(family: FontFamily) = Typography(
+    displayLarge = TextStyle(fontFamily = family, fontWeight = FontWeight.Bold, fontSize = 44.sp, letterSpacing = (-1.5).sp),
+    displayMedium = TextStyle(fontFamily = family, fontWeight = FontWeight.Bold, fontSize = 36.sp, letterSpacing = (-1).sp),
+    displaySmall = TextStyle(fontFamily = family, fontWeight = FontWeight.Bold, fontSize = 32.sp, letterSpacing = (-0.5).sp),
+    headlineLarge = TextStyle(fontFamily = family, fontWeight = FontWeight.Bold, fontSize = 30.sp, letterSpacing = (-0.5).sp),
+    headlineMedium = TextStyle(fontFamily = family, fontWeight = FontWeight.Bold, fontSize = 26.sp, letterSpacing = (-0.5).sp),
+    headlineSmall = TextStyle(fontFamily = family, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, letterSpacing = (-0.25).sp, lineHeight = 30.sp),
+    titleLarge = TextStyle(fontFamily = family, fontWeight = FontWeight.SemiBold, fontSize = 19.sp),
+    titleMedium = TextStyle(fontFamily = family, fontWeight = FontWeight.SemiBold, fontSize = 16.sp),
+    titleSmall = TextStyle(fontFamily = family, fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
+    bodyLarge = TextStyle(fontFamily = family, fontWeight = FontWeight.Medium, fontSize = 16.sp, lineHeight = 24.sp),
+    bodyMedium = TextStyle(fontFamily = family, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 21.sp),
+    bodySmall = TextStyle(fontFamily = family, fontWeight = FontWeight.Normal, fontSize = 12.5.sp, lineHeight = 18.sp),
+    labelLarge = TextStyle(fontFamily = family, fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
+    labelMedium = TextStyle(fontFamily = family, fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, letterSpacing = 0.9.sp),
+    labelSmall = TextStyle(fontFamily = family, fontWeight = FontWeight.Medium, fontSize = 10.sp, letterSpacing = 0.8.sp),
 )
 
 @Composable
@@ -89,10 +127,12 @@ fun MonkTheme(
     content: @Composable () -> Unit,
 ) {
     val strings = remember { stringsForSystem() }
+    val family = montserrat()
     CompositionLocalProvider(LocalStrings provides strings) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkScheme else LightScheme,
             shapes = MonkShapes,
+            typography = monkTypography(family),
             content = content,
         )
     }

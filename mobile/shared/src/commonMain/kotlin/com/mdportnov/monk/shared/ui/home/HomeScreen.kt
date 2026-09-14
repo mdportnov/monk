@@ -2,7 +2,21 @@ package com.mdportnov.monk.shared.ui.home
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.sp
+import com.mdportnov.monk.shared.ui.components.Pill
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.layout.PaddingValues
@@ -120,6 +134,7 @@ fun HomeScreen(
                 item { EmptyApps(onAddApps) }
             }
             items(apps, key = { it.packageName }) { app ->
+                Box(Modifier.animateItem()) {
                 AppRow(
                     app = app,
                     config = config,
@@ -128,6 +143,7 @@ fun HomeScreen(
                     onEndAllowance = { store.revokeAllowance(app.packageName) },
                     onClick = { onOpenApp(app.packageName) },
                 )
+                }
             }
         }
         if (apps.isNotEmpty() && platform.supportsBlocking) {
@@ -143,22 +159,35 @@ fun HomeScreen(
 
 @Composable
 private fun Header() {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-        MonkMark(28.dp)
-        Spacer(Modifier.size(10.dp))
-        Text("Monk", style = MaterialTheme.typography.headlineMedium)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
+        MonkMark(30.dp)
+        Spacer(Modifier.size(12.dp))
+        Text(
+            buildAnnotatedString {
+                append("monk")
+                withStyle(SpanStyle(brush = Brush.linearGradient(listOf(MonkColors.Blue, MonkColors.Violet)))) { append("_") }
+            },
+            style = MaterialTheme.typography.headlineMedium,
+        )
     }
 }
 
 /** The "m_" from assets/logo.svg drawn as text — tiny, no vector plumbing needed. */
 @Composable
 fun MonkMark(size: Dp) {
-    Surface(color = MonkColors.Ink, shape = MaterialTheme.shapes.small, modifier = Modifier.size(size)) {
+    Surface(
+        color = MonkColors.Ink,
+        shape = RoundedCornerShape(size * 0.22f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.size(size),
+    ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
-                "m_",
-                color = MonkColors.Fog,
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = MaterialTheme.typography.titleMedium.fontSize * (size.value / 32f)),
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = MonkColors.Fog)) { append("m") }
+                    withStyle(SpanStyle(brush = Brush.linearGradient(listOf(MonkColors.Blue, MonkColors.Violet)))) { append("_") }
+                },
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = (size.value * 0.52f).sp, fontWeight = FontWeight.Bold),
             )
         }
     }
@@ -234,8 +263,8 @@ private fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permis
 @Composable
 private fun ChipRow(label: String, chips: @Composable () -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Box(Modifier.height(32.dp), contentAlignment = Alignment.Center) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(Modifier.height(32.dp).padding(end = 4.dp), contentAlignment = Alignment.Center) {
+            Text(label.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         chips()
     }
@@ -255,28 +284,43 @@ private fun WeekCard(stats: Stats) {
     val away = days.sumOf { it.turnedAway }
     val streak = stats.walkAwayStreak(lastDates(90))
     MonkCard {
-        Text(s.thisWeek, style = MaterialTheme.typography.titleMedium)
-        if (paused == 0) {
-            Hint(s.noWeekData)
-        } else {
-            Text(s.weekLine(paused, away), style = MaterialTheme.typography.bodyLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(s.thisWeek, style = MaterialTheme.typography.titleMedium)
+                if (paused == 0) Hint(s.noWeekData) else Text(s.weekLine(paused, away), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Sparkline(days.map { it.turnedAway }, days.map { it.opened })
+        }
+        if (paused > 0) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatChip(s.successRate(away * 100 / paused), MaterialTheme.colorScheme.tertiary)
-                if (streak > 0) StatChip(s.streak(streak), MaterialTheme.colorScheme.primary)
+                Pill(s.successRate(away * 100 / paused), MaterialTheme.colorScheme.tertiary)
+                if (streak > 0) Pill(s.streak(streak), MaterialTheme.colorScheme.primary)
             }
         }
     }
 }
 
+/** Seven tiny stacked bars: walked away over opened, today on the right. */
 @Composable
-private fun StatChip(text: String, color: androidx.compose.ui.graphics.Color) {
-    AssistChip(
-        onClick = {},
-        enabled = false,
-        label = { Text(text) },
-        colors = AssistChipDefaults.assistChipColors(disabledContainerColor = color.copy(alpha = 0.16f), disabledLabelColor = color),
-        border = null,
-    )
+private fun Sparkline(away: List<Int>, opened: List<Int>) {
+    val a = MaterialTheme.colorScheme.tertiary
+    val o = MaterialTheme.colorScheme.primary
+    val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    val max = (away.indices.maxOfOrNull { away[it] + opened[it] } ?: 1).coerceAtLeast(1)
+    Canvas(Modifier.width(84.dp).height(36.dp)) {
+        val n = away.size
+        val gap = 3.dp.toPx()
+        val w = (size.width - gap * (n - 1)) / n
+        val r = CornerRadius(2.dp.toPx())
+        for (i in 0 until n) {
+            val x = i * (w + gap)
+            drawRoundRect(track, Offset(x, 0f), Size(w, size.height), r)
+            val hO = size.height * opened[i] / max
+            val hA = size.height * away[i] / max
+            if (hO > 0) drawRoundRect(o, Offset(x, size.height - hO), Size(w, hO), r)
+            if (hA > 0) drawRoundRect(a, Offset(x, size.height - hO - hA), Size(w, hA), r)
+        }
+    }
 }
 
 @Composable
@@ -347,17 +391,17 @@ private fun AppRow(
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(app.packageName, 40.dp)
-                Spacer(Modifier.size(12.dp))
+                AppIcon(app.packageName, 44.dp)
+                Spacer(Modifier.size(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(app.label, style = MaterialTheme.typography.bodyLarge)
-                    Spacer(Modifier.height(4.dp))
+                    Text(app.label, style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         ModeChip(app, config)
                         val limit = app.dailyLimit
                         if (limit != null) {
                             val exhausted = opensToday >= limit
-                            SmallChip(
+                            Pill(
                                 s.limitToday(opensToday, limit),
                                 if (exhausted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -382,34 +426,13 @@ private fun AppRow(
 }
 
 @Composable
-private fun SmallChip(text: String, color: androidx.compose.ui.graphics.Color) {
-    AssistChip(
-        onClick = {},
-        enabled = false,
-        label = { Text(text) },
-        colors = AssistChipDefaults.assistChipColors(disabledContainerColor = color.copy(alpha = 0.12f), disabledLabelColor = color),
-        border = null,
-    )
-}
-
-@Composable
 fun ModeChip(app: BlockedApp, config: MonkConfig) {
     val s = strings
     val block = app.mode == BlockMode.BLOCK
-    val container = if (block) MaterialTheme.colorScheme.error.copy(alpha = 0.16f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
     val content = if (block) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    AssistChip(
-        onClick = {},
-        enabled = false,
-        label = { Text(if (block) s.modeBlock else s.pauseChip(config.delayFor(app))) },
-        leadingIcon = {
-            Icon(if (block) Icons.Outlined.Block else Icons.Outlined.HourglassEmpty, null, Modifier.size(16.dp))
-        },
-        colors = AssistChipDefaults.assistChipColors(
-            disabledContainerColor = container,
-            disabledLabelColor = content,
-            disabledLeadingIconContentColor = content,
-        ),
-        border = null,
+    Pill(
+        if (block) s.modeBlock else s.pauseChip(config.delayFor(app)),
+        content,
+        icon = { Icon(if (block) Icons.Outlined.Block else Icons.Outlined.HourglassEmpty, null, Modifier.size(14.dp), tint = content) },
     )
 }

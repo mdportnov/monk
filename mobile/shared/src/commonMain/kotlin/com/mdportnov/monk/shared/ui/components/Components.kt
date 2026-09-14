@@ -1,6 +1,8 @@
 package com.mdportnov.monk.shared.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,11 +34,26 @@ fun MonkCard(
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     Text(
-        text,
-        style = MaterialTheme.typography.titleSmall,
+        text.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(horizontal = 4.dp),
+        modifier = modifier.padding(start = 6.dp, top = 6.dp),
     )
+}
+
+/** Small status pill: text on a tinted background, no interaction. */
+@Composable
+fun Pill(text: String, color: Color, modifier: Modifier = Modifier, icon: (@Composable () -> Unit)? = null) {
+    Row(
+        modifier
+            .background(color.copy(alpha = 0.14f), MaterialTheme.shapes.extraSmall)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (icon != null) icon()
+        Text(text, style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp), color = color)
+    }
 }
 
 @Composable

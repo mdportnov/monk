@@ -32,7 +32,7 @@ kotlin {
         }
     }
 
-    compilerOptions {
+        compilerOptions {
         freeCompilerArgs.addAll("-Xexpect-actual-classes", "-opt-in=kotlin.time.ExperimentalTime")
     }
 
@@ -42,6 +42,7 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(compose.ui)
+            implementation(compose.components.resources)
             implementation(compose.materialIconsExtended)
             implementation(libs.lifecycle.runtime.compose)
             implementation(libs.kotlinx.serialization.json)
@@ -56,4 +57,8 @@ kotlin {
             implementation(libs.androidx.activity.compose)
         }
     }
+}
+
+compose.resources {
+    packageOfResClass = "com.mdportnov.monk.shared.resources"
 }

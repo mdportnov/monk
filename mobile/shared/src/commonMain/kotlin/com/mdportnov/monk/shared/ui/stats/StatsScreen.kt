@@ -32,6 +32,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.isoDayNumber
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mdportnov.monk.shared.data.MonkStore
 import com.mdportnov.monk.shared.data.lastDates
@@ -96,7 +99,22 @@ fun StatsScreen(store: MonkStore, modifier: Modifier = Modifier) {
             if (range != Range.Today) {
                 SectionTitle(s.byDay)
                 MonkCard {
-                    BarChart(if (range == Range.All) days.takeLast(30) else days)
+                    val shown = if (range == Range.All) days.takeLast(30) else days
+                    BarChart(shown)
+                    if (shown.size <= 14) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            shown.forEach { d ->
+                                val dow = LocalDate.parse(d.date).dayOfWeek.isoDayNumber
+                                Text(
+                                    s.dayShort[dow - 1].take(if (shown.size > 7) 1 else 2),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f),
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                        }
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Legend(MaterialTheme.colorScheme.tertiary, s.turnedAway)
                         Legend(MaterialTheme.colorScheme.primary, s.opened)

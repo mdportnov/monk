@@ -25,6 +25,17 @@ class Strings(private val ru: Boolean) {
     val pause60 get() = t("1 hour", "1 час")
     val pauseDay get() = t("Today", "До завтра")
     val resume get() = t("Resume", "Продолжить")
+    val focus get() = t("Focus", "Фокус")
+    val focus25 get() = t("25 min", "25 мин")
+    val focus50 get() = t("50 min", "50 мин")
+    fun focusUntil(time: String) = t("Focus until $time", "Фокус до $time")
+    val focusHint get() = t("Every watched app is blocked until the timer ends. No way to stop early.", "Все приложения под контролем закрыты до конца таймера. Остановить раньше нельзя.")
+    val focusConfirmTitle get() = t("Start a focus session?", "Начать фокус-сессию?")
+    fun focusConfirmBody(time: String) = t("All watched apps stay blocked until $time. No way to stop early.", "Все приложения под контролем закрыты до $time. Остановить раньше нельзя.")
+    val start get() = t("Start", "Начать")
+    val todayForApp get() = t("Today", "Сегодня")
+    val noData get() = t("No data for this period.", "За этот период данных нет.")
+    fun pauses(n: Int) = t(if (n == 1) "1 pause" else "$n pauses", "$n ${plural(n, "остановка", "остановки", "остановок")}")
     val strictLocked get() = t("Locked by strict mode", "Заблокировано строгим режимом")
 
     // Setup
@@ -44,7 +55,7 @@ class Strings(private val ru: Boolean) {
 
     // Week summary
     val thisWeek get() = t("This week", "Эта неделя")
-    fun weekLine(paused: Int, away: Int) = t("$paused pauses · $away walked away", "$paused остановок · $away раз ушли")
+    fun weekLine(paused: Int, away: Int) = t("${pauses(paused)} · $away walked away", "${pauses(paused)} · $away раз ушли")
     fun successRate(pct: Int) = t("$pct% walked away", "$pct% ушли")
     fun streak(days: Int) = t(if (days == 1) "1-day streak" else "$days-day streak", "серия: $days ${plural(days, "день", "дня", "дней")}")
     val noWeekData get() = t("No pauses yet this week.", "На этой неделе остановок ещё не было.")
@@ -168,6 +179,12 @@ class Strings(private val ru: Boolean) {
     val interceptNotNow get() = t("Not now", "Не сейчас")
     val interceptBack get() = t("Back to focus", "Вернуться к делу")
     fun interceptWait(seconds: Int) = t("Wait ${seconds}s", "Подождите ${seconds}с")
+    fun interceptFocusTitle(time: String) = t("Focus until $time", "Фокус до $time")
+    val interceptFocusHint get() = t("You started this session. Everything waits.", "Вы сами начали эту сессию. Всё подождёт.")
+    fun timesToday(n: Int) = t(
+        when (n) { 1 -> "1st time today"; 2 -> "2nd time today"; 3 -> "3rd time today"; else -> "${n}th time today" },
+        "$n-й раз сегодня",
+    )
 
     val iosTitle get() = t("iOS is not supported yet", "iOS пока не поддерживается")
     val iosBody get() = t(

@@ -3,6 +3,13 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.1.0
+
+- Focus session: 25 or 50 minutes during which every watched app is blocked, no early exit.
+- Pause screen: a draining countdown ring, a buzz when the wait is over, "3rd time today".
+- App card shows today's pauses; stats by app show the walk-away percentage.
+- Chips wrap on narrow screens; empty states in stats.
+
 ## 1.0.0
 
 First release.

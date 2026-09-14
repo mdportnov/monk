@@ -107,19 +107,22 @@ fun StatsScreen(store: MonkStore, modifier: Modifier = Modifier) {
             SectionTitle(s.byApp)
             MonkCard {
                 val perApp = stats.perApp(dates)
+                if (perApp.isEmpty()) Hint(s.noData)
                 val max = perApp.maxOfOrNull { it.second.intercepted }?.coerceAtLeast(1) ?: 1
                 perApp.forEach { (pkg, a) ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AppIcon(pkg, 32.dp)
                         Spacer(Modifier.size(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Row {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(labels[pkg] ?: pkg, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                                 Text(
-                                    "${a.turnedAway}/${a.intercepted}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    "${a.turnedAway * 100 / a.intercepted.coerceAtLeast(1)}%",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.tertiary,
                                 )
+                                Spacer(Modifier.width(8.dp))
+                                Text(s.pauses(a.intercepted), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Spacer(Modifier.height(4.dp))
                             StackedBar(

@@ -41,7 +41,7 @@ fun UpdateCard(updater: Updater, compact: Boolean) {
             is UpdateState.Available -> {
                 Text(s.updateAvailable(st.version), style = MaterialTheme.typography.titleMedium)
                 Hint(s.updateSize(formatMb(st.sizeBytes)))
-                val notes = plainNotes(st.notes)
+                val notes = if (compact) "" else plainNotes(st.notes)
                 if (notes.isNotBlank()) {
                     Text(s.releaseNotes, style = MaterialTheme.typography.labelLarge)
                     Text(notes, style = MaterialTheme.typography.bodySmall)

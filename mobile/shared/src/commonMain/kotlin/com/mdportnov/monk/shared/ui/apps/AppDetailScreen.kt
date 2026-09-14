@@ -38,7 +38,9 @@ import com.mdportnov.monk.shared.data.nowMillis
 import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.BlockMode
 import com.mdportnov.monk.shared.platform.AppIcon
+import com.mdportnov.monk.shared.ui.components.Counter
 import com.mdportnov.monk.shared.ui.components.Hint
+import com.mdportnov.monk.shared.data.localMoment
 import com.mdportnov.monk.shared.ui.components.LabeledRow
 import com.mdportnov.monk.shared.ui.components.MonkCard
 import com.mdportnov.monk.shared.ui.components.SectionTitle
@@ -49,6 +51,7 @@ import com.mdportnov.monk.shared.ui.settings.DurationPicker
 fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) {
     val s = strings
     val config by store.config.collectAsStateWithLifecycle()
+    val stats by store.stats.collectAsStateWithLifecycle()
     val app = config.app(packageName)
     LaunchedEffect(app == null) { if (app == null) onClose() }
     if (app == null) return
@@ -85,6 +88,18 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
                     Icon(Icons.Outlined.Lock, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.size(6.dp))
                     Hint(s.strictUntil(formatClock(config.strictUntil)))
+                }
+            }
+
+            val today = stats.day(localMoment().dateIso).byApp[packageName]
+            if (today != null && today.intercepted > 0) {
+                SectionTitle(s.todayForApp)
+                MonkCard {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Counter(today.intercepted, s.intercepted)
+                        Counter(today.turnedAway, s.turnedAway, MaterialTheme.colorScheme.tertiary)
+                        Counter(today.opened, s.opened, MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
 

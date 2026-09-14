@@ -66,6 +66,8 @@ data class MonkConfig(
     val pausedUntil: Long = 0,
     /** Epoch millis; until then nothing that weakens protection can be changed. 0 = off. */
     val strictUntil: Long = 0,
+    /** Epoch millis; until then every watched app is blocked outright. One-way. 0 = off. */
+    val focusUntil: Long = 0,
     val theme: ThemeMode = ThemeMode.SYSTEM,
     /** Ask "why?" on the pause screen before opening; the answer lands in stats. */
     val askIntention: Boolean = true,
@@ -75,6 +77,7 @@ data class MonkConfig(
     fun allowFor(app: BlockedApp) = app.allowMinutes ?: defaultAllowMinutes
     fun isPaused(now: Long) = pausedUntil > now
     fun isStrict(now: Long) = strictUntil > now
+    fun isFocus(now: Long) = focusUntil > now
 }
 
 @Serializable
@@ -152,8 +155,8 @@ data class InstalledApp(val packageName: String, val label: String)
 
 sealed interface Decision {
     data object Allow : Decision
-    data class Intercept(val app: BlockedApp, val limitReached: Boolean) : Decision {
-        val effectiveMode get() = if (limitReached) BlockMode.BLOCK else app.mode
+    data class Intercept(val app: BlockedApp, val limitReached: Boolean, val focus: Boolean = false) : Decision {
+        val effectiveMode get() = if (limitReached || focus) BlockMode.BLOCK else app.mode
     }
 }
 
@@ -170,6 +173,7 @@ object BlockPolicy {
         if (!config.enabled) return Decision.Allow
         if (config.isPaused(nowMillis)) return Decision.Allow
         val app = config.app(packageName) ?: return Decision.Allow
+        if (config.isFocus(nowMillis)) return Decision.Intercept(app, limitReached = false, focus = true)
         if (!config.schedule.isActive(dayIso, minuteOfDay)) return Decision.Allow
         val until = allowances[packageName] ?: 0L
         if (until > nowMillis) return Decision.Allow

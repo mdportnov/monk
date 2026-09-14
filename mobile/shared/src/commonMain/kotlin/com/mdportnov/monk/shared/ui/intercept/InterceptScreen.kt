@@ -7,7 +7,14 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.mdportnov.monk.shared.data.formatClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,13 +71,17 @@ fun InterceptScreen(
     allowMinutes: Int,
     limitReached: Boolean,
     dailyLimit: Int?,
+    /** Epoch millis of the focus session end, when one is running. */
+    focusUntil: Long?,
+    timesToday: Int,
     askIntention: Boolean,
     onOpen: (Intention?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     MonkTheme(darkTheme = true) {
         val s = strings
-        val blocked = mode == BlockMode.BLOCK || limitReached
+        val focus = focusUntil != null
+        val blocked = mode == BlockMode.BLOCK || limitReached || focus
         var remaining by remember(packageName, delaySeconds) { mutableIntStateOf(if (blocked) 0 else delaySeconds) }
         var intention by remember(packageName) { mutableStateOf<Intention?>(null) }
         // Ticks only while RESUMED: pulling the notification shade over the pause must not wait it out.
@@ -85,6 +96,13 @@ fun InterceptScreen(
         }
         val countdownDone = !blocked && remaining == 0
         val ready = countdownDone && (!askIntention || intention != null)
+        val haptic = LocalHapticFeedback.current
+        LaunchedEffect(countdownDone) { if (countdownDone && delaySeconds > 0) haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
+        val arc by animateFloatAsState(
+            targetValue = if (blocked || delaySeconds == 0) 0f else remaining.toFloat() / delaySeconds,
+            animationSpec = tween(900, easing = LinearEasing),
+            label = "arc",
+        )
 
         Box(
             Modifier
@@ -99,11 +117,16 @@ fun InterceptScreen(
             ) {
                 Spacer(Modifier.height(8.dp))
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    BreathingOrb(active = !blocked && remaining > 0) {
+                    BreathingOrb(active = !blocked && remaining > 0, arc = arc) {
                         AppIcon(packageName, 56.dp)
                     }
                     Spacer(Modifier.height(40.dp))
                     when {
+                        focus -> {
+                            Title(s.interceptFocusTitle(formatClock(focusUntil ?: 0L)))
+                            Spacer(Modifier.height(12.dp))
+                            Sub(s.interceptFocusHint)
+                        }
                         limitReached -> {
                             Title(s.interceptLimitTitle(label))
                             Spacer(Modifier.height(12.dp))
@@ -119,6 +142,10 @@ fun InterceptScreen(
                             Spacer(Modifier.height(12.dp))
                             Sub(if (remaining > 0) label else s.interceptQuestionApp(label))
                         }
+                    }
+                    if (timesToday > 1 && !focus) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(s.timesToday(timesToday), style = MaterialTheme.typography.labelMedium, color = MonkColors.Violet)
                     }
                     AnimatedVisibility(visible = countdownDone && askIntention) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -181,7 +208,7 @@ private fun Sub(text: String) {
 }
 
 @Composable
-private fun BreathingOrb(active: Boolean, content: @Composable () -> Unit) {
+private fun BreathingOrb(active: Boolean, arc: Float, content: @Composable () -> Unit) {
     val transition = rememberInfiniteTransition(label = "breath")
     val scale by transition.animateFloat(
         initialValue = 0.82f,
@@ -203,6 +230,22 @@ private fun BreathingOrb(active: Boolean, content: @Composable () -> Unit) {
                 .scale(s)
                 .background(Brush.radialGradient(listOf(MonkColors.Blue.copy(alpha = 0.55f), MonkColors.Blue.copy(alpha = 0.08f))), CircleShape),
         )
+        // Countdown ring: drains clockwise as the pause runs out.
+        if (arc > 0f) {
+            Canvas(Modifier.size(176.dp)) {
+                val stroke = 3.dp.toPx()
+                drawArc(
+                    color = MonkColors.Fog.copy(alpha = 0.12f),
+                    startAngle = -90f, sweepAngle = 360f, useCenter = false,
+                    style = Stroke(stroke, cap = StrokeCap.Round),
+                )
+                drawArc(
+                    brush = Brush.sweepGradient(listOf(MonkColors.Blue, MonkColors.Violet, MonkColors.Blue)),
+                    startAngle = -90f, sweepAngle = 360f * arc, useCenter = false,
+                    style = Stroke(stroke, cap = StrokeCap.Round),
+                )
+            }
+        }
         content()
     }
 }

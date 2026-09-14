@@ -65,6 +65,17 @@ class BlockPolicyTest {
     }
 
     @Test
+    fun focusBlocksEverythingWatchedEvenWithAllowance() {
+        val focused = config.copy(focusUntil = 5_000_000L)
+        val d = decide(cfg = focused, allow = mapOf(insta.packageName to 9_000_000L))
+        assertIs<Decision.Intercept>(d)
+        assertTrue(d.focus)
+        assertEquals(BlockMode.BLOCK, d.effectiveMode)
+        assertEquals(Decision.Allow, decide(cfg = focused, pkg = "com.example.other"))
+        assertEquals(Decision.Allow, decide(cfg = focused.copy(focusUntil = 10L), allow = mapOf(insta.packageName to 9_000_000L)))
+    }
+
+    @Test
     fun scheduleOutsideWindowAllows() {
         val scheduled = config.copy(schedule = Schedule(enabled = true, days = setOf(1, 2, 3, 4, 5), startMinute = 9 * 60, endMinute = 18 * 60))
         assertIs<Decision.Intercept>(decide(cfg = scheduled, day = 3, minute = 10 * 60))

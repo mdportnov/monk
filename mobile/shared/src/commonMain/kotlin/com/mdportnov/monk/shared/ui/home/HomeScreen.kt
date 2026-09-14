@@ -3,6 +3,8 @@ package com.mdportnov.monk.shared.ui.home
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -169,12 +171,15 @@ private fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permis
     val scheduleActive = config.schedule.isActive(moment.dayIso, moment.minuteOfDay)
     val strict = config.isStrict(now)
     val paused = config.isPaused(now)
+    val focus = config.isFocus(now)
     val effective = config.enabled && permissions.accessibilityEnabled && !paused
+    var focusCandidate by remember { mutableStateOf<Long?>(null) }
     val subtitle = when {
         !config.enabled -> s.protectionOff
         !permissions.accessibilityEnabled -> s.setupAccessibility
         paused -> s.pausedUntil(formatClock(config.pausedUntil))
-        !scheduleActive -> s.protectionPaused
+        focus -> s.focusUntil(formatClock(config.focusUntil))
+        !scheduleActive && !focus -> s.protectionPaused
         strict -> s.strictUntil(formatClock(config.strictUntil))
         else -> s.protectionOn
     }
@@ -191,24 +196,48 @@ private fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permis
                 Text(s.protection, style = MaterialTheme.typography.titleMedium)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (strict) {
+            if (strict || focus) {
                 Icon(Icons.Outlined.Lock, s.strictLocked, tint = MaterialTheme.colorScheme.primary)
             } else {
                 Switch(checked = config.enabled, onCheckedChange = { on -> store.updateConfig { it.copy(enabled = on, pausedUntil = 0) } })
             }
         }
-        if (config.enabled && permissions.accessibilityEnabled && !strict) {
+        if (config.enabled && permissions.accessibilityEnabled && !focus) {
             if (paused) {
                 OutlinedButton(onClick = store::resumeProtection) { Text(s.resume) }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(s.pauseFor, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    PauseChip(s.pause15) { store.pauseProtection(nowMillis() + 15 * 60_000L) }
-                    PauseChip(s.pause60) { store.pauseProtection(nowMillis() + 60 * 60_000L) }
-                    PauseChip(s.pauseDay) { store.pauseProtection(nextMidnightMillis()) }
+                if (!strict) {
+                    ChipRow(s.pauseFor) {
+                        PauseChip(s.pause15) { store.pauseProtection(nowMillis() + 15 * 60_000L) }
+                        PauseChip(s.pause60) { store.pauseProtection(nowMillis() + 60 * 60_000L) }
+                        PauseChip(s.pauseDay) { store.pauseProtection(nextMidnightMillis()) }
+                    }
+                }
+                ChipRow(s.focus) {
+                    PauseChip(s.focus25) { focusCandidate = nowMillis() + 25 * 60_000L }
+                    PauseChip(s.focus50) { focusCandidate = nowMillis() + 50 * 60_000L }
                 }
             }
         }
+    }
+    focusCandidate?.let { until ->
+        AlertDialog(
+            onDismissRequest = { focusCandidate = null },
+            title = { Text(s.focusConfirmTitle) },
+            text = { Text(s.focusConfirmBody(formatClock(until))) },
+            confirmButton = { TextButton(onClick = { store.startFocus(until); focusCandidate = null }) { Text(s.start) } },
+            dismissButton = { TextButton(onClick = { focusCandidate = null }) { Text(s.cancel) } },
+        )
+    }
+}
+
+@Composable
+private fun ChipRow(label: String, chips: @Composable () -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(Modifier.height(32.dp), contentAlignment = Alignment.Center) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        chips()
     }
 }
 

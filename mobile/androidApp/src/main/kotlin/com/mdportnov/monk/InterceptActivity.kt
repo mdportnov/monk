@@ -26,7 +26,7 @@ class InterceptActivity : ComponentActivity() {
     private var target by mutableStateOf<Target?>(null)
     private var decided = false
 
-    private data class Target(val app: BlockedApp, val config: MonkConfig, val limitReached: Boolean)
+    private data class Target(val app: BlockedApp, val config: MonkConfig, val limitReached: Boolean, val timesToday: Int)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -46,6 +46,8 @@ class InterceptActivity : ComponentActivity() {
                 allowMinutes = t.config.allowFor(t.app),
                 limitReached = t.limitReached,
                 dailyLimit = t.app.dailyLimit,
+                focusUntil = t.config.focusUntil.takeIf { t.config.isFocus(System.currentTimeMillis()) },
+                timesToday = t.timesToday,
                 askIntention = t.config.askIntention,
                 onOpen = { reason -> open(t.app.packageName, t.config.allowFor(t.app), reason?.name) },
                 onDismiss = { dismiss() },
@@ -65,11 +67,11 @@ class InterceptActivity : ComponentActivity() {
         val config = MonkRuntime.store.config.value
         val app = config.app(pkg) ?: return false
         val limitReached = app.dailyLimit?.let { MonkRuntime.store.opensToday(pkg) >= it } ?: false
-        target = Target(app, config, limitReached)
         decided = false
         InterceptGate.showing = pkg
         InterceptGate.created = true
         MonkRuntime.store.recordIntercepted(pkg)
+        target = Target(app, config, limitReached, MonkRuntime.store.interceptsToday(pkg))
         return true
     }
 

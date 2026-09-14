@@ -49,6 +49,13 @@ class MonkStore(private val kv: KeyValueStore) {
     fun pauseProtection(untilMillis: Long) = updateConfig { it.copy(pausedUntil = untilMillis) }
     fun resumeProtection() = updateConfig { it.copy(pausedUntil = 0) }
 
+    /** One-way, like strict mode: a focus session cannot be cut short. Live allowances are dropped. */
+    fun startFocus(untilMillis: Long) {
+        updateConfig { it.copy(focusUntil = untilMillis, pausedUntil = 0, enabled = true) }
+        _allowances.value = emptyMap()
+        kv.putString(KEY_ALLOW, json.encodeToString(allowSerializer, emptyMap()))
+    }
+
     /** One-way while it lasts: there is deliberately no `disableStrict`. */
     fun enableStrict(untilMillis: Long) = updateConfig { it.copy(strictUntil = untilMillis, pausedUntil = 0, enabled = true) }
 
@@ -67,6 +74,7 @@ class MonkStore(private val kv: KeyValueStore) {
     fun activeAllowances(now: Long = nowMillis()) = _allowances.value.filterValues { it > now }
 
     fun opensToday(packageName: String) = _stats.value.opensToday(localMoment().dateIso, packageName)
+    fun interceptsToday(packageName: String) = _stats.value.day(localMoment().dateIso).byApp[packageName]?.intercepted ?: 0
 
     fun decide(packageName: String): Decision {
         val m = localMoment()

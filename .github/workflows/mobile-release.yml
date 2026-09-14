@@ -70,7 +70,35 @@ jobs:
           (cd dist && sha256sum "monk-android-$v.apk" > "monk-android-$v.apk.sha256")
           cat "dist/monk-android-$v.apk.sha256"
 
+      - name: release notes
+        id: notes
+        shell: bash
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          # The "## <version>" section of mobile/CHANGELOG.md; empty when the version has none.
+          awk -v v="$v" '
+            /^## /{ on = ($2 == v) ; next }
+            on { print }
+          ' CHANGELOG.md | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > "$RUNNER_TEMP/notes.md"
+          if [ -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "has=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::no CHANGELOG section for $v, falling back to generated notes"
+            echo "has=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: softprops/action-gh-release@v2
+        if: steps.notes.outputs.has == 'true'
+        with:
+          tag_name: mobile-v${{ steps.v.outputs.version }}
+          name: Monk Android ${{ steps.v.outputs.version }}
+          body_path: ${{ runner.temp }}/notes.md
+          files: |
+            mobile/dist/monk-android-${{ steps.v.outputs.version }}.apk
+            mobile/dist/monk-android-${{ steps.v.outputs.version }}.apk.sha256
+
+      - uses: softprops/action-gh-release@v2
+        if: steps.notes.outputs.has != 'true'
         with:
           tag_name: mobile-v${{ steps.v.outputs.version }}
           name: Monk Android ${{ steps.v.outputs.version }}

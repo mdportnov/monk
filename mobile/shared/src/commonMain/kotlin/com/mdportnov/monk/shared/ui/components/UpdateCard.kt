@@ -41,9 +41,10 @@ fun UpdateCard(updater: Updater, compact: Boolean) {
             is UpdateState.Available -> {
                 Text(s.updateAvailable(st.version), style = MaterialTheme.typography.titleMedium)
                 Hint(s.updateSize(formatMb(st.sizeBytes)))
-                if (st.notes.isNotBlank()) {
+                val notes = plainNotes(st.notes)
+                if (notes.isNotBlank()) {
                     Text(s.releaseNotes, style = MaterialTheme.typography.labelLarge)
-                    Text(st.notes.trim().take(600), style = MaterialTheme.typography.bodySmall)
+                    Text(notes, style = MaterialTheme.typography.bodySmall)
                 }
                 Button(onClick = updater::install) { Text(s.updateInstall) }
             }
@@ -80,6 +81,20 @@ fun UpdateCard(updater: Updater, compact: Boolean) {
         }
     }
 }
+
+/** GitHub bodies are Markdown; the card wants a few plain lines, without changelog boilerplate. */
+private fun plainNotes(md: String): String = md.lines()
+    .map { it.trim() }
+    .filter { it.isNotEmpty() && !it.startsWith("#") && !it.contains("Full Changelog", ignoreCase = true) }
+    .map { line ->
+        line.removePrefix("* ").removePrefix("- ")
+            .replace("**", "")
+            .replace(Regex("\\[(.*?)]\\(.*?\\)"), "$1")
+            .replace(Regex("\\s+by @\\S+ in https?://\\S+$"), "")
+            .let { "• $it" }
+    }
+    .take(6)
+    .joinToString("\n")
 
 private fun formatMb(bytes: Long): String {
     val tenths = (bytes * 10 / (1024 * 1024)).toInt()

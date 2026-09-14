@@ -3,6 +3,13 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.2.0
+
+- Quick Settings tiles: "Monk pause" (15 min, toggle) and "Monk focus" (25 min, confirmed).
+- Overlay mode: the pause screen drawn on top of everything, for split-screen and ROMs that drop it; also the automatic fallback.
+- A notification when the accessibility service stops (after reboot, update, or a system kill). Opt-in, on by default.
+- Your own line on the pause screen.
+
 ## 1.1.0
 
 - Focus session: 25 or 50 minutes during which every watched app is blocked, no early exit.

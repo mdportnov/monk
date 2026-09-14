@@ -41,7 +41,32 @@ class AndroidPlatform(private val app: Context, override val updater: Updater) :
     override fun permissions() = PermissionStatus(
         accessibilityEnabled = isAccessibilityServiceEnabled(app),
         mayNeedRestrictedSettingsUnlock = isRestrictedSideload(),
+        notificationsGranted = MonkNotifications.granted(app),
     )
+
+    /** Set by MainActivity while it is alive: runtime permissions need an Activity. */
+    @Volatile var notificationPermissionRequester: (() -> Unit)? = null
+
+    override fun requestNotificationPermission() {
+        notificationPermissionRequester?.invoke() ?: openAppInfo()
+    }
+
+    override fun requestAddTiles() {
+        if (Build.VERSION.SDK_INT < 33) return
+        val sbm = app.getSystemService(android.app.StatusBarManager::class.java) ?: return
+        val icon = android.graphics.drawable.Icon.createWithResource(app, R.drawable.ic_tile_focus)
+        val s = com.mdportnov.monk.shared.i18n.stringsForSystem()
+        runCatching {
+            sbm.requestAddTileService(
+                android.content.ComponentName(app, com.mdportnov.monk.tiles.FocusTileService::class.java),
+                s.tileFocus, icon, app.mainExecutor,
+            ) { }
+            sbm.requestAddTileService(
+                android.content.ComponentName(app, com.mdportnov.monk.tiles.PauseTileService::class.java),
+                s.tilePause, android.graphics.drawable.Icon.createWithResource(app, R.drawable.ic_tile_pause), app.mainExecutor,
+            ) { }
+        }
+    }
 
     override fun openAccessibilitySettings() = launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 

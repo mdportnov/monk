@@ -35,9 +35,16 @@ Android 13+ and APKs installed from a downloaded file: the accessibility toggle 
 Tap it once anyway, then *App info → ⋮ → Allow restricted settings*. The setup card links there.
 `adb install` is not affected.
 
-Known gaps: work-profile clones of a watched app are intercepted too and "Open" launches the
-personal instance; in split-screen / desktop windowing the intercept may open as its own window
-instead of covering the target (an accessibility overlay would fix both, not built yet).
+**Overlay mode** (Settings → Reliability) draws the pause screen as a `TYPE_ACCESSIBILITY_OVERLAY`
+window owned by the service instead of an Activity: no permission, immune to background-launch
+rules, covers split-screen. It is also the automatic fallback when the Activity never resumes.
+
+**Quick Settings tiles**: "Monk pause" toggles a 15-minute pause, "Monk focus" starts a 25-minute
+focus session after a confirmation. **Service watchdog**: a notification when the accessibility
+service is off while apps are watched (on unbind, after boot, after an update); opt-in in Settings.
+
+Known gap: work-profile clones of a watched app are intercepted too and "Open" launches the
+personal instance.
 
 ## Layout
 

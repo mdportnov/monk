@@ -32,6 +32,8 @@ object IosPlatform : MonkPlatform {
     override fun permissions() = PermissionStatus(accessibilityEnabled = false, mayNeedRestrictedSettingsUnlock = false)
     override fun openAccessibilitySettings() = Unit
     override fun openAppInfo() = Unit
+    override fun requestNotificationPermission() = Unit
+    override fun requestAddTiles() = Unit
     override val updater: Updater? = null
 }
 

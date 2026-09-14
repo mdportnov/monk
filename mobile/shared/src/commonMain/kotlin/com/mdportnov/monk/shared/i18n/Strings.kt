@@ -106,6 +106,24 @@ class Strings(private val ru: Boolean) {
     val pauseScreen get() = t("Pause screen", "Экран паузы")
     val askIntention get() = t("Ask why", "Спрашивать зачем")
     val askIntentionHint get() = t("Before opening, pick a reason. Shows up in stats.", "Перед открытием выбрать причину. Видно в статистике.")
+    val pauseMessage get() = t("Your line", "Ваша фраза")
+    val pauseMessageHint get() = t("Shown on the pause screen instead of the default. Leave empty for the default.", "Показывается на экране паузы вместо стандартной. Пусто = стандартная.")
+    val reliability get() = t("Reliability", "Надёжность")
+    val overlayMode get() = t("Overlay mode", "Режим оверлея")
+    val overlayModeHint get() = t(
+        "Draw the pause screen on top of everything. Turn on if the pause screen does not appear on your phone, or you use split-screen.",
+        "Рисовать экран паузы поверх всего. Включите, если экран паузы не появляется на вашем телефоне или вы пользуетесь разделённым экраном.",
+    )
+    val notifyWhenOff get() = t("Warn when protection stops", "Предупреждать, если защита выключилась")
+    val notifyWhenOffHint get() = t("A notification if the system turns the accessibility service off.", "Уведомление, если система выключила службу специальных возможностей.")
+    val notifyPermission get() = t("Allow notifications", "Разрешить уведомления")
+    val quickTiles get() = t("Quick Settings tiles", "Плитки в шторке")
+    val quickTilesHint get() = t("Add \"Monk pause\" and \"Monk focus\" tiles to the notification shade for one-tap control.", "Добавьте плитки «Monk: пауза» и «Monk: фокус» в шторку для управления одним касанием.")
+    val addTiles get() = t("Add tiles", "Добавить плитки")
+    val tilePause get() = t("Monk pause", "Monk: пауза")
+    val tileFocus get() = t("Monk focus", "Monk: фокус")
+    val serviceOffTitle get() = t("Monk protection stopped", "Защита Monk выключилась")
+    val serviceOffBody get() = t("The accessibility service is off, so watched apps open freely. Tap to turn it back on.", "Служба специальных возможностей выключена, приложения открываются свободно. Нажмите, чтобы включить обратно.")
     val strictTitle get() = t("Strict mode", "Строгий режим")
     val strictHint get() = t(
         "Until the chosen time you cannot turn protection off, pause it, remove apps or soften their settings. No way back.",

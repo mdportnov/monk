@@ -10,6 +10,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -83,6 +88,37 @@ fun SettingsScreen(store: MonkStore, modifier: Modifier = Modifier) {
         MonkCard {
             LabeledRow(title = s.askIntention, subtitle = s.askIntentionHint) {
                 Switch(checked = config.askIntention, onCheckedChange = { on -> store.updateConfig { it.copy(askIntention = on) } })
+            }
+            var message by remember(config.pauseMessage) { mutableStateOf(config.pauseMessage) }
+            OutlinedTextField(
+                value = message,
+                onValueChange = { v -> message = v.take(120) },
+                label = { Text(s.pauseMessage) },
+                supportingText = { Text(s.pauseMessageHint) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().onFocusChanged { f ->
+                    if (!f.isFocused && message != config.pauseMessage) store.updateConfig { it.copy(pauseMessage = message.trim()) }
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { store.updateConfig { it.copy(pauseMessage = message.trim()) } }),
+            )
+        }
+
+        val platform = MonkRuntime.platform
+        if (platform.supportsBlocking) {
+            SectionTitle(s.reliability)
+            MonkCard {
+                LabeledRow(title = s.overlayMode, subtitle = s.overlayModeHint) {
+                    Switch(checked = config.overlayMode, onCheckedChange = { on -> store.updateConfig { it.copy(overlayMode = on) } })
+                }
+                LabeledRow(title = s.notifyWhenOff, subtitle = s.notifyWhenOffHint) {
+                    Switch(checked = config.notifyWhenOff, onCheckedChange = { on -> store.updateConfig { it.copy(notifyWhenOff = on) } })
+                }
+                if (config.notifyWhenOff && !platform.permissions().notificationsGranted) {
+                    OutlinedButton(onClick = platform::requestNotificationPermission) { Text(s.notifyPermission) }
+                }
+                LabeledRow(title = s.quickTiles, subtitle = s.quickTilesHint) {}
+                OutlinedButton(onClick = platform::requestAddTiles) { Text(s.addTiles) }
             }
         }
 

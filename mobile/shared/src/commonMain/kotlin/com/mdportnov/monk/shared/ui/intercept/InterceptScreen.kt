@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -75,6 +76,8 @@ fun InterceptScreen(
     focusUntil: Long?,
     timesToday: Int,
     askIntention: Boolean,
+    /** The user's own line; empty = built-in copy. */
+    message: String = "",
     onOpen: (Intention?) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -135,12 +138,21 @@ fun InterceptScreen(
                         blocked -> {
                             Title(s.interceptBlockedTitle(label))
                             Spacer(Modifier.height(12.dp))
-                            Sub(s.interceptBlockedHint)
+                            Sub(message.ifBlank { s.interceptBlockedHint })
                         }
                         else -> {
                             Title(if (remaining > 0) s.interceptBreathe else s.interceptQuestion)
                             Spacer(Modifier.height(12.dp))
                             Sub(if (remaining > 0) label else s.interceptQuestionApp(label))
+                            if (message.isNotBlank()) {
+                                Spacer(Modifier.height(16.dp))
+                                Text(
+                                    "“$message”",
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic),
+                                    color = MonkColors.Fog.copy(alpha = 0.8f),
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
                         }
                     }
                     if (timesToday > 1 && !focus) {

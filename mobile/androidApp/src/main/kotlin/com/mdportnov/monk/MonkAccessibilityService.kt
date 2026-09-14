@@ -32,6 +32,7 @@ import java.lang.ref.WeakReference
  */
 class MonkAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
+    private val overlay by lazy { InterceptOverlay(this) }
 
     /** The last Activity window we saw that belongs to a "real" app (not launcher/system/IME). */
     private var lastForeground: String? = null
@@ -69,9 +70,11 @@ class MonkAccessibilityService : AccessibilityService() {
                 handler.postDelayed(this, LAUNCH_GUARD_MS)
                 return
             }
-            Log.w(TAG, "intercept screen for $pkg never resumed; sending Home")
+            // The Activity never made it (OEM dropped the launch): fall back to the overlay, which
+            // no ROM can refuse. Home only if even that fails.
+            Log.w(TAG, "intercept screen for $pkg never resumed; falling back to overlay")
             InterceptGate.showing = null
-            performGlobalAction(GLOBAL_ACTION_HOME)
+            if (!showOverlay(pkg)) performGlobalAction(GLOBAL_ACTION_HOME)
         }
     }
 
@@ -89,11 +92,16 @@ class MonkAccessibilityService : AccessibilityService() {
             },
         )
         registerReceiver(userPresent, IntentFilter(Intent.ACTION_USER_PRESENT))
+        MonkNotifications.clearServiceOff(this)
         Log.d(TAG, "connected")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         handler.removeCallbacksAndMessages(null)
+        overlay.hide(countAbandoned = true)
+        // Posted after the unbind settles: by then the system knows whether we are really off.
+        val app = applicationContext
+        Handler(Looper.getMainLooper()).postDelayed({ MonkNotifications.serviceOff(app) }, 3_000)
         runCatching { unregisterReceiver(packagesChanged) }
         runCatching { unregisterReceiver(userPresent) }
         instance = null
@@ -109,6 +117,12 @@ class MonkAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
+        // An overlay covers exactly one app; anything else surfacing means the user left it.
+        overlay.session?.let { s ->
+            if (pkg != packageName && pkg != s.packageName && (pkg in launchers || isActivityWindowOf(pkg, event))) {
+                overlay.hide(countAbandoned = true)
+            }
+        }
         if (pkg == packageName) {
             // Monk's own UI in front means the watched app is not; the intercept screen itself
             // is transparent (it sits on top of the app it covers).
@@ -159,6 +173,10 @@ class MonkAccessibilityService : AccessibilityService() {
             }
             is Decision.Intercept -> {
                 Log.d(TAG, "intercepting ${decision.app.packageName} (${decision.effectiveMode})")
+                if (store.config.value.overlayMode) {
+                    if (!showOverlay(pkg)) performGlobalAction(GLOBAL_ACTION_HOME)
+                    return
+                }
                 InterceptGate.showing = pkg
                 InterceptGate.resumed = false
                 InterceptGate.created = false
@@ -184,6 +202,14 @@ class MonkAccessibilityService : AccessibilityService() {
             }
         }
     }
+
+    private fun showOverlay(pkg: String): Boolean {
+        val session = InterceptSession.start(this, pkg) ?: return false
+        overlay.show(session)
+        return overlay.isShowing
+    }
+
+    private fun isActivityWindowOf(pkg: String, event: AccessibilityEvent) = isActivityWindow(pkg, event.className?.toString())
 
     private fun isActivityWindow(pkg: String, className: String?): Boolean {
         if (className.isNullOrEmpty()) return false

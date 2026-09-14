@@ -71,6 +71,16 @@ data class MonkConfig(
     val theme: ThemeMode = ThemeMode.SYSTEM,
     /** Ask "why?" on the pause screen before opening; the answer lands in stats. */
     val askIntention: Boolean = true,
+    /** Your own line on the pause screen. Empty = the built-in one. */
+    val pauseMessage: String = "",
+    /**
+     * Android: draw the pause screen as an accessibility overlay instead of an Activity. Covers
+     * split-screen and ROMs that drop background activity starts; the Activity is the default
+     * because it gets predictive back and a real task.
+     */
+    val overlayMode: Boolean = false,
+    /** Android: notify when the accessibility service stops while apps are watched. */
+    val notifyWhenOff: Boolean = true,
 ) {
     fun app(packageName: String): BlockedApp? = apps.firstOrNull { it.packageName == packageName }
     fun delayFor(app: BlockedApp) = app.delaySeconds ?: defaultDelaySeconds

@@ -10,6 +10,8 @@ data class PermissionStatus(
     val accessibilityEnabled: Boolean,
     /** APKs installed from a downloaded file on Android 13+ need "Allow restricted settings" first. */
     val mayNeedRestrictedSettingsUnlock: Boolean,
+    /** POST_NOTIFICATIONS on Android 13+; true where notifications need no runtime grant. */
+    val notificationsGranted: Boolean = true,
 )
 
 interface MonkPlatform {
@@ -19,6 +21,9 @@ interface MonkPlatform {
     fun permissions(): PermissionStatus
     fun openAccessibilitySettings()
     fun openAppInfo()
+    fun requestNotificationPermission()
+    /** Offers to add the Quick Settings tiles (Android 13+); no-op elsewhere. */
+    fun requestAddTiles()
     val updater: Updater?
 }
 

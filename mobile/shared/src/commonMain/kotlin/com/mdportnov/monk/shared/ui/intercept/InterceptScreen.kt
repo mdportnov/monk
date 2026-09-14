@@ -17,6 +17,12 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import com.mdportnov.monk.shared.data.formatClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
@@ -106,21 +112,30 @@ fun InterceptScreen(
             label = "arc",
         )
 
-        Box(
+        BoxWithConstraints(
             Modifier
                 .fillMaxSize()
                 .background(Brush.verticalGradient(listOf(Color(0xFF0B0D12), Color(0xFF141a2a), Color(0xFF0B0D12))))
                 .safeDrawingPadding(),
         ) {
+            // Landscape phones and small windows: a smaller orb and a scrollable column instead
+            // of clipped buttons. Tablets: the column stays phone-wide in the middle.
+            val orb = minOf(220.dp, maxHeight * 0.3f)
+            val scroll = rememberScrollState()
             Column(
-                Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp),
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .widthIn(max = 520.dp)
+                    .fillMaxSize()
+                    .verticalScroll(scroll)
+                    .padding(horizontal = 32.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.weight(1f, fill = true))
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    BreathingOrb(active = !blocked && remaining > 0, arc = arc) {
-                        AppIcon(packageName, 56.dp)
+                    BreathingOrb(active = !blocked && remaining > 0, arc = arc, size = orb) {
+                        AppIcon(packageName, orb * 0.25f)
                     }
                     Spacer(Modifier.height(40.dp))
                     when {
@@ -179,6 +194,7 @@ fun InterceptScreen(
                         }
                     }
                 }
+                Spacer(Modifier.weight(1f, fill = true))
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!blocked) {
                         Button(
@@ -219,7 +235,7 @@ private fun Sub(text: String) {
 }
 
 @Composable
-private fun BreathingOrb(active: Boolean, arc: Float, content: @Composable () -> Unit) {
+private fun BreathingOrb(active: Boolean, arc: Float, size: Dp, content: @Composable () -> Unit) {
     val transition = rememberInfiniteTransition(label = "breath")
     val scale by transition.animateFloat(
         initialValue = 0.82f,
@@ -228,22 +244,22 @@ private fun BreathingOrb(active: Boolean, arc: Float, content: @Composable () ->
         label = "scale",
     )
     val s = if (active) scale else 0.95f
-    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(220.dp)) {
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size)) {
         Box(
             Modifier
-                .size(220.dp)
+                .size(size)
                 .scale(s)
                 .background(Brush.radialGradient(listOf(MonkColors.Violet.copy(alpha = 0.35f), Color.Transparent)), CircleShape),
         )
         Box(
             Modifier
-                .size(150.dp)
+                .size(size * 0.68f)
                 .scale(s)
                 .background(Brush.radialGradient(listOf(MonkColors.Blue.copy(alpha = 0.55f), MonkColors.Blue.copy(alpha = 0.08f))), CircleShape),
         )
         // Countdown ring: drains clockwise as the pause runs out.
         if (arc > 0f) {
-            Canvas(Modifier.size(176.dp)) {
+            Canvas(Modifier.size(size * 0.8f)) {
                 val stroke = 3.dp.toPx()
                 drawArc(
                     color = MonkColors.Fog.copy(alpha = 0.12f),

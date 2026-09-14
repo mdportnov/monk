@@ -2,6 +2,10 @@ package com.mdportnov.monk.shared.ui.home
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import com.mdportnov.monk.shared.ui.components.GlassRail
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -62,33 +66,40 @@ fun MainScreen(
     }
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    // Content runs under both glass pieces; these insets keep the first and last rows reachable.
-    val contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = top + 12.dp, bottom = bottom + 12.dp + 64.dp + 24.dp)
+    val tabs = listOf(
+        DockTab(Icons.Outlined.Apps, s.tabHome),
+        DockTab(Icons.Outlined.Insights, s.tabStats),
+        DockTab(Icons.Outlined.Tune, s.tabSettings),
+    )
 
-    Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().hazeSource(hazeState)) {
-            when (tab) {
-                Tab.Home -> HomeScreen(store, platform, onAddApps, onOpenApp, scroll.list, contentPadding)
-                Tab.Stats -> StatsScreen(store, scroll.column, contentPadding)
-                Tab.Settings -> SettingsScreen(store, platform, scroll.column, contentPadding)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // Tablets and unfolded foldables: a side rail instead of the dock, content capped so
+        // cards stop stretching into banners.
+        val wide = maxWidth >= 840.dp
+        val contentPadding = PaddingValues(
+            start = 16.dp, end = 16.dp,
+            top = top + 12.dp,
+            bottom = if (wide) bottom + 24.dp else bottom + 12.dp + 64.dp + 24.dp,
+        )
+        Box(Modifier.fillMaxSize().padding(start = if (wide) 96.dp else 0.dp).hazeSource(hazeState)) {
+            Box(Modifier.widthIn(max = 720.dp).fillMaxSize().align(Alignment.TopCenter)) {
+                when (tab) {
+                    Tab.Home -> HomeScreen(store, platform, onAddApps, onOpenApp, scroll.list, contentPadding)
+                    Tab.Stats -> StatsScreen(store, scroll.column, contentPadding)
+                    Tab.Settings -> SettingsScreen(store, platform, scroll.column, contentPadding)
+                }
             }
         }
         GlassTopBar(
             title = when (tab) { Tab.Home -> "monk_"; Tab.Stats -> s.tabStats; Tab.Settings -> s.tabSettings },
             visible = condensed,
             hazeState = hazeState,
-            modifier = Modifier.align(Alignment.TopCenter),
+            modifier = Modifier.align(Alignment.TopCenter).padding(start = if (wide) 96.dp else 0.dp),
         )
-        GlassDock(
-            tabs = listOf(
-                DockTab(Icons.Outlined.Apps, s.tabHome),
-                DockTab(Icons.Outlined.Insights, s.tabStats),
-                DockTab(Icons.Outlined.Tune, s.tabSettings),
-            ),
-            selected = tab.ordinal,
-            onSelect = { tab = Tab.entries[it] },
-            hazeState = hazeState,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
+        if (wide) {
+            GlassRail(tabs, tab.ordinal, { tab = Tab.entries[it] }, hazeState, Modifier.align(Alignment.CenterStart))
+        } else {
+            GlassDock(tabs, tab.ordinal, { tab = Tab.entries[it] }, hazeState, Modifier.align(Alignment.BottomCenter))
+        }
     }
 }

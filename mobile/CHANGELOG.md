@@ -3,6 +3,14 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.5.1
+
+- Russian labels shrink to fit instead of wrapping in segmented controls, the dock and chips.
+- Tablets and unfolded foldables: a side rail instead of the dock, content capped at a readable width.
+- Landscape and small windows: the pause screen scales its orb and scrolls instead of clipping.
+- Large system font: the setup button grows instead of clipping its label.
+- An app that surfaced under the lock screen is judged again on its next window if the unlock event never arrived.
+
 ## 1.5.0
 
 - Russian: pick the language in Settings (system / English / Русский); on Android 13+ the tiles, notifications and service name follow.

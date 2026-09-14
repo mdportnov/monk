@@ -71,7 +71,7 @@ class Strings(private val ru: Boolean) {
         "Choose Monk and turn it on",
         "Confirm \"Allow\" and come back",
     )
-    val openAccessibilitySettings get() = t("Open accessibility settings", "Открыть настройки специальных возможностей")
+    val openAccessibilitySettings get() = t("Open accessibility settings", "Открыть настройки доступности")
     val addSuggested get() = t("Add suggested", "Добавить рекомендуемые")
     val setupRestricted get() = t(
         "Android 13+: the switch is greyed out for sideloaded apps. Tap it once anyway, then open App info → ⋮ → Allow restricted settings, and come back.",

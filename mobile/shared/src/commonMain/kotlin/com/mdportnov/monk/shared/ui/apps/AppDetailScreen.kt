@@ -1,10 +1,12 @@
 package com.mdportnov.monk.shared.ui.apps
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,6 +41,7 @@ import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.BlockMode
 import com.mdportnov.monk.shared.platform.AppIcon
 import com.mdportnov.monk.shared.ui.components.Counter
+import com.mdportnov.monk.shared.ui.components.FitText
 import com.mdportnov.monk.shared.ui.components.Hint
 import com.mdportnov.monk.shared.data.localMoment
 import com.mdportnov.monk.shared.ui.components.LabeledRow
@@ -75,8 +78,9 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
             )
         },
     ) { padding ->
+        Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
-            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+            Modifier.widthIn(max = 720.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -116,12 +120,12 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
                             enabled = !strict,
                             onClick = { store.upsertApp(app.copy(mode = BlockMode.DELAY)) },
                             shape = SegmentedButtonDefaults.itemShape(0, 2),
-                        ) { Text(s.modeDelay) }
+                        ) { FitText(s.modeDelay) }
                         SegmentedButton(
                             selected = app.mode == BlockMode.BLOCK,
                             onClick = { store.upsertApp(app.copy(mode = BlockMode.BLOCK)) },
                             shape = SegmentedButtonDefaults.itemShape(1, 2),
-                        ) { Text(s.modeBlock) }
+                        ) { FitText(s.modeBlock) }
                     }
                 }
             }
@@ -188,6 +192,7 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
                     }
                 }
             }
+        }
         }
     }
 }

@@ -95,6 +95,16 @@ class ForegroundGateTest {
     }
 
     @Test
+    fun keyguardDeferralRecoversWithoutUserPresent() {
+        val fx = Fake(); val g = gate(fx)
+        fx.keyguard = true
+        g.onWindow("com.insta", "com.insta.MainActivity")
+        fx.keyguard = false
+        g.onWindow("com.insta", "com.insta.FeedActivity")
+        assertEquals(listOf("com.insta"), fx.intercepts)
+    }
+
+    @Test
     fun allowanceSchedulesReevaluationAtExpiry() {
         val fx = Fake(); val g = gate(fx)
         fx.allowances["com.insta"] = fx.now + 60_000

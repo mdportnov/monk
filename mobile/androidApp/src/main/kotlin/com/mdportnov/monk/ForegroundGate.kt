@@ -67,7 +67,15 @@ class ForegroundGate(
         if (!effects.isActivityWindow(pkg, className)) return
 
         val gateOpenFor = effects.interceptShowingFor()
-        if (pkg == lastForeground && gateOpenFor != pkg) return
+        if (pkg == lastForeground && gateOpenFor != pkg) {
+            // Surfaced under the keyguard earlier and USER_PRESENT never came (some ROMs skip it
+            // for a swipe lock): the next window of the same app on an unlocked screen counts.
+            if (pendingAfterUnlock == pkg && !effects.isKeyguardLocked()) {
+                pendingAfterUnlock = null
+                evaluate(pkg)
+            }
+            return
+        }
         // The app resurfacing above a live intercept (notification deep link, relaunch): re-cover
         // it, but not for the echo events the relaunch itself produces.
         if (gateOpenFor == pkg && clock() - lastLaunchAt < RELAUNCH_DEBOUNCE_MS) return

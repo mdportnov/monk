@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -127,6 +129,7 @@ fun GlassDock(
     val borderColor = if (dark) MonkColors.Violet.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.8f)
     Row(
         modifier
+            .widthIn(max = 480.dp)
             .padding(horizontal = 24.dp)
             .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp)
             .height(64.dp)
@@ -163,9 +166,65 @@ fun GlassDock(
                 verticalArrangement = Arrangement.Center,
             ) {
                 Icon(tab.icon, tab.label, tint = fg, modifier = Modifier.size(22.dp))
-                Text(tab.label, style = MaterialTheme.typography.labelSmall, color = fg, modifier = Modifier.padding(top = 2.dp))
+                androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides fg) {
+                    FitText(tab.label, style = MaterialTheme.typography.labelSmall, minSize = 8f, modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp))
+                }
             }
             if (i < tabs.lastIndex) Box(Modifier.width(2.dp))
+        }
+    }
+}
+
+/** The dock, stood up on its side for wide screens (tablets, unfolded foldables). */
+@Composable
+fun GlassRail(
+    tabs: List<DockTab>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    hazeState: HazeState,
+    modifier: Modifier = Modifier,
+) {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    Column(
+        modifier
+            .fillMaxHeight()
+            .width(96.dp)
+            .monkGlass(hazeState)
+            .background(
+                Brush.verticalGradient(
+                    listOf(MonkColors.Violet.copy(alpha = if (dark) 0.14f else 0.06f), MonkColors.Blue.copy(alpha = if (dark) 0.08f else 0.03f)),
+                ),
+            )
+            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp, bottom = 16.dp)
+            .padding(horizontal = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        tabs.forEachIndexed { i, tab ->
+            val active = i == selected
+            val pill by animateColorAsState(
+                if (active) MaterialTheme.colorScheme.primary.copy(alpha = if (dark) 0.28f else 0.16f) else Color.Transparent,
+                tween(250), label = "pill",
+            )
+            val fg by animateColorAsState(
+                if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                tween(250), label = "fg",
+            )
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(pill)
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(i) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(tab.icon, tab.label, tint = fg, modifier = Modifier.size(24.dp))
+                androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides fg) {
+                    FitText(tab.label, style = MaterialTheme.typography.labelSmall, minSize = 8f, modifier = Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp))
+                }
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -84,7 +85,8 @@ fun AddAppsScreen(store: MonkStore, platform: MonkPlatform, onClose: () -> Unit)
             )
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
+        Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -133,6 +135,7 @@ fun AddAppsScreen(store: MonkStore, platform: MonkPlatform, onClose: () -> Unit)
                     }
                 }
             }
+        }
         }
     }
 }

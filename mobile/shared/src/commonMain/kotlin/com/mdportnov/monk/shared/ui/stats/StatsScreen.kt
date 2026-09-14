@@ -46,6 +46,7 @@ import com.mdportnov.monk.shared.platform.AppIcon
 import com.mdportnov.monk.shared.ui.components.Counter
 import com.mdportnov.monk.shared.ui.components.Hint
 import com.mdportnov.monk.shared.ui.components.MonkCard
+import com.mdportnov.monk.shared.ui.components.FitText
 import com.mdportnov.monk.shared.ui.components.SectionTitle
 
 private enum class Range(val days: Int) { Today(1), Week(7), All(90) }
@@ -72,7 +73,7 @@ fun StatsScreen(store: MonkStore, scrollState: ScrollState, contentPadding: Padd
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             val items = listOf(Range.Today to s.statsToday, Range.Week to s.statsWeek, Range.All to s.statsAllTime)
             items.forEachIndexed { i, (r, label) ->
-                SegmentedButton(selected = range == r, onClick = { range = r }, shape = SegmentedButtonDefaults.itemShape(i, items.size)) { Text(label) }
+                SegmentedButton(selected = range == r, onClick = { range = r }, shape = SegmentedButtonDefaults.itemShape(i, items.size)) { FitText(label) }
             }
         }
 

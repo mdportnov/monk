@@ -58,6 +58,7 @@ import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.ThemeMode
 import com.mdportnov.monk.shared.platform.MonkPlatform
 import com.mdportnov.monk.shared.ui.LocalHostActions
+import com.mdportnov.monk.shared.ui.components.FitText
 import com.mdportnov.monk.shared.ui.components.SectionTitle
 import com.mdportnov.monk.shared.ui.components.SettingBlock
 import com.mdportnov.monk.shared.ui.components.SettingRow
@@ -217,7 +218,7 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
                             selected = config.language == tag,
                             onClick = { store.updateConfig { it.copy(language = tag) } },
                             shape = SegmentedButtonDefaults.itemShape(i, langs.size),
-                        ) { Text(label) }
+                        ) { FitText(label) }
                     }
                 }
             }
@@ -233,7 +234,7 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
                             selected = config.theme == mode,
                             onClick = { store.updateConfig { it.copy(theme = mode) } },
                             shape = SegmentedButtonDefaults.itemShape(i, modes.size),
-                        ) { Text(label) }
+                        ) { FitText(label) }
                     }
                 }
             }

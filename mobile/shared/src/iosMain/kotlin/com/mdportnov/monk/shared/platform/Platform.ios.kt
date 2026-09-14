@@ -36,6 +36,7 @@ object IosPlatform : MonkPlatform {
     override fun openAppInfo() = Unit
     override fun requestAddTiles() = Unit
     override fun applyAppLanguage(language: String) = Unit
+    override fun openUrl(url: String) = Unit
     override val updater: Updater? = null
 }
 

@@ -28,7 +28,10 @@ import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -141,23 +144,18 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
             if (config.schedule.enabled) {
                 SettingsDivider()
                 SettingBlock {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         s.dayShort.forEachIndexed { i, label ->
                             val day = i + 1
                             val on = day in config.schedule.days
-                            FilterChip(
-                                selected = on,
-                                // At least one day stays selected: an empty set would silently pause protection forever.
-                                enabled = !strict && !(on && config.schedule.days.size == 1),
-                                onClick = {
-                                    store.updateConfig {
-                                        val days = if (on) it.schedule.days - day else it.schedule.days + day
-                                        it.copy(schedule = it.schedule.copy(days = days))
-                                    }
-                                },
-                                label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                                modifier = Modifier.weight(1f),
-                            )
+                            // At least one day stays selected: an empty set would silently pause protection forever.
+                            val enabled = !strict && !(on && config.schedule.days.size == 1)
+                            DayToggle(label, on, enabled) {
+                                store.updateConfig {
+                                    val days = if (on) it.schedule.days - day else it.schedule.days + day
+                                    it.copy(schedule = it.schedule.copy(days = days))
+                                }
+                            }
                         }
                     }
                 }
@@ -260,6 +258,12 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
         SettingsGroup {
             SettingBlock { Text(s.aboutText, style = MaterialTheme.typography.bodyMedium) }
         }
+        TextButton(
+            onClick = { platform.openUrl(s.madeWithUrl) },
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        ) {
+            Text(s.madeWith, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 
     if (showHelp) {
@@ -297,6 +301,24 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
             },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(s.cancel) } },
         )
+    }
+}
+
+/** A 40 dp circle per weekday: no check icon, so the two-letter label never wraps. */
+@Composable
+private fun DayToggle(label: String, on: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val bg = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
+    val fg = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = CircleShape,
+        color = bg,
+        modifier = Modifier.size(40.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(label, style = MaterialTheme.typography.labelLarge, color = fg.copy(alpha = if (enabled) 1f else 0.5f))
+        }
     }
 }
 

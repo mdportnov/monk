@@ -28,6 +28,7 @@ interface MonkPlatform {
     fun requestAddTiles()
     /** Tell the OS the app's language ("system" = follow the device), so system-facing strings match. */
     fun applyAppLanguage(language: String)
+    fun openUrl(url: String)
     val updater: Updater?
 }
 

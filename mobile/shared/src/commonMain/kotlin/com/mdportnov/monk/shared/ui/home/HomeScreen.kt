@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.sp
 import com.mdportnov.monk.shared.ui.components.Pill
+import com.mdportnov.monk.shared.ui.components.FitText
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.layout.PaddingValues
@@ -132,8 +133,8 @@ fun HomeScreen(
             } else {
                 platform.updater?.let { u -> item { UpdateCard(u, compact = true) } }
                 if (permissions.accessibilityEnabled) {
-                    item { StatusCard(store, config, permissions, now) }
-                    item { WeekCard(stats) }
+                    item { StatusCard(store, config, permissions, now, showControls = apps.isNotEmpty()) }
+                    if (stats.days.isNotEmpty()) item { WeekCard(stats) }
                 } else {
                     item { SetupCard(permissions, platform) }
                 }
@@ -206,7 +207,7 @@ fun MonkMark(size: Dp) {
 }
 
 @Composable
-private fun StatusCard(store: MonkStore, config: MonkConfig, permissions: PermissionStatus, now: Long) {
+private fun StatusCard(store: MonkStore, config: MonkConfig, permissions: PermissionStatus, now: Long, showControls: Boolean) {
     val s = strings
     val moment = localMoment()
     val scheduleActive = config.schedule.isActive(moment.dayIso, moment.minuteOfDay)
@@ -243,7 +244,7 @@ private fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permis
                 Switch(checked = config.enabled, onCheckedChange = { on -> store.updateConfig { it.copy(enabled = on, pausedUntil = 0) } })
             }
         }
-        if (config.enabled && permissions.accessibilityEnabled && !focus) {
+        if (showControls && config.enabled && permissions.accessibilityEnabled && !focus) {
             Hint(s.pauseFocusHint)
             if (paused) {
                 OutlinedButton(onClick = store::resumeProtection) { Text(s.resume) }
@@ -411,7 +412,7 @@ private fun EmptyApps(platform: MonkPlatform, store: MonkStore, onAddApps: () ->
         Text(s.noApps, style = MaterialTheme.typography.titleMedium)
         Text(s.noAppsHint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (suggested.isNotEmpty()) {
-            Text(s.suggested, style = MaterialTheme.typography.labelLarge)
+            Text(s.suggested, style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 0.6.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 suggested.forEach { app ->
                     AssistChip(
@@ -427,12 +428,10 @@ private fun EmptyApps(platform: MonkPlatform, store: MonkStore, onAddApps: () ->
                 Button(
                     onClick = { suggested.forEach { store.upsertApp(BlockedApp(it.packageName, it.label)) } },
                     modifier = Modifier.weight(1f),
-                ) { Text(s.addSuggested) }
+                ) { FitText(s.addSuggested) }
             }
             OutlinedButton(onClick = onAddApps, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Outlined.Add, null)
-                Spacer(Modifier.size(6.dp))
-                Text(s.allApps)
+                FitText(if (suggested.isNotEmpty()) s.chooseManually else s.addApps)
             }
         }
     }

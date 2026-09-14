@@ -92,6 +92,8 @@ class AndroidPlatform(private val app: Context, override val updater: Updater) :
         if (lm.applicationLocales != wanted) runCatching { lm.applicationLocales = wanted }
     }
 
+    override fun openUrl(url: String) = launch(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+
     private fun launch(intent: Intent) {
         runCatching { app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }

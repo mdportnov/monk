@@ -3,6 +3,12 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.6.0
+
+- First screen tells a story: turn the service on, see how it works, pick apps. Pause / focus controls and the week card appear once there is something to control.
+- Clearer wording in both languages: "Your apps", "Pick your apps", "Usual suspects", "Add all" / "Choose manually", "Same as in Settings", "Start" / "End".
+- Weekday toggles that never wrap; a "made with ♥" link to mikeportnov.com in Settings.
+
 ## 1.5.1
 
 - Russian labels shrink to fit instead of wrapping in segmented controls, the dock and chips.

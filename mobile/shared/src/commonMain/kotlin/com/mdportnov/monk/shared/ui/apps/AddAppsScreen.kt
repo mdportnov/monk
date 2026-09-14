@@ -115,7 +115,7 @@ fun AddAppsScreen(store: MonkStore, platform: MonkPlatform, onClose: () -> Unit)
                                         Text(s.suggested, style = MaterialTheme.typography.titleSmall)
                                         Text(s.suggestedHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    TextButton(onClick = { selected = selected + suggested.map { it.packageName } }) { Text(s.addSuggested) }
+                                    TextButton(onClick = { selected = selected + suggested.map { it.packageName } }) { Text(s.selectSuggested) }
                                 }
                             }
                         }

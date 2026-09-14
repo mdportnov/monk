@@ -45,10 +45,10 @@ class Strings(private val ru: Boolean) {
     val howStep3 get() = t("3. After the countdown you choose: open it for a few minutes, or walk away.", "3. После отсчёта вы решаете: открыть на несколько минут или уйти.")
     val howStep4 get() = t("Block mode skips the choice: the app just does not open.", "Режим «Запрет» без выбора: приложение просто не открывается.")
     val gotIt get() = t("Got it", "Понятно")
-    val suggested get() = t("Suggested", "Рекомендуем")
-    val suggestedHint get() = t("Installed on this phone and known to eat time.", "Стоят на этом телефоне и известны тем, что съедают время.")
+    val suggested get() = t("Usual suspects", "Часто отвлекают")
+    val suggestedHint get() = t("Installed on this phone and known to eat time.", "Стоят на этом телефоне и славятся тем, что съедают время.")
     val allApps get() = t("All apps", "Все приложения")
-    val pauseFocusHint get() = t("Pause turns protection off for a while. Focus blocks every watched app and cannot be stopped early.", "Пауза отключает защиту на время. Фокус закрывает все приложения под контролем и не останавливается раньше срока.")
+    val pauseFocusHint get() = t("Pause switches protection off for a while. Focus blocks every app here until the timer ends.", "Пауза выключает защиту на время. Фокус закрывает все приложения отсюда до конца таймера.")
     val delayLengthHint get() = t("How long the countdown on the pause screen lasts before you may open the app.", "Сколько длится отсчёт на экране паузы, прежде чем приложение можно открыть.")
     val allowLengthHint get() = t("After you choose to open, how long the app stays available before Monk asks again.", "После того как вы решили открыть: сколько приложение доступно, прежде чем Monk спросит снова.")
     val walkedAwayHint get() = t("«Walked away» = closed the pause screen without opening the app.", "«Ушли» = закрыли экран паузы, не открыв приложение.")
@@ -72,7 +72,9 @@ class Strings(private val ru: Boolean) {
         "Confirm \"Allow\" and come back",
     )
     val openAccessibilitySettings get() = t("Open accessibility settings", "Открыть настройки доступности")
-    val addSuggested get() = t("Add suggested", "Добавить рекомендуемые")
+    val addSuggested get() = t("Add all", "Добавить все")
+    val selectSuggested get() = t("Select all", "Выбрать все")
+    val chooseManually get() = t("Choose manually", "Выбрать вручную")
     val setupRestricted get() = t(
         "Android 13+: the switch is greyed out for sideloaded apps. Tap it once anyway, then open App info → ⋮ → Allow restricted settings, and come back.",
         "Android 13+: для установленных вручную приложений переключатель серый. Всё равно нажмите его один раз, затем откройте О приложении → ⋮ → Разрешить ограниченные настройки и вернитесь.",
@@ -89,11 +91,11 @@ class Strings(private val ru: Boolean) {
     val noWeekData get() = t("No pauses yet this week.", "На этой неделе остановок ещё не было.")
 
     // Apps
-    val blockedApps get() = t("Watched apps", "Под контролем")
-    val noApps get() = t("No apps yet", "Пока пусто")
+    val blockedApps get() = t("Your apps", "Мои приложения")
+    val noApps get() = t("Pick your apps", "Выберите приложения")
     val noAppsHint get() = t(
-        "Add the apps that steal your attention. Each one gets a pause or a hard block.",
-        "Добавьте приложения, которые крадут внимание. Каждому — пауза или полный запрет.",
+        "The ones that open themselves. Each gets a pause before it opens, or a hard block.",
+        "Те, что открываются сами собой. Каждому — пауза перед входом или полный запрет.",
     )
     val addApps get() = t("Add apps", "Добавить")
     val search get() = t("Search", "Поиск")
@@ -116,7 +118,8 @@ class Strings(private val ru: Boolean) {
     val dailyLimit get() = t("Daily limit", "Лимит в день")
     val dailyLimitHint get() = t("After this many opens the app is blocked until midnight.", "После стольких открытий приложение закрыто до полуночи.")
     val noLimit get() = t("No limit", "Без лимита")
-    val useDefault get() = t("Use default", "По умолчанию")
+    val useDefault get() = t("Same as in Settings", "Как в настройках")
+    fun currently(v: String) = t("Currently $v", "Сейчас $v")
     val seconds get() = t("s", "с")
     val minutes get() = t("min", "мин")
     val times get() = t("×", "×")
@@ -129,15 +132,15 @@ class Strings(private val ru: Boolean) {
     val scheduleTitle get() = t("Schedule", "Расписание")
     val scheduleHint get() = t("Protect only inside this window. Off = always.", "Защита только в этом окне. Выкл = всегда.")
     val scheduleAllDay get() = t("Same start and end = the whole day.", "Одинаковые начало и конец = весь день.")
-    val from get() = t("From", "С")
-    val to get() = t("To", "До")
+    val from get() = t("Start", "Начало")
+    val to get() = t("End", "Конец")
     val pauseScreen get() = t("Pause screen", "Экран паузы")
     val askIntention get() = t("Ask why", "Спрашивать зачем")
     val askIntentionHint get() = t("Before opening, pick a reason. Shows up in stats.", "Перед открытием выбрать причину. Видно в статистике.")
     val pauseMessage get() = t("Your line", "Ваша фраза")
     val pauseMessageHint get() = t("Shown on the pause screen instead of the default. Leave empty for the default.", "Показывается на экране паузы вместо стандартной. Пусто = стандартная.")
     val reliability get() = t("Reliability", "Надёжность")
-    val overlayMode get() = t("Overlay mode", "Режим оверлея")
+    val overlayMode get() = t("Draw over everything", "Экран поверх всего")
     val overlayModeHint get() = t(
         "Draw the pause screen on top of everything. Turn on if the pause screen does not appear on your phone, or you use split-screen.",
         "Рисовать экран паузы поверх всего. Включите, если экран паузы не появляется на вашем телефоне или вы пользуетесь разделённым экраном.",
@@ -173,6 +176,8 @@ class Strings(private val ru: Boolean) {
     val resetStatsConfirm get() = t("Delete all statistics? Apps and settings stay.", "Удалить всю статистику? Приложения и настройки останутся.")
     val delete get() = t("Delete", "Удалить")
     val about get() = t("About", "О приложении")
+    val madeWith get() = t("Made with ♥ by Punto Cero & Mike Portnov", "Сделано с ♥ в Punto Cero · Mike Portnov")
+    val madeWithUrl get() = "https://mikeportnov.com"
     fun version(v: String) = t("Version $v", "Версия $v")
     val checkUpdates get() = t("Check for updates", "Проверить обновления")
     val updateChecking get() = t("Checking…", "Проверяю…")

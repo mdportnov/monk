@@ -133,7 +133,7 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
             if (app.mode == BlockMode.DELAY) {
                 SectionTitle(s.delayLength)
                 SettingsGroup {
-                    SettingRow(title = s.useDefault, subtitle = "${config.defaultDelaySeconds} ${s.seconds}") {
+                    SettingRow(title = s.useDefault, subtitle = s.currently("${config.defaultDelaySeconds} ${s.seconds}")) {
                         Switch(
                             checked = app.delaySeconds == null,
                             enabled = !strict,
@@ -154,7 +154,7 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
 
                 SectionTitle(s.allowLength)
                 SettingsGroup {
-                    SettingRow(title = s.useDefault, subtitle = "${config.defaultAllowMinutes} ${s.minutes}") {
+                    SettingRow(title = s.useDefault, subtitle = s.currently("${config.defaultAllowMinutes} ${s.minutes}")) {
                         Switch(
                             checked = app.allowMinutes == null,
                             enabled = !strict,

@@ -1,6 +1,5 @@
 package com.mdportnov.monk.shared.ui.home
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +21,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.HourglassEmpty
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PhoneIphone
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -36,31 +36,37 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mdportnov.monk.shared.data.MonkStore
+import com.mdportnov.monk.shared.data.formatClock
+import com.mdportnov.monk.shared.data.lastDates
 import com.mdportnov.monk.shared.data.localMoment
+import com.mdportnov.monk.shared.data.nextMidnightMillis
+import com.mdportnov.monk.shared.data.nowMillis
 import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.BlockMode
 import com.mdportnov.monk.shared.model.BlockedApp
 import com.mdportnov.monk.shared.model.MonkConfig
+import com.mdportnov.monk.shared.model.Stats
 import com.mdportnov.monk.shared.platform.AppIcon
 import com.mdportnov.monk.shared.platform.MonkPlatform
 import com.mdportnov.monk.shared.platform.PermissionStatus
+import com.mdportnov.monk.shared.ui.components.Hint
 import com.mdportnov.monk.shared.ui.components.LabeledRow
 import com.mdportnov.monk.shared.ui.components.MonkCard
 import com.mdportnov.monk.shared.ui.components.SectionTitle
 import com.mdportnov.monk.shared.ui.theme.MonkColors
+import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
@@ -72,12 +78,23 @@ fun HomeScreen(
 ) {
     val s = strings
     val config by store.config.collectAsStateWithLifecycle()
+    val stats by store.stats.collectAsStateWithLifecycle()
+    val allowances by store.allowances.collectAsStateWithLifecycle()
     var permissions by remember { mutableStateOf(platform.permissions()) }
     LifecycleResumeEffect(Unit) {
         permissions = platform.permissions()
         onPauseOrDispose { }
     }
+    // A 30 s heartbeat: pause / strict / allowance countdowns and the schedule flip on their own.
+    var now by remember { mutableLongStateOf(nowMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            now = nowMillis()
+        }
+    }
     val apps = remember(config.apps) { config.apps.sortedBy { it.label.lowercase() } }
+    val today = localMoment().dateIso
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(
@@ -88,17 +105,25 @@ fun HomeScreen(
             if (!platform.supportsBlocking) {
                 item { UnsupportedCard() }
             } else {
-                item { StatusCard(config, permissions, onToggle = { on -> store.updateConfig { it.copy(enabled = on) } }) }
+                item { StatusCard(store, config, permissions, now) }
                 if (!permissions.accessibilityEnabled) {
                     item { SetupCard(permissions, platform) }
                 }
+                item { WeekCard(stats) }
             }
             item { SectionTitle(s.blockedApps, Modifier.padding(top = 8.dp)) }
             if (apps.isEmpty()) {
                 item { EmptyApps(onAddApps) }
             }
             items(apps, key = { it.packageName }) { app ->
-                AppRow(app, config, onClick = { onOpenApp(app.packageName) })
+                AppRow(
+                    app = app,
+                    config = config,
+                    allowedUntil = allowances[app.packageName]?.takeIf { it > now },
+                    opensToday = stats.opensToday(today, app.packageName),
+                    onEndAllowance = { store.revokeAllowance(app.packageName) },
+                    onClick = { onOpenApp(app.packageName) },
+                )
             }
         }
         if (apps.isNotEmpty() && platform.supportsBlocking) {
@@ -121,9 +146,9 @@ private fun Header() {
     }
 }
 
-/** The "m" from assets/logo.svg drawn as text — tiny, no vector plumbing needed. */
+/** The "m_" from assets/logo.svg drawn as text — tiny, no vector plumbing needed. */
 @Composable
-fun MonkMark(size: androidx.compose.ui.unit.Dp) {
+fun MonkMark(size: Dp) {
     Surface(color = MonkColors.Ink, shape = MaterialTheme.shapes.small, modifier = Modifier.size(size)) {
         Box(contentAlignment = Alignment.Center) {
             Text(
@@ -136,22 +161,19 @@ fun MonkMark(size: androidx.compose.ui.unit.Dp) {
 }
 
 @Composable
-private fun StatusCard(config: MonkConfig, permissions: PermissionStatus, onToggle: (Boolean) -> Unit) {
+private fun StatusCard(store: MonkStore, config: MonkConfig, permissions: PermissionStatus, now: Long) {
     val s = strings
-    // Re-evaluated once a minute so "Paused by schedule" flips on its own.
-    var moment by remember { mutableStateOf(localMoment()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(60_000)
-            moment = localMoment()
-        }
-    }
+    val moment = localMoment()
     val scheduleActive = config.schedule.isActive(moment.dayIso, moment.minuteOfDay)
-    val effective = config.enabled && permissions.accessibilityEnabled
+    val strict = config.isStrict(now)
+    val paused = config.isPaused(now)
+    val effective = config.enabled && permissions.accessibilityEnabled && !paused
     val subtitle = when {
         !config.enabled -> s.protectionOff
         !permissions.accessibilityEnabled -> s.setupAccessibility
+        paused -> s.pausedUntil(formatClock(config.pausedUntil))
         !scheduleActive -> s.protectionPaused
+        strict -> s.strictUntil(formatClock(config.strictUntil))
         else -> s.protectionOn
     }
     val dotColor = when {
@@ -167,9 +189,63 @@ private fun StatusCard(config: MonkConfig, permissions: PermissionStatus, onTogg
                 Text(s.protection, style = MaterialTheme.typography.titleMedium)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Switch(checked = config.enabled, onCheckedChange = onToggle)
+            if (strict) {
+                Icon(Icons.Outlined.Lock, s.strictLocked, tint = MaterialTheme.colorScheme.primary)
+            } else {
+                Switch(checked = config.enabled, onCheckedChange = { on -> store.updateConfig { it.copy(enabled = on, pausedUntil = 0) } })
+            }
+        }
+        if (config.enabled && permissions.accessibilityEnabled && !strict) {
+            if (paused) {
+                OutlinedButton(onClick = store::resumeProtection) { Text(s.resume) }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(s.pauseFor, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    PauseChip(s.pause15) { store.pauseProtection(nowMillis() + 15 * 60_000L) }
+                    PauseChip(s.pause60) { store.pauseProtection(nowMillis() + 60 * 60_000L) }
+                    PauseChip(s.pauseDay) { store.pauseProtection(nextMidnightMillis()) }
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun PauseChip(label: String, onClick: () -> Unit) {
+    AssistChip(onClick = onClick, label = { Text(label) })
+}
+
+@Composable
+private fun WeekCard(stats: Stats) {
+    val s = strings
+    val week = lastDates(7)
+    val days = week.map { stats.day(it) }
+    val paused = days.sumOf { it.intercepted }
+    val away = days.sumOf { it.turnedAway }
+    val streak = stats.walkAwayStreak(lastDates(90))
+    MonkCard {
+        Text(s.thisWeek, style = MaterialTheme.typography.titleMedium)
+        if (paused == 0) {
+            Hint(s.noWeekData)
+        } else {
+            Text(s.weekLine(paused, away), style = MaterialTheme.typography.bodyLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatChip(s.successRate(away * 100 / paused), MaterialTheme.colorScheme.tertiary)
+                if (streak > 0) StatChip(s.streak(streak), MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatChip(text: String, color: androidx.compose.ui.graphics.Color) {
+    AssistChip(
+        onClick = {},
+        enabled = false,
+        label = { Text(text) },
+        colors = AssistChipDefaults.assistChipColors(disabledContainerColor = color.copy(alpha = 0.16f), disabledLabelColor = color),
+        border = null,
+    )
 }
 
 @Composable
@@ -181,35 +257,16 @@ private fun SetupCard(permissions: PermissionStatus, platform: MonkPlatform) {
             Spacer(Modifier.size(8.dp))
             Text(s.setupTitle, style = MaterialTheme.typography.titleMedium)
         }
-        PermissionRow(
-            title = s.setupAccessibility,
-            hint = s.setupAccessibilityHint,
-            granted = permissions.accessibilityEnabled,
-            grantedLabel = s.enabled,
-            action = s.enable,
-            onAction = platform::openAccessibilitySettings,
-        )
-        if (permissions.mayNeedRestrictedSettingsUnlock) {
-            Text(s.setupRestricted, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextButton(onClick = platform::openAppInfo) { Text(s.appInfo) }
+        LabeledRow(title = s.setupAccessibility, subtitle = s.setupAccessibilityHint) {
+            if (permissions.accessibilityEnabled) {
+                Icon(Icons.Outlined.CheckCircle, s.enabled, tint = MonkColors.Mint)
+            } else {
+                Button(onClick = platform::openAccessibilitySettings) { Text(s.enable) }
+            }
         }
-    }
-}
-
-@Composable
-private fun PermissionRow(
-    title: String,
-    hint: String,
-    granted: Boolean,
-    grantedLabel: String,
-    action: String,
-    onAction: () -> Unit,
-) {
-    LabeledRow(title = title, subtitle = hint) {
-        if (granted) {
-            Icon(Icons.Outlined.CheckCircle, grantedLabel, tint = MonkColors.Mint)
-        } else {
-            Button(onClick = onAction) { Text(action) }
+        if (permissions.mayNeedRestrictedSettingsUnlock) {
+            Hint(s.setupRestricted)
+            TextButton(onClick = platform::openAppInfo) { Text(s.appInfo) }
         }
     }
 }
@@ -242,7 +299,14 @@ private fun EmptyApps(onAddApps: () -> Unit) {
 }
 
 @Composable
-private fun AppRow(app: BlockedApp, config: MonkConfig, onClick: () -> Unit) {
+private fun AppRow(
+    app: BlockedApp,
+    config: MonkConfig,
+    allowedUntil: Long?,
+    opensToday: Int,
+    onEndAllowance: () -> Unit,
+    onClick: () -> Unit,
+) {
     val s = strings
     Surface(
         onClick = onClick,
@@ -250,17 +314,51 @@ private fun AppRow(app: BlockedApp, config: MonkConfig, onClick: () -> Unit) {
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            AppIcon(app.packageName, 40.dp)
-            Spacer(Modifier.size(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(app.label, style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.height(4.dp))
-                ModeChip(app, config)
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AppIcon(app.packageName, 40.dp)
+                Spacer(Modifier.size(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(app.label, style = MaterialTheme.typography.bodyLarge)
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ModeChip(app, config)
+                        val limit = app.dailyLimit
+                        if (limit != null) {
+                            val exhausted = opensToday >= limit
+                            SmallChip(
+                                s.limitToday(opensToday, limit),
+                                if (exhausted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (allowedUntil != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    Text(
+                        s.openUntil(formatClock(allowedUntil)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onEndAllowance) { Text(s.endNow) }
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun SmallChip(text: String, color: androidx.compose.ui.graphics.Color) {
+    AssistChip(
+        onClick = {},
+        enabled = false,
+        label = { Text(text) },
+        colors = AssistChipDefaults.assistChipColors(disabledContainerColor = color.copy(alpha = 0.12f), disabledLabelColor = color),
+        border = null,
+    )
 }
 
 @Composable

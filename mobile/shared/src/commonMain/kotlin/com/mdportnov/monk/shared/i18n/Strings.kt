@@ -2,6 +2,7 @@ package com.mdportnov.monk.shared.i18n
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.mdportnov.monk.shared.model.Intention
 import com.mdportnov.monk.shared.platform.systemLanguage
 
 class Strings(private val ru: Boolean) {
@@ -12,10 +13,21 @@ class Strings(private val ru: Boolean) {
     val tabStats get() = t("Stats", "Статистика")
     val tabSettings get() = t("Settings", "Настройки")
 
+    // Status
     val protection get() = t("Protection", "Защита")
     val protectionOn get() = t("On", "Включена")
     val protectionOff get() = t("Off", "Выключена")
     val protectionPaused get() = t("Paused by schedule", "Пауза по расписанию")
+    fun pausedUntil(time: String) = t("Paused until $time", "Пауза до $time")
+    fun strictUntil(time: String) = t("Strict mode until $time", "Строгий режим до $time")
+    val pauseFor get() = t("Pause", "Пауза")
+    val pause15 get() = t("15 min", "15 мин")
+    val pause60 get() = t("1 hour", "1 час")
+    val pauseDay get() = t("Today", "До завтра")
+    val resume get() = t("Resume", "Продолжить")
+    val strictLocked get() = t("Locked by strict mode", "Заблокировано строгим режимом")
+
+    // Setup
     val setupTitle get() = t("Finish setup", "Завершите настройку")
     val setupAccessibility get() = t("Accessibility service", "Служба специальных возможностей")
     val setupAccessibilityHint get() = t(
@@ -27,11 +39,17 @@ class Strings(private val ru: Boolean) {
         "Android 13+: для установленных вручную приложений переключатель серый. Всё равно нажмите его один раз, затем откройте О приложении → ⋮ → Разрешить ограниченные настройки и вернитесь.",
     )
     val enable get() = t("Enable", "Включить")
-    val grant get() = t("Grant", "Разрешить")
     val appInfo get() = t("App info", "О приложении")
-    val granted get() = t("Granted", "Есть")
     val enabled get() = t("Enabled", "Включена")
 
+    // Week summary
+    val thisWeek get() = t("This week", "Эта неделя")
+    fun weekLine(paused: Int, away: Int) = t("$paused pauses · $away walked away", "$paused остановок · $away раз ушли")
+    fun successRate(pct: Int) = t("$pct% walked away", "$pct% ушли")
+    fun streak(days: Int) = t(if (days == 1) "1-day streak" else "$days-day streak", "серия: $days ${plural(days, "день", "дня", "дней")}")
+    val noWeekData get() = t("No pauses yet this week.", "На этой неделе остановок ещё не было.")
+
+    // Apps
     val blockedApps get() = t("Watched apps", "Под контролем")
     val noApps get() = t("No apps yet", "Пока пусто")
     val noAppsHint get() = t(
@@ -43,10 +61,12 @@ class Strings(private val ru: Boolean) {
     val done get() = t("Done", "Готово")
     val cancel get() = t("Cancel", "Отмена")
     val remove get() = t("Remove", "Убрать")
-    val save get() = t("Save", "Сохранить")
-    val selected get() = t("selected", "выбрано")
     val loadingApps get() = t("Reading installed apps…", "Читаю список приложений…")
+    fun openUntil(time: String) = t("Open until $time", "Открыто до $time")
+    val endNow get() = t("End now", "Закрыть")
+    fun limitToday(used: Int, limit: Int) = t("$used/$limit today", "$used/$limit сегодня")
 
+    // App detail
     val modeTitle get() = t("Mode", "Режим")
     val modeBlock get() = t("Block", "Запрет")
     val modeBlockHint get() = t("Never opens while protection is on.", "Не открывается, пока включена защита.")
@@ -54,12 +74,17 @@ class Strings(private val ru: Boolean) {
     val modeDelayHint get() = t("Breathe first, then decide.", "Сначала вдох-выдох, потом решение.")
     val delayLength get() = t("Pause length", "Длина паузы")
     val allowLength get() = t("Open for", "Открывать на")
+    val dailyLimit get() = t("Daily limit", "Лимит в день")
+    val dailyLimitHint get() = t("After this many opens the app is blocked until midnight.", "После стольких открытий приложение закрыто до полуночи.")
+    val noLimit get() = t("No limit", "Без лимита")
     val useDefault get() = t("Use default", "По умолчанию")
     val seconds get() = t("s", "с")
     val minutes get() = t("min", "мин")
+    val times get() = t("×", "×")
     fun pauseChip(seconds: Int) = t("${seconds}s pause", "Пауза ${seconds}с")
     fun openFor(minutes: Int) = t("Open for $minutes min", "Открыть на $minutes мин")
 
+    // Settings
     val defaults get() = t("Defaults", "По умолчанию")
     val defaultsHint get() = t("Used by apps without their own setting.", "Для приложений без своих настроек.")
     val scheduleTitle get() = t("Schedule", "Расписание")
@@ -67,27 +92,64 @@ class Strings(private val ru: Boolean) {
     val scheduleAllDay get() = t("Same start and end = the whole day.", "Одинаковые начало и конец = весь день.")
     val from get() = t("From", "С")
     val to get() = t("To", "До")
+    val pauseScreen get() = t("Pause screen", "Экран паузы")
+    val askIntention get() = t("Ask why", "Спрашивать зачем")
+    val askIntentionHint get() = t("Before opening, pick a reason. Shows up in stats.", "Перед открытием выбрать причину. Видно в статистике.")
+    val strictTitle get() = t("Strict mode", "Строгий режим")
+    val strictHint get() = t(
+        "Until the chosen time you cannot turn protection off, pause it, remove apps or soften their settings. No way back.",
+        "До выбранного времени нельзя выключить защиту, поставить паузу, убрать приложения или ослабить настройки. Обратного пути нет.",
+    )
+    val strictUntilMidnight get() = t("Until midnight", "До полуночи")
+    val strict3h get() = t("For 3 hours", "На 3 часа")
+    val strictConfirmTitle get() = t("Enable strict mode?", "Включить строгий режим?")
+    fun strictConfirmBody(time: String) = t("Nothing can be softened until $time. Not even by you.", "До $time ничего нельзя ослабить. Даже вам.")
+    val confirm get() = t("Enable", "Включить")
+    val appearance get() = t("Appearance", "Оформление")
+    val themeSystem get() = t("System", "Как в системе")
+    val themeLight get() = t("Light", "Светлая")
+    val themeDark get() = t("Dark", "Тёмная")
+    val data get() = t("Data", "Данные")
+    val resetStats get() = t("Reset statistics", "Сбросить статистику")
+    val resetStatsConfirm get() = t("Delete all statistics? Apps and settings stay.", "Удалить всю статистику? Приложения и настройки останутся.")
+    val delete get() = t("Delete", "Удалить")
     val about get() = t("About", "О приложении")
     val aboutText get() = t(
-        "Monk puts a moment of friction between you and the apps you open on autopilot. Everything stays on the device.",
-        "Monk ставит секунду трения между вами и приложениями, которые открываются на автопилоте. Всё остаётся на телефоне.",
+        "Monk puts a moment of friction between you and the apps you open on autopilot. No internet permission, no backup: everything stays on the device.",
+        "Monk ставит секунду трения между вами и приложениями, которые открываются на автопилоте. Без доступа в интернет и без бэкапа: всё остаётся на телефоне.",
     )
     val language get() = t("Language follows the system", "Язык берётся из системы")
     val dayShort get() = if (ru) listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс") else listOf("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su")
 
+    // Stats
     val statsToday get() = t("Today", "Сегодня")
-    val statsAllTime get() = t("All time", "За всё время")
+    val statsWeek get() = t("7 days", "7 дней")
+    val statsAllTime get() = t("All time", "Всё время")
     val intercepted get() = t("Paused", "Остановок")
     val turnedAway get() = t("Walked away", "Ушли")
     val opened get() = t("Opened anyway", "Открыли")
     val statsEmpty get() = t("Nothing intercepted yet.", "Пока ни одной остановки.")
-    val last14 get() = t("Last 14 days", "Последние 14 дней")
+    val byDay get() = t("By day", "По дням")
+    val byApp get() = t("By app", "По приложениям")
+    val byHour get() = t("By hour of day", "По часам")
+    val byHourHint get() = t("When you reach for these apps.", "Когда тянет к этим приложениям.")
+    val reasons get() = t("Why you opened", "Зачем открывали")
+    fun intention(i: Intention) = when (i) {
+        Intention.REPLY -> t("Reply to someone", "Ответить кому-то")
+        Intention.LOOKUP -> t("Check something specific", "Посмотреть конкретное")
+        Intention.BORED -> t("Bored", "Скучно")
+        Intention.HABIT -> t("Habit", "По привычке")
+    }
 
+    // Intercept
     val interceptBreathe get() = t("Breathe", "Вдох. Выдох.")
     val interceptQuestion get() = t("Do you really want to open", "Правда хотите открыть")
+    fun interceptQuestionApp(label: String) = "$label?"
     fun interceptBlockedTitle(label: String) = t("$label is blocked", "$label под запретом")
-    fun interceptQuestionApp(label: String) = t("$label?", "$label?")
     val interceptBlockedHint get() = t("You chose this earlier. Future you says thanks.", "Вы сами так решили. Будущий вы скажет спасибо.")
+    fun interceptLimitTitle(label: String) = t("$label is done for today", "$label на сегодня всё")
+    fun interceptLimitHint(limit: Int) = t("Daily limit of $limit reached. Opens again after midnight.", "Лимит $limit в день исчерпан. Снова после полуночи.")
+    val interceptWhy get() = t("Why?", "Зачем?")
     val interceptNotNow get() = t("Not now", "Не сейчас")
     val interceptBack get() = t("Back to focus", "Вернуться к делу")
     fun interceptWait(seconds: Int) = t("Wait ${seconds}s", "Подождите ${seconds}с")
@@ -97,6 +159,16 @@ class Strings(private val ru: Boolean) {
         "Apple keeps app interception behind the Screen Time API. This build only ships the Android blocker; the iOS shell is a placeholder.",
         "Apple прячет перехват приложений за Screen Time API. В этой сборке блокировщик только для Android, оболочка iOS — заглушка.",
     )
+
+    private fun plural(n: Int, one: String, few: String, many: String): String {
+        val n10 = n % 10
+        val n100 = n % 100
+        return when {
+            n10 == 1 && n100 != 11 -> one
+            n10 in 2..4 && n100 !in 12..14 -> few
+            else -> many
+        }
+    }
 }
 
 val LocalStrings = staticCompositionLocalOf { Strings(ru = false) }

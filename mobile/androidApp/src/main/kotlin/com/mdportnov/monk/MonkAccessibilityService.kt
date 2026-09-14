@@ -44,13 +44,31 @@ class MonkAccessibilityService : AccessibilityService() {
         override fun onReceive(context: Context, intent: Intent) = refreshSystemSets()
     }
 
+    /** An app that surfaced while the keyguard was up is judged once the user actually unlocks. */
+    private var pendingAfterUnlock: String? = null
+    private val userPresent = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val pkg = pendingAfterUnlock ?: return
+            pendingAfterUnlock = null
+            if (pkg == lastForeground) evaluate(pkg)
+        }
+    }
+
     /** Re-checks the foreground app when its allowance runs out while it is still open. */
     private val allowanceExpiry = Runnable { lastForeground?.let { evaluate(it) } }
 
     /** Fail-closed guard: fires if InterceptActivity never showed up. */
-    private val launchGuard = Runnable {
-        val pkg = InterceptGate.showing ?: return@Runnable
-        if (!InterceptGate.resumed) {
+    private var guardRetries = 0
+    private val launchGuard: Runnable = object : Runnable {
+        override fun run() {
+            val pkg = InterceptGate.showing ?: return
+            if (InterceptGate.resumed) return
+            // Created but not yet resumed: a cold start on a slow device, give it more time.
+            if (InterceptGate.created && guardRetries < LAUNCH_GUARD_RETRIES) {
+                guardRetries++
+                handler.postDelayed(this, LAUNCH_GUARD_MS)
+                return
+            }
             Log.w(TAG, "intercept screen for $pkg never resumed; sending Home")
             InterceptGate.showing = null
             performGlobalAction(GLOBAL_ACTION_HOME)
@@ -70,12 +88,14 @@ class MonkAccessibilityService : AccessibilityService() {
                 addDataScheme("package")
             },
         )
+        registerReceiver(userPresent, IntentFilter(Intent.ACTION_USER_PRESENT))
         Log.d(TAG, "connected")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         handler.removeCallbacksAndMessages(null)
         runCatching { unregisterReceiver(packagesChanged) }
+        runCatching { unregisterReceiver(userPresent) }
         instance = null
         return super.onUnbind(intent)
     }
@@ -89,7 +109,15 @@ class MonkAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
-        if (pkg == packageName) return
+        if (pkg == packageName) {
+            // Monk's own UI in front means the watched app is not; the intercept screen itself
+            // is transparent (it sits on top of the app it covers).
+            if (event.className?.toString() == MainActivity::class.java.name) {
+                lastForeground = pkg
+                handler.removeCallbacks(allowanceExpiry)
+            }
+            return
+        }
         if (pkg in launchers) {
             // Home: whatever was open has been left; the next entry is a fresh decision.
             lastForeground = pkg
@@ -109,7 +137,11 @@ class MonkAccessibilityService : AccessibilityService() {
         // it, but not for the echo events the relaunch itself produces.
         if (gateOpenFor == pkg && System.currentTimeMillis() - lastLaunchAt < RELAUNCH_DEBOUNCE_MS) return
         lastForeground = pkg
-        if (isKeyguardLocked() || isInCall()) return
+        if (isKeyguardLocked()) {
+            pendingAfterUnlock = pkg
+            return
+        }
+        if (isInCall()) return
         evaluate(pkg)
     }
 
@@ -126,9 +158,11 @@ class MonkAccessibilityService : AccessibilityService() {
                 if (delay > 0) handler.postDelayed(allowanceExpiry, delay + 250)
             }
             is Decision.Intercept -> {
-                Log.d(TAG, "intercepting ${decision.app.packageName} (${decision.app.mode})")
+                Log.d(TAG, "intercepting ${decision.app.packageName} (${decision.effectiveMode})")
                 InterceptGate.showing = pkg
                 InterceptGate.resumed = false
+                InterceptGate.created = false
+                guardRetries = 0
                 val intent = Intent(this, InterceptActivity::class.java)
                     .putExtra(InterceptActivity.EXTRA_PACKAGE, pkg)
                     .addFlags(
@@ -168,7 +202,8 @@ class MonkAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "MonkA11y"
-        private const val LAUNCH_GUARD_MS = 1500L
+        private const val LAUNCH_GUARD_MS = 2500L
+        private const val LAUNCH_GUARD_RETRIES = 3
         private const val RELAUNCH_DEBOUNCE_MS = 1000L
 
         @Volatile private var instance: WeakReference<MonkAccessibilityService>? = null

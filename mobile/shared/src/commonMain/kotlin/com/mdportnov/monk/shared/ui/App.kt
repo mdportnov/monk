@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -14,7 +15,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mdportnov.monk.shared.MonkRuntime
+import com.mdportnov.monk.shared.model.ThemeMode
 import com.mdportnov.monk.shared.ui.apps.AddAppsScreen
 import com.mdportnov.monk.shared.ui.apps.AppDetailScreen
 import com.mdportnov.monk.shared.ui.home.MainScreen
@@ -41,7 +44,13 @@ class Navigator {
 fun MonkApp(onBackHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> }) {
     val nav = remember { Navigator() }
     onBackHandler(nav.canGoBack) { nav.pop() }
-    MonkTheme {
+    val config by MonkRuntime.store.config.collectAsStateWithLifecycle()
+    val dark = when (config.theme) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+    MonkTheme(darkTheme = dark) {
         Surface(Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = nav.current,

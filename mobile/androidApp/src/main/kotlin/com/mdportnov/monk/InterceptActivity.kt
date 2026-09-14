@@ -26,7 +26,7 @@ class InterceptActivity : ComponentActivity() {
     private var target by mutableStateOf<Target?>(null)
     private var decided = false
 
-    private data class Target(val app: BlockedApp, val config: MonkConfig)
+    private data class Target(val app: BlockedApp, val config: MonkConfig, val limitReached: Boolean)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -44,7 +44,10 @@ class InterceptActivity : ComponentActivity() {
                 mode = t.app.mode,
                 delaySeconds = t.config.delayFor(t.app),
                 allowMinutes = t.config.allowFor(t.app),
-                onOpen = { open(t.app.packageName, t.config.allowFor(t.app)) },
+                limitReached = t.limitReached,
+                dailyLimit = t.app.dailyLimit,
+                askIntention = t.config.askIntention,
+                onOpen = { reason -> open(t.app.packageName, t.config.allowFor(t.app), reason?.name) },
                 onDismiss = { dismiss() },
             )
         }
@@ -61,23 +64,30 @@ class InterceptActivity : ComponentActivity() {
         val pkg = intent.getStringExtra(EXTRA_PACKAGE).orEmpty()
         val config = MonkRuntime.store.config.value
         val app = config.app(pkg) ?: return false
-        target = Target(app, config)
+        val limitReached = app.dailyLimit?.let { MonkRuntime.store.opensToday(pkg) >= it } ?: false
+        target = Target(app, config, limitReached)
         decided = false
         InterceptGate.showing = pkg
-        MonkRuntime.store.recordIntercepted()
+        InterceptGate.created = true
+        MonkRuntime.store.recordIntercepted(pkg)
         return true
     }
 
     override fun onResume() {
         super.onResume()
+        // The service gave up on us and already sent the user Home: do not pop up over the launcher.
+        if (InterceptGate.showing != target?.app?.packageName) {
+            finishAndRemoveTask()
+            return
+        }
         InterceptGate.resumed = true
     }
 
-    private fun open(packageName: String, minutes: Int) {
+    private fun open(packageName: String, minutes: Int, reason: String?) {
         if (decided) return
         decided = true
         MonkRuntime.store.grantAllowance(packageName, minutes)
-        MonkRuntime.store.recordOpened()
+        MonkRuntime.store.recordOpened(packageName, reason)
         // The app's task is right underneath; finishing reveals it. Relaunch only if something
         // else has taken its place meanwhile — a relaunch would otherwise reset a deep link.
         val underneath = MonkAccessibilityService.currentForeground() == packageName
@@ -92,7 +102,7 @@ class InterceptActivity : ComponentActivity() {
     private fun dismiss() {
         if (decided) return
         decided = true
-        MonkRuntime.store.recordTurnedAway()
+        target?.let { MonkRuntime.store.recordTurnedAway(it.app.packageName) }
         goHome()
         finishAndRemoveTask()
     }
@@ -118,5 +128,6 @@ class InterceptActivity : ComponentActivity() {
 /** Which package the intercept screen is covering, so the service can tell "shown" from "dropped". */
 object InterceptGate {
     @Volatile var showing: String? = null
+    @Volatile var created: Boolean = false
     @Volatile var resumed: Boolean = false
 }

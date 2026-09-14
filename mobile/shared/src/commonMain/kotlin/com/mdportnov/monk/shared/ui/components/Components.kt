@@ -1,6 +1,14 @@
 package com.mdportnov.monk.shared.ui.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import com.mdportnov.monk.shared.ui.Motion
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Column
@@ -17,17 +25,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
+/** The standard card. With [onClick] it becomes a tappable surface (ripple, haptic tick) that leads somewhere. */
 @Composable
 fun MonkCard(
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { content() }
+    val colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+    val elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    val m = modifier.fillMaxWidth().animateContentSize(Motion.contentSize)
+    if (onClick != null) {
+        val h = rememberHaptics()
+        Card(onClick = { h.select(); onClick() }, modifier = m, colors = colors, elevation = elevation) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { content() }
+        }
+    } else {
+        Card(modifier = m, colors = colors, elevation = elevation) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { content() }
+        }
     }
 }
 
@@ -82,7 +98,16 @@ fun Hint(text: String) {
 @Composable
 fun Counter(value: Int, label: String, color: Color = MaterialTheme.colorScheme.onSurface) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value.toString(), style = MaterialTheme.typography.headlineMedium, color = color)
+        // A new number rolls in from the side it grew towards, the old one leaving the other way.
+        AnimatedContent(
+            targetState = value,
+            transitionSpec = {
+                val up = if (targetState > initialState) 1 else -1
+                (fadeIn(Motion.enter()) + slideInVertically(Motion.enter()) { up * it / 2 }) togetherWith
+                    (fadeOut(Motion.exit()) + slideOutVertically(Motion.exit()) { -up * it / 2 })
+            },
+            label = "counter",
+        ) { v -> Text(v.toString(), style = MaterialTheme.typography.headlineMedium.copy(fontFeatureSettings = "tnum"), color = color) }
         Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

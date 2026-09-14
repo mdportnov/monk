@@ -6,24 +6,23 @@
 
 <p align="center">
   <b>focus, weaponized.</b><br/>
-  A cross-platform CLI focus & distraction blocker built in Rust.<br/>
-  One binary, one daemon, zero nonsense – block apps and websites,<br/>
-  commit to hard-mode sessions, and get your attention back.
+  A focus &amp; distraction blocker in two shapes:<br/>
+  a <b>CLI + daemon</b> for macOS, Linux and Windows, and an <b>Android app</b><br/>
+  that puts a pause between you and the apps you open on autopilot.
 </p>
 
 <p align="center">
   <a href="https://github.com/mdportnov/monk-cli/actions/workflows/ci.yml"><img src="https://github.com/mdportnov/monk-cli/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/mdportnov/monk-cli/actions/workflows/release.yml"><img src="https://github.com/mdportnov/monk-cli/actions/workflows/release.yml/badge.svg" alt="Release" /></a>
+  <a href="https://github.com/mdportnov/monk-cli/actions/workflows/mobile-ci.yml"><img src="https://github.com/mdportnov/monk-cli/actions/workflows/mobile-ci.yml/badge.svg" alt="mobile CI" /></a>
+  <a href="https://github.com/mdportnov/monk-cli/releases"><img src="https://img.shields.io/github/v/release/mdportnov/monk-cli?filter=v*&label=cli" alt="CLI release" /></a>
+  <a href="https://github.com/mdportnov/monk-cli/releases?q=mobile-v"><img src="https://img.shields.io/github/v/release/mdportnov/monk-cli?filter=mobile-v*&label=android" alt="Android release" /></a>
   <img src="https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue.svg" alt="License: MIT OR Apache-2.0" />
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-5a5a5a" alt="Platforms" />
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Rust-1.82%2B-DEA584?logo=rust&logoColor=black" alt="Rust" />
-  <img src="https://img.shields.io/badge/TUI-ratatui-7aa2f7" alt="ratatui" />
-  <img src="https://img.shields.io/badge/async-tokio-orange" alt="tokio" />
-  <img src="https://img.shields.io/badge/stats-SQLite-044a64?logo=sqlite&logoColor=white" alt="SQLite" />
-  <img src="https://img.shields.io/badge/unsafe-forbidden-success" alt="deny(unsafe_code)" />
+  <img src="https://img.shields.io/badge/Kotlin_Multiplatform-2.4-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin Multiplatform" />
+  <img src="https://img.shields.io/badge/Compose_Multiplatform-1.11-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose Multiplatform" />
   <img src="https://img.shields.io/badge/i18n-EN%20%2F%20RU-bb9af7" alt="EN/RU" />
 </p>
 
@@ -33,14 +32,19 @@
 
 ---
 
-## Android app
+| | Desktop CLI | Android app |
+| --- | --- | --- |
+| **What it is** | One binary, one daemon: blocks sites and apps for a session, hard mode you cannot quit | A OneSec-style pause screen before Instagram, YouTube, TikTok and whatever else you open without thinking |
+| **Runs on** | macOS · Linux · Windows | Android 10+ |
+| **Built with** | Rust, tokio, ratatui, SQLite | Kotlin Multiplatform, Compose Material 3, an accessibility service |
+| **Get it** | [Install](#installation) | [APK from the latest `mobile-v*` release](https://github.com/mdportnov/monk-cli/releases) · [details](#android-app) |
+| **Docs** | [below](#desktop-cli) | [`mobile/README.md`](./mobile/README.md) |
 
-`mobile/` holds **Monk for Android** — a OneSec-style pause between you and the apps you open on
-autopilot, built with Kotlin Multiplatform and Compose. Grab the APK from the latest
-`mobile-v*` release; it updates itself from GitHub Releases afterwards. See
-[`mobile/README.md`](./mobile/README.md).
+The two do not talk to each other yet: same idea, same name, separate configs.
 
-## Highlights
+## Desktop CLI
+
+### Highlights
 
 - **Real app blocking** — scans installed applications on macOS, Linux (native, Flatpak and Snap) and Windows, so you pick from a curated list instead of guessing process names.
 - **Curated site presets** — bundled `global` and `ru` site groups (social, video, news, chat, shopping, games) with subdomain expansion baked in.
@@ -51,7 +55,7 @@ autopilot, built with Kotlin Multiplatform and Compose. Grab the APK from the la
 - **Localized** — English and Русский out of the box via `rust-i18n`.
 - **Zero unsafe** — `#![deny(unsafe_code)]` in the main crate.
 
-## How it works
+### How it works
 
 monk runs a small always-on daemon — the same `monk` binary launched as `monk daemon run`, registered with your OS service manager under the name `monkd`. It owns the block state; the CLI and TUI talk to it over a local socket. When you start a session:
 
@@ -60,7 +64,7 @@ monk runs a small always-on daemon — the same `monk` binary launched as `monk 
 3. Matching processes are killed on a tick loop and kept down for the session.
 4. In hard mode, a signed session lock is written to disk and verified on every tick — corrupting or deleting it keeps the block active.
 
-## Tech stack
+### Tech stack
 
 | Layer          | Crate / tech                                                        |
 | -------------- | ------------------------------------------------------------------- |
@@ -76,9 +80,9 @@ monk runs a small always-on daemon — the same `monk` binary launched as `monk 
 | i18n           | `rust-i18n`, `sys-locale`                                           |
 | Errors         | `thiserror` + `miette` fancy reports                                |
 
-## Installation
+### Installation
 
-### Quick install (script)
+#### Quick install (script)
 
 Downloads the matching release binary, verifies its checksum, and drops it on
 your `PATH`. Then run `monk setup`.
@@ -93,7 +97,7 @@ curl -fsSL https://raw.githubusercontent.com/mdportnov/monk-cli/master/assets/in
 irm https://raw.githubusercontent.com/mdportnov/monk-cli/master/assets/install.ps1 | iex
 ```
 
-### From source
+#### From source
 
 Needs the Rust toolchain (1.82+) — install via [rustup](https://rustup.rs). Works the same on Linux, macOS, and Windows.
 
@@ -135,7 +139,7 @@ git clone https://github.com/mdportnov/monk-cli; cd monk-cli
 powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
 ```
 
-### cargo / cargo-binstall
+#### cargo / cargo-binstall
 
 The crate is published as **`monk-cli`** — plain `monk` on crates.io is an
 unrelated project — but it installs a binary called `monk`.
@@ -145,14 +149,14 @@ cargo binstall monk-cli   # prebuilt binary from the GitHub release
 cargo install monk-cli    # or build it from source
 ```
 
-### Package managers
+#### Package managers
 
 - **Debian / Ubuntu**: `cargo deb` produces a `.deb` wired up for systemd user units; bash/zsh/fish completions are bundled.
 - **Fedora / RHEL**: `cargo generate-rpm` produces an `.rpm` (completions bundled).
 - **Windows**: `assets/install.ps1` (above). MSI / Scoop manifest coming soon.
 - **macOS**: a `.pkg` is attached to every release; it drops `monk` into `/usr/local/bin` and nothing else — you still run `monk setup` afterwards. Unless the release was built with a Developer ID identity the package is **unsigned**, so Gatekeeper blocks a double-click: right-click → *Open*, or use the install script above. Homebrew tap coming soon.
 
-### Requirements
+#### Requirements
 
 - A terminal and admin rights on your machine — blocking edits the system `hosts` file, which is privileged. You grant this **once**, during setup.
 - Rust 1.82+ only if you build from source.
@@ -163,7 +167,7 @@ cargo install monk-cli    # or build it from source
 - **Linux** — the daemon runs as **you** via a `systemd` *user* unit (no `sudo`). For blocking to work monk must be able to write `/etc/hosts` (or use a `systemd-resolved` backend) — `monk doctor` tells you if it can't.
 - **Windows** — the daemon is a logon **scheduled task** that needs elevation, so open your terminal **as Administrator** before running `monk setup` / `monk daemon install`.
 
-## Quick start
+### Quick start
 
 Run these in order. On **Windows** open PowerShell **as Administrator** first; on **macOS** you'll get a password prompt during setup.
 
@@ -177,9 +181,9 @@ monk stop                   # 5. end it — soft mode only; hard mode can't be s
 
 Prefer a UI? `monk tui` opens the full dashboard. Start a committed session you can't quit with `monk start deepwork --hard`.
 
-## Commands
+### Commands
 
-### Sessions
+#### Sessions
 
 | Command                                              | What it does                                  |
 | ---------------------------------------------------- | --------------------------------------------- |
@@ -191,7 +195,7 @@ Prefer a UI? `monk tui` opens the full dashboard. Start a committed session you 
 | `monk stats`                                         | Session statistics                            |
 | `monk tui`                                           | Open the interactive dashboard                |
 
-### Profiles & apps
+#### Profiles & apps
 
 | Command                                                          | What it does                              |
 | --------------------------------------------------------------- | ----------------------------------------- |
@@ -208,7 +212,7 @@ Prefer a UI? `monk tui` opens the full dashboard. Start a committed session you 
 
 Built-in presets for `--preset`: `deepwork`, `study`, `detox`, `sleep`, `sober`, `lockdown`, `no-social`, `no-video`, `no-news`, `no-games`, `no-chat`, `no-shopping`, `no-adult`, `no-gambling`, `no-dating`, `no-ai`.
 
-### Daemon
+#### Daemon
 
 `monk service` is an alias for `monk daemon`. `install` and `uninstall` need elevation: on macOS they show the native admin prompt when you didn't start them with `sudo`; on Windows use an Administrator terminal; on Linux it's a `systemd` user unit and needs no `sudo`. After `monk update` the service is refreshed automatically so the daemon never keeps running an older binary — `monk doctor` warns if it ever does.
 
@@ -221,7 +225,7 @@ Built-in presets for `--preset`: `deepwork`, `study`, `detox`, `sleep`, `sober`,
 | `monk daemon install [--reinstall]` | Install as systemd / launchd / Windows scheduled task |
 | `monk daemon uninstall [--purge]`  | Remove the service (`--purge` also wipes config + data) |
 
-### Menu bar (macOS)
+#### Menu bar (macOS)
 
 A native status item next to the clock, wearing the monk mark: dimmed when idle, solid with a countdown while a session runs, and with a filled block cursor in hard mode. Every mode gets a submenu with blocked-site/app counts, duration choices, a hard-mode start and "make this the default ★" — the default mode always leads the list. A running session can be extended from "Add time" (+5/15/30/60m); hard sessions still can't be stopped from the menu — `monk panic` in a terminal stays the only escape.
 
@@ -235,7 +239,7 @@ A native status item next to the clock, wearing the monk mark: dimmed when idle,
 | `monk menubar install`   | Register it as a login item and start it now            |
 | `monk menubar uninstall` | Stop the login-item instance and remove the registration |
 
-### Config & diagnostics
+#### Config & diagnostics
 
 | Command                                | What it does                                          |
 | -------------------------------------- | ----------------------------------------------------- |
@@ -247,7 +251,7 @@ A native status item next to the clock, wearing the monk mark: dimmed when idle,
 | `monk lang en\|ru`                     | Switch interface language                             |
 | `monk completions SHELL`               | Emit shell completions (bash/zsh/fish/powershell/elvish) |
 
-## Configuration
+### Configuration
 
 Config lives at:
 
@@ -271,7 +275,7 @@ apps  = ["com.tinyspeck.slackmacgap", "com.hnc.Discord"]
 
 App ids are stable identifiers produced by the scanner: macOS bundle ids, Linux `.desktop` ids, Windows shortcut targets.
 
-## Hard mode
+### Hard mode
 
 Hard mode is the whole point. Once you start a hard session:
 
@@ -282,6 +286,46 @@ Hard mode is the whole point. Once you start a hard session:
 
 Use it deliberately.
 
+## Android app
+
+`mobile/` is **Monk for Android**. You pick the apps you open on autopilot; from then on every
+launch lands on a pause screen with a breathing orb and a countdown. Walk away, or open the app
+for a few minutes on purpose. Nothing is read from the screen: the accessibility service only
+sees *which* app came to the front.
+
+- **Pause, block or limit** each app, per-app time rules (say, Instagram closed 06:00–09:00 and
+  after 22:00), a daily open limit, and a per-app lock that only removal undoes.
+- **Break, focus, strict.** A break switches protection off for a while and costs a 10-second
+  breath; focus blocks everything and cannot be stopped; strict mode freezes the whole setup
+  until a time you chose. Quick Settings tiles for break and focus.
+- **Stats** for pauses, walk-aways and opens by day, app and hour, plus screen time of the
+  watched apps when you grant usage access.
+- **Private.** No account, no analytics. The only network call is the update check against
+  GitHub Releases, and the app updates itself from there.
+- English and Русский, light / dark / Material You.
+
+### Install
+
+Download `monk-android-X.Y.Z.apk` from the latest [`mobile-vX.Y.Z` release](https://github.com/mdportnov/monk-cli/releases),
+install it, and turn on the accessibility service from the setup card. On Android 13+ a
+sideloaded APK needs *App info → ⋮ → Allow restricted settings* once; the app walks you through it.
+Updates are offered inside the app and verified by SHA-256 and the signing key.
+
+### Build from source
+
+Requires JDK 17 and the Android SDK (platform 36); the Gradle wrapper brings the rest
+(Kotlin 2.4, AGP 9.2, Compose Multiplatform 1.11).
+
+```sh
+cd mobile
+./gradlew :androidApp:assembleDebug          # → androidApp/build/outputs/apk/debug/
+./gradlew :androidApp:installDebug           # onto a connected phone
+./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest
+```
+
+A debug build cannot update over a release one (different signing key). How the service, the
+fail-closed launch guard and the release signing work: [`mobile/README.md`](./mobile/README.md).
+
 ## Development
 
 ```sh
@@ -291,11 +335,12 @@ just test       # cargo test
 just run init   # cargo run -- init
 ```
 
-The repo enforces `unsafe_code = "deny"` and a strict clippy profile. CI runs on Linux, macOS and Windows.
+The repo enforces `unsafe_code = "deny"` and a strict clippy profile. CI runs on Linux, macOS and Windows;
+`mobile-ci.yml` builds and tests the Android app on every change under `mobile/`.
 
 ## License
 
-Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option. Both the CLI and the Android app.
 
 ---
 

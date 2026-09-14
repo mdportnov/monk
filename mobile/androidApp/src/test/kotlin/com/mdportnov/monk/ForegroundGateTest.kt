@@ -34,11 +34,17 @@ class ForegroundGateTest {
         }
         override fun isWatched(pkg: String) = pkg in watched
         override fun allowanceUntil(pkg: String) = allowances[pkg]
+        var nextChange: Long? = null
+        override fun nextChangeMillis(pkg: String) = nextChange
         override fun interceptShowingFor() = showing
+        var inFront = false
+        override fun interceptInFront() = inFront
         override fun intercept(pkg: String, decision: Decision.Intercept) { intercepts += pkg; showing = pkg }
         override fun hideOverlay() { hidden++; showing = null }
         override fun schedule(delayMs: Long, action: () -> Unit) { scheduledDelay = delayMs; scheduledAction = action }
         override fun cancelScheduled() { scheduledDelay = null; scheduledAction = null }
+        val remembered = mutableListOf<String?>()
+        override fun rememberForeground(pkg: String?) { remembered += pkg }
     }
 
     private fun gate(fx: Fake) = ForegroundGate("com.monk", "com.monk.MainActivity", fx) { fx.now }
@@ -57,7 +63,7 @@ class ForegroundGateTest {
         g.onWindow("com.insta", "android.widget.PopupWindow")
         g.onWindow("com.android.systemui", "com.android.systemui.Shade")
         g.onWindow("com.ime", "com.ime.InputView")
-        assertEquals(emptyList(), fx.intercepts)
+        assertEquals(emptyList<String>(), fx.intercepts)
         assertNull(g.lastForeground)
     }
 
@@ -88,7 +94,7 @@ class ForegroundGateTest {
         val fx = Fake(); val g = gate(fx)
         fx.keyguard = true
         g.onWindow("com.insta", "com.insta.MainActivity")
-        assertEquals(emptyList(), fx.intercepts)
+        assertEquals(emptyList<String>(), fx.intercepts)
         fx.keyguard = false
         g.onUserPresent()
         assertEquals(listOf("com.insta"), fx.intercepts)
@@ -109,11 +115,34 @@ class ForegroundGateTest {
         val fx = Fake(); val g = gate(fx)
         fx.allowances["com.insta"] = fx.now + 60_000
         g.onWindow("com.insta", "com.insta.MainActivity")
-        assertEquals(emptyList(), fx.intercepts)
+        assertEquals(emptyList<String>(), fx.intercepts)
         assertEquals(60_250L, fx.scheduledDelay)
         fx.now += 61_000
         fx.scheduledAction!!.invoke()
         assertEquals(listOf("com.insta"), fx.intercepts)
+    }
+
+    @Test
+    fun ruleBoundaryIsScheduledEvenWithoutAllowance() {
+        val fx = Fake(); val g = gate(fx)
+        fx.watched["com.free"] = BlockedApp("com.free", "Free", BlockMode.DELAY)
+        fx.nextChange = 5 * 60_000L
+        // Pretend a FREE window: decide() returns Allow for an unwatched-looking case by removing allowances path
+        fx.allowances["com.free"] = fx.now + 60 * 60_000L
+        g.onWindow("com.free", "com.free.MainActivity")
+        assertEquals(5 * 60_000L + 250, fx.scheduledDelay)
+    }
+
+    @Test
+    fun clockChangeDropsTheTimerAndRejudgesTheForegroundApp() {
+        val fx = Fake(); val g = gate(fx)
+        fx.allowances["com.insta"] = fx.now + 60 * 60_000L
+        g.onWindow("com.insta", "com.insta.MainActivity")
+        assertEquals(emptyList<String>(), fx.intercepts)
+        fx.allowances.clear()
+        g.onClockChanged()
+        assertEquals(listOf("com.insta"), fx.intercepts)
+        assertNull(fx.scheduledAction)
     }
 
     @Test
@@ -123,6 +152,21 @@ class ForegroundGateTest {
         g.onWindow("com.insta", "com.insta.MainActivity")
         g.onWindow("com.launcher", "com.launcher.Home")
         assertNull(fx.scheduledAction)
+    }
+
+    @Test
+    fun coldStartWindowsUnderALiveInterceptAreNotCountedAgain() {
+        val fx = Fake(); val g = gate(fx)
+        g.onWindow("com.insta", "com.insta.MainActivity")
+        fx.inFront = true
+        fx.now += 2_000
+        g.onWindow("com.insta", "com.insta.FeedActivity")
+        assertEquals(1, fx.intercepts.size)
+        // The pause screen left the front (a deep link on top of it): the app is covered again.
+        fx.inFront = false
+        fx.now += 2_000
+        g.onWindow("com.insta", "com.insta.DeepLinkActivity")
+        assertEquals(2, fx.intercepts.size)
     }
 
     @Test
@@ -146,5 +190,76 @@ class ForegroundGateTest {
         fx.showing = "com.insta"
         g.onWindow("com.launcher", "com.launcher.Home")
         assertEquals(2, fx.hidden)
+    }
+
+    @Test
+    fun unlockRejudgesAnExpiredAllowanceEvenWithoutPendingApp() {
+        val fx = Fake(); val g = gate(fx)
+        fx.allowances["com.insta"] = fx.now + 60_000
+        g.onWindow("com.insta", "com.insta.MainActivity")
+        assertEquals(emptyList<String>(), fx.intercepts)
+        // Phone slept through the deadline: the uptime timer never fired.
+        fx.now += 10 * 60_000
+        g.onUserPresent()
+        assertEquals(listOf("com.insta"), fx.intercepts)
+    }
+
+    @Test
+    fun unlockWithLiveAllowanceReschedulesFromTheWallClock() {
+        val fx = Fake(); val g = gate(fx)
+        fx.allowances["com.insta"] = fx.now + 60_000
+        g.onWindow("com.insta", "com.insta.MainActivity")
+        fx.now += 20_000
+        g.onUserPresent()
+        assertEquals(emptyList<String>(), fx.intercepts)
+        assertEquals(40_250L, fx.scheduledDelay)
+    }
+
+    @Test
+    fun unlockOnLauncherDoesNothing() {
+        val fx = Fake(); val g = gate(fx)
+        g.onWindow("com.launcher", "com.launcher.Home")
+        g.onUserPresent()
+        assertEquals(emptyList<String>(), fx.intercepts)
+    }
+
+    @Test
+    fun foregroundChangesAreHandedToTheHost() {
+        val fx = Fake(); val g = gate(fx)
+        g.onWindow("com.insta", "com.insta.MainActivity")
+        g.onWindow("com.insta", "com.insta.FeedActivity")
+        g.onWindow("com.launcher", "com.launcher.Home")
+        assertEquals(listOf<String?>("com.insta", "com.launcher"), fx.remembered)
+    }
+
+    @Test
+    fun restoredForegroundIsJudgedOnReevaluate() {
+        val fx = Fake(); val g = gate(fx)
+        g.restore("com.insta")
+        assertEquals("com.insta", g.lastForeground)
+        g.reevaluateForeground()
+        assertEquals(listOf("com.insta"), fx.intercepts)
+    }
+
+    @Test
+    fun restoreNeverOverridesALiveObservation() {
+        val fx = Fake(); val g = gate(fx)
+        g.onWindow("com.launcher", "com.launcher.Home")
+        g.restore("com.insta")
+        assertEquals("com.launcher", g.lastForeground)
+        g.reevaluateForeground()
+        assertEquals(emptyList<String>(), fx.intercepts)
+    }
+
+    @Test
+    fun reevaluateUnderKeyguardWaitsForUnlock() {
+        val fx = Fake(); val g = gate(fx)
+        g.restore("com.insta")
+        fx.keyguard = true
+        g.reevaluateForeground()
+        assertEquals(emptyList<String>(), fx.intercepts)
+        fx.keyguard = false
+        g.onUserPresent()
+        assertEquals(listOf("com.insta"), fx.intercepts)
     }
 }

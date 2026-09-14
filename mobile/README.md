@@ -23,9 +23,11 @@ blocking API is a stub until the Screen Time entitlement is wired in.
    An app resurfacing above a live intercept (notification deep link) gets covered again.
 4. Fail-closed: starting an Activity from a bound accessibility service is exempt from
    background-launch limits, but if an OEM ROM drops it anyway and the screen has not resumed
-   within 1.5 s, the user is sent Home rather than left in the app.
-5. Config, allowances and stats live in `SharedPreferences` as JSON (`MonkStore`). No INTERNET
-   permission, `allowBackup=false`: nothing leaves the device.
+   within 2.5 s (three retries for a slow cold start), the pause screen is drawn as an overlay
+   instead, and Home is the last resort. After two misses in a row the overlay goes first.
+5. Config, allowances and stats live in `SharedPreferences` as JSON (`MonkStore`), stats in
+   their own file. `allowBackup=false` and no cloud / device-transfer extraction; the only network
+   call is the update check against GitHub Releases.
 
 Never gated, and hidden from "Add apps": Monk itself, launchers, Settings, the dialer / telecom /
 in-call UI, emergency, permission controller, package installer, keyboards. This is enforced in
@@ -35,17 +37,17 @@ Android 13+ and APKs installed from a downloaded file: the accessibility toggle 
 Tap it once anyway, then *App info → ⋮ → Allow restricted settings*. The setup card links there.
 `adb install` is not affected.
 
-**Overlay mode** (Settings → Reliability) draws the pause screen as a `TYPE_ACCESSIBILITY_OVERLAY`
+**Overlay mode** (Settings → Pause screen) draws the pause screen as a `TYPE_ACCESSIBILITY_OVERLAY`
 window owned by the service instead of an Activity: no permission, immune to background-launch
 rules, covers split-screen. It is also the automatic fallback when the Activity never resumes.
 
-**Quick Settings tiles**: "Monk pause" toggles a 15-minute pause, "Monk focus" starts a 25-minute
+**Quick Settings tiles**: "Monk pause" toggles a 15-minute pause, "Monk focus" starts a 30-minute
 focus session after a confirmation. **Service watchdog**: a notification when the accessibility
 service is off while apps are watched (on unbind, after boot, after an update); opt-in in Settings.
 
 Known gaps: work-profile clones of a watched app are intercepted too and "Open" launches the
-personal instance; pause / strict / focus deadlines are wall-clock, so moving the system clock
-forward ends them early (Settings is deliberately never gated).
+personal instance. Moving the system clock shifts break / focus / strict deadlines with it (measured
+against the boot clock), so it neither shortens nor stretches them; Settings is deliberately never gated.
 
 ## Architecture
 

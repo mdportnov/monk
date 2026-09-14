@@ -42,9 +42,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        LiveStatus.sync(this, monkGraph.store.config.value)
+    }
+
     override fun onResume() {
         super.onResume()
         monkGraph.platform.refreshPermissions()
+        // The OS forgets usage events after ~10 days; every foreground is a chance to keep them.
+        monkGraph.platform.snapshotScreenTime(monkGraph.store.config.value.apps.map { it.packageName }.toSet())
         // Throttled inside (6 h); foreground is the one moment a check reliably runs.
         monkGraph.updater.check(force = false)
     }

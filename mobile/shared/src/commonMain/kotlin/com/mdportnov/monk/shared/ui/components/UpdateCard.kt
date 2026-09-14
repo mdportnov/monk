@@ -26,15 +26,10 @@ fun UpdateCard(updater: Updater, compact: Boolean) {
     MonkCard {
         when (val st = state) {
             UpdateState.Idle -> {
-                Text(s.version(updater.currentVersion), style = MaterialTheme.typography.bodyMedium)
                 OutlinedButton(onClick = { updater.check(force = true) }) { Text(s.checkUpdates) }
             }
-            UpdateState.Checking -> {
-                Text(s.version(updater.currentVersion), style = MaterialTheme.typography.bodyMedium)
-                Hint(s.updateChecking)
-            }
+            UpdateState.Checking -> Hint(s.updateChecking)
             UpdateState.UpToDate -> {
-                Text(s.version(updater.currentVersion), style = MaterialTheme.typography.bodyMedium)
                 Hint(s.updateUpToDate)
                 OutlinedButton(onClick = { updater.check(force = true) }) { Text(s.checkUpdates) }
             }

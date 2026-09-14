@@ -12,7 +12,7 @@ junit = "4.13.2"
 haze = "1.7.2"
 
 android-compileSdk = "36"
-android-minSdk = "26"
+android-minSdk = "29"
 android-targetSdk = "36"
 
 [libraries]

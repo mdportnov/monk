@@ -6,6 +6,8 @@ import android.os.Build
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.WindowManager
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
@@ -33,6 +35,7 @@ import com.mdportnov.monk.shared.ui.intercept.InterceptScreen
 class InterceptOverlay(private val service: AccessibilityService, private val registry: InterceptRegistry) {
     private val wm = service.getSystemService(WindowManager::class.java)
     private var view: ComposeView? = null
+    private var backCallback: OnBackInvokedCallback? = null
     private var owner: Owner? = null
     var session: InterceptSession? = null
         private set
@@ -83,10 +86,23 @@ class InterceptOverlay(private val service: AccessibilityService, private val re
         runCatching { wm.addView(compose, params) }
             .onSuccess {
                 view = compose
+                registerBack(compose, session)
                 owner.resume()
                 compose.requestFocus()
             }
             .onFailure { owner.destroy(); this.owner = null; this.session = null }
+    }
+
+    /**
+     * Android 16 (targetSdk 36) stops dispatching KEYCODE_BACK: back reaches a window only through
+     * its OnBackInvokedDispatcher. The key listener above stays for the legacy path (< 33).
+     */
+    private fun registerBack(compose: ComposeView, session: InterceptSession) {
+        if (Build.VERSION.SDK_INT < 33) return
+        val dispatcher = compose.findOnBackInvokedDispatcher() ?: return
+        val callback = OnBackInvokedCallback { dismiss(session) }
+        dispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback)
+        backCallback = callback
     }
 
     /** Something (the shade, a system dialog) is over the overlay: freeze the countdown. */
@@ -106,11 +122,13 @@ class InterceptOverlay(private val service: AccessibilityService, private val re
 
     /** Removes the window. An undecided session is abandoned like an Activity left via Home. */
     fun hide() {
+        if (Build.VERSION.SDK_INT >= 33) view?.findOnBackInvokedDispatcher()?.let { d -> backCallback?.let(d::unregisterOnBackInvokedCallback) }
+        backCallback = null
         view?.let { v -> runCatching { wm.removeViewImmediate(v) } }
         view = null
         owner?.destroy()
         owner = null
-        session?.let { registry.remove(it.token) }
+        session?.let { it.abandon(); registry.remove(it.token) }
         session = null
     }
 

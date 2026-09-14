@@ -27,7 +27,11 @@ class InterceptActivity : ComponentActivity() {
         enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
         super.onCreate(savedInstanceState)
         if (!bind(intent)) {
+            // No session for this token: the process was killed and the system brought the
+            // screen back on its own, or the service already moved on. Never show a pause screen
+            // that cannot decide anything; leave, and let the service judge what is underneath.
             finishAndRemoveTask()
+            MonkAccessibilityService.reevaluateForeground()
             return
         }
         setContent {
@@ -45,12 +49,17 @@ class InterceptActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (!bind(intent)) finishAndRemoveTask()
+        if (!bind(intent)) {
+            finishAndRemoveTask()
+            MonkAccessibilityService.reevaluateForeground()
+        }
     }
 
     private fun bind(intent: Intent): Boolean {
         val token = intent.getLongExtra(EXTRA_TOKEN, -1L)
         val s = monkGraph.intercepts[token] ?: return false
+        // A new intercept over a live one: the old session is abandoned, not leaked.
+        session?.let { old -> if (old.token != token) { old.abandon(); monkGraph.intercepts.remove(old.token) } }
         session = s
         InterceptGate.created(token)
         return true
@@ -61,6 +70,11 @@ class InterceptActivity : ComponentActivity() {
         val s = session ?: return
         // The service gave up on this launch and moved on: do not pop up over whatever is there now.
         if (!InterceptGate.resumed(s.token)) finishAndRemoveTask()
+    }
+
+    override fun onPause() {
+        session?.let { InterceptGate.paused(it.token) }
+        super.onPause()
     }
 
     private fun open(s: InterceptSession, reason: String?) {
@@ -78,6 +92,7 @@ class InterceptActivity : ComponentActivity() {
 
     override fun onDestroy() {
         session?.let { s ->
+            if (isFinishing) s.abandon()
             InterceptGate.closed(s.token)
             monkGraph.intercepts.remove(s.token)
         }
@@ -98,6 +113,7 @@ object InterceptGate {
     private var pkg: String? = null
     private var isCreated = false
     private var isResumed = false
+    private var inFront = false
 
     val showingFor: String? get() = pkg
 
@@ -106,6 +122,7 @@ object InterceptGate {
         this.pkg = pkg
         isCreated = false
         isResumed = false
+        inFront = false
     }
 
     fun created(token: Long) { if (token == this.token) isCreated = true }
@@ -115,10 +132,16 @@ object InterceptGate {
     fun resumed(token: Long): Boolean {
         if (token != this.token) return false
         isResumed = true
+        inFront = true
         return true
     }
 
+    fun paused(token: Long) { if (token == this.token) inFront = false }
+
     fun isResumed(token: Long) = token == this.token && isResumed
+
+    /** The live pause screen is the resumed window right now: whatever surfaces meanwhile is underneath it. */
+    fun isInFront() = token != -1L && inFront
 
     fun closed(token: Long) {
         if (token != this.token) return
@@ -126,6 +149,7 @@ object InterceptGate {
         pkg = null
         isCreated = false
         isResumed = false
+        inFront = false
     }
 
     fun clear() { closed(token) }

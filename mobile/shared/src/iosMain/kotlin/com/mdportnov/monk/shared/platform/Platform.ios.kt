@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import com.mdportnov.monk.shared.data.KeyValueStore
 import com.mdportnov.monk.shared.model.InstalledApp
+import com.mdportnov.monk.shared.model.ScreenTimeReport
 import kotlinx.coroutines.flow.MutableStateFlow
 import platform.Foundation.NSLocale
 import platform.Foundation.NSUserDefaults
@@ -35,8 +36,13 @@ object IosPlatform : MonkPlatform {
     override fun openAccessibilitySettings() = Unit
     override fun openAppInfo() = Unit
     override fun requestAddTiles() = Unit
+    override fun requestBatteryUnrestricted() = Unit
+    override fun openBatterySettings() = Unit
     override fun applyAppLanguage(language: String) = Unit
     override fun openUrl(url: String) = Unit
+    override fun openUsageAccessSettings() = Unit
+    override fun clearScreenTime() = Unit
+    override suspend fun screenTime(days: Int, packages: Set<String>) = ScreenTimeReport.Unsupported
     override val updater: Updater? = null
 }
 

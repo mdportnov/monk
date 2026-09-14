@@ -8,3 +8,6 @@ class HostActions(
 )
 
 val LocalHostActions = staticCompositionLocalOf { HostActions() }
+
+/** Opens a pushed page from anywhere below the root, so a tab screen need not thread a callback for every route. */
+val LocalOpenRoute = staticCompositionLocalOf<(Route) -> Unit> { {} }

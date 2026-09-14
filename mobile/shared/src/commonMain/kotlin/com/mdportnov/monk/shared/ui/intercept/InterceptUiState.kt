@@ -17,4 +17,8 @@ data class InterceptUiState(
     val askIntention: Boolean,
     /** The user's own line; empty = built-in copy. */
     val message: String,
+    /** Epoch millis when the active block rule window closes, if a rule is what blocks. */
+    val ruleBlockedUntil: Long? = null,
+    /** "system", "en" or "ru" — the app's own choice, not the device's. */
+    val language: String = "system",
 )

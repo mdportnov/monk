@@ -1,14 +1,31 @@
 package com.mdportnov.monk.shared.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import com.mdportnov.monk.shared.ui.Motion
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -27,11 +44,23 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
+/*
+ * Settings rows follow Material list items: a 24 dp leading icon centred on the row, a text
+ * column (title, then a one-line description 2 dp below), a trailing control centred on the row.
+ * No tinted circles and no custom layout: with descriptions kept to one or two short lines the
+ * centred icon is exactly where the eye expects it.
+ */
+
+private val HPad = 16.dp
+private val VPad = 12.dp
+private val IconSize = 24.dp
+private val IconGap = 16.dp
+
 /** A settings group: rows separated by hairlines, no inner padding of its own. */
 @Composable
 fun SettingsGroup(content: @Composable () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().animateContentSize(Motion.contentSize),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
@@ -41,21 +70,31 @@ fun SettingsGroup(content: @Composable () -> Unit) {
 
 @Composable
 fun SettingsDivider() {
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 64.dp))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = HPad))
 }
 
 @Composable
-private fun LeadingIcon(icon: ImageVector?) {
+private fun Leading(icon: ImageVector?) {
     if (icon == null) return
-    Box(
-        Modifier.size(36.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+    Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(IconSize).padding(end = 0.dp))
+}
+
+@Composable
+private fun Texts(title: String?, subtitle: String?, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        if (title != null) Text(title, style = MaterialTheme.typography.bodyLarge)
+        if (subtitle != null) {
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = if (title != null) 2.dp else 0.dp),
+            )
+        }
     }
 }
 
-/** Icon · title / subtitle · trailing control. The standard row. */
+/** Icon · title / description · trailing control. The standard row. */
 @Composable
 fun SettingRow(
     title: String,
@@ -64,38 +103,34 @@ fun SettingRow(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().padding(horizontal = HPad, vertical = VPad),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(IconGap),
     ) {
-        LeadingIcon(icon)
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
+        Leading(icon)
+        Texts(title, subtitle, Modifier.weight(1f))
         if (trailing != null) trailing()
     }
 }
 
-/** Free-form row body under an optional icon column (segmented controls, button rows). */
+/** Title / description on top, then free-form content stacked below (buttons, toggles, fields). */
 @Composable
 fun SettingBlock(icon: ImageVector? = null, title: String? = null, subtitle: String? = null, content: @Composable () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = HPad, vertical = VPad),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        LeadingIcon(icon)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (title != null) Text(title, style = MaterialTheme.typography.bodyLarge)
-            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            content()
+        if (title != null || subtitle != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(IconGap)) {
+                Leading(icon)
+                Texts(title, subtitle, Modifier.weight(1f))
+            }
         }
+        content()
     }
 }
 
-/** Title + value pill on one line, hint under it, a full-width slider below. Commits on release. */
+/** Title + value pill on one line, description under it, a full-width slider below. Commits on release. */
 @Composable
 fun SliderSetting(
     title: String,
@@ -110,27 +145,80 @@ fun SliderSetting(
     onChange: (Int) -> Unit,
 ) {
     var draft by remember(value) { mutableFloatStateOf(value.toFloat()) }
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    val h = rememberHaptics()
+    Column(Modifier.fillMaxWidth().padding(horizontal = HPad, vertical = VPad)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(IconGap)) {
+            Leading(icon)
+            Texts(title, hint, Modifier.weight(1f))
+            Pill(format(draft.roundToInt()), if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Slider(
+            value = draft,
+            enabled = enabled,
+            onValueChange = { v ->
+                val next = ((v / step).roundToInt() * step).toFloat()
+                if (next != draft) h.tick()
+                draft = next
+            },
+            onValueChangeFinished = { h.select(); onChange(draft.roundToInt().coerceIn(range)) },
+            valueRange = range.first.toFloat()..range.last.toFloat(),
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        )
+    }
+}
+
+/**
+ * A row of exclusive choices: one filled pill glides to the chosen one instead of each segment
+ * flipping its colour, and labels shrink rather than wrap.
+ */
+@Composable
+fun <T> Segments(options: List<Pair<T, String>>, selected: T, enabled: Boolean = true, onSelect: (T) -> Unit) {
+    val h = rememberHaptics()
+    val shape = RoundedCornerShape(50)
+    val index = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
+    val position by animateFloatAsState(index.toFloat(), Motion.standard(), label = "segment")
+    val outline = MaterialTheme.colorScheme.outline.copy(alpha = if (enabled) 1f else 0.38f)
+    val fill = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = if (enabled) 1f else 0.5f)
+    BoxWithConstraints(
+        Modifier.fillMaxWidth().height(40.dp).clip(shape).border(1.dp, outline, shape),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        LeadingIcon(icon)
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                Pill(format(draft.roundToInt()), if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        val slot = maxWidth / options.size
+        val stride = with(LocalDensity.current) { slot.toPx() }
+        Box(
+            Modifier
+                .offset { IntOffset((stride * position).roundToInt(), 0) }
+                .width(slot)
+                .fillMaxHeight()
+                .padding(3.dp)
+                .clip(shape)
+                .background(fill),
+        )
+        Row(Modifier.fillMaxWidth()) {
+            options.forEachIndexed { i, (value, label) ->
+                val active = i == index
+                val fg by animateColorAsState(
+                    when {
+                        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        active -> MaterialTheme.colorScheme.onSecondaryContainer
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
+                    Motion.color, label = "segmentFg",
+                )
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable(enabled = enabled, interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                            if (value != selected) h.select()
+                            onSelect(value)
+                        }
+                        .padding(horizontal = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CompositionLocalProvider(LocalContentColor provides fg) { FitText(label) }
+                }
             }
-            if (hint != null) {
-                Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
-            }
-            Slider(
-                value = draft,
-                enabled = enabled,
-                onValueChange = { v -> draft = ((v / step).roundToInt() * step).toFloat() },
-                onValueChangeFinished = { onChange(draft.roundToInt().coerceIn(range)) },
-                valueRange = range.first.toFloat()..range.last.toFloat(),
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
     }
 }

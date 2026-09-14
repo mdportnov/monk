@@ -11,17 +11,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -36,9 +35,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.mutableIntStateOf
+import com.mdportnov.monk.shared.platform.MonkPlatform
 import com.mdportnov.monk.shared.data.MonkStore
 import com.mdportnov.monk.shared.data.lastDates
+import com.mdportnov.monk.shared.data.localMoment
 import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.DayStats
 import com.mdportnov.monk.shared.model.Intention
@@ -46,36 +49,54 @@ import com.mdportnov.monk.shared.platform.AppIcon
 import com.mdportnov.monk.shared.ui.components.Counter
 import com.mdportnov.monk.shared.ui.components.Hint
 import com.mdportnov.monk.shared.ui.components.MonkCard
-import com.mdportnov.monk.shared.ui.components.FitText
+import com.mdportnov.monk.shared.ui.components.PageHeaderSlot
+import com.mdportnov.monk.shared.ui.components.PageTitle
+import com.mdportnov.monk.shared.ui.components.Segments
 import com.mdportnov.monk.shared.ui.components.SectionTitle
 
 private enum class Range(val days: Int) { Today(1), Week(7), All(90) }
 
 @Composable
-fun StatsScreen(store: MonkStore, scrollState: ScrollState, contentPadding: PaddingValues) {
+fun StatsScreen(store: MonkStore, platform: MonkPlatform, scrollState: ScrollState, contentPadding: PaddingValues) {
     val s = strings
     val stats by store.stats.collectAsStateWithLifecycle()
     val config by store.config.collectAsStateWithLifecycle()
+    val permissions by platform.permissions.collectAsStateWithLifecycle()
     var range by rememberSaveable { mutableStateOf(Range.Week) }
-    val dates = remember(range, stats) { lastDates(range.days) }
+    // Bumped on every return to the foreground: usage access is granted on a system page, and
+    // the card must flip from opt-in to numbers the moment the user comes back.
+    var resumeTick by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        platform.refreshPermissions()
+        resumeTick++
+        onPauseOrDispose { }
+    }
+    val today = localMoment().dateIso
+    val watchedPackages = remember(config.apps) { config.apps.map { it.packageName }.toSet() }
+    val screenTime = rememberScreenTime(
+        platform = platform,
+        days = if (range == Range.All) 30 else range.days * 2,
+        packages = watchedPackages,
+        granted = permissions.usageAccessGranted,
+        tick = resumeTick to today,
+    )
+    val dates = remember(range, today) { lastDates(range.days) }
     val days = remember(dates, stats) { dates.map { stats.day(it) } }
     val intercepted = days.sumOf { it.intercepted }
     val away = days.sumOf { it.turnedAway }
     val opened = days.sumOf { it.opened }
-    val labels = remember(config.apps) { config.apps.associate { it.packageName to it.label } }
+    val labels = remember(config.apps, config.archivedApps) { (config.archivedApps + config.apps).associate { it.packageName to it.label } }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(s.tabStats, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 4.dp))
+        PageHeaderSlot(Modifier.padding(horizontal = 4.dp)) { PageTitle(s.tabStats) }
 
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            val items = listOf(Range.Today to s.statsToday, Range.Week to s.statsWeek, Range.All to s.statsAllTime)
-            items.forEachIndexed { i, (r, label) ->
-                SegmentedButton(selected = range == r, onClick = { range = r }, shape = SegmentedButtonDefaults.itemShape(i, items.size)) { FitText(label) }
-            }
-        }
+        Segments(
+            options = listOf(Range.Today to s.statsToday, Range.Week to s.statsWeek, Range.All to s.statsAllTime),
+            selected = range,
+        ) { range = it }
 
         MonkCard {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -84,19 +105,25 @@ fun StatsScreen(store: MonkStore, scrollState: ScrollState, contentPadding: Padd
                 Counter(opened, s.opened, MaterialTheme.colorScheme.primary)
             }
             if (intercepted > 0) {
-                val rate = away.toFloat() / intercepted
-                LinearProgressIndicator(
-                    progress = { rate },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.tertiary,
-                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                // The same three colours as the day chart: walked away, opened, and the faint
+                // remainder for pauses that have no outcome yet.
+                StackedBar(
+                    total = intercepted,
+                    away = away,
+                    opened = opened,
+                    awayColor = MaterialTheme.colorScheme.tertiary,
+                    openedColor = MaterialTheme.colorScheme.primary,
+                    pendingColor = MaterialTheme.colorScheme.secondaryContainer,
+                    track = MaterialTheme.colorScheme.surfaceContainerHighest,
                 )
-                Hint(s.successRate((rate * 100).toInt()))
+                Hint(s.successRate(away * 100 / intercepted))
             } else {
                 Hint(s.statsEmpty)
             }
-            Hint(s.walkedAwayHint)
+            Hint(s.countersHint)
         }
+
+        ScreenTimeSection(platform, store, screenTime, periodDays = range.days, allTime = range == Range.All)
 
         if (intercepted > 0) {
             if (range != Range.Today) {
@@ -121,6 +148,7 @@ fun StatsScreen(store: MonkStore, scrollState: ScrollState, contentPadding: Padd
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Legend(MaterialTheme.colorScheme.tertiary, s.turnedAway)
                         Legend(MaterialTheme.colorScheme.primary, s.opened)
+                        Legend(MaterialTheme.colorScheme.secondaryContainer, s.pendingLegend)
                     }
                 }
             }
@@ -131,6 +159,7 @@ fun StatsScreen(store: MonkStore, scrollState: ScrollState, contentPadding: Padd
                 if (perApp.isEmpty()) Hint(s.noData)
                 val max = perApp.maxOfOrNull { it.second.intercepted }?.coerceAtLeast(1) ?: 1
                 perApp.forEach { (pkg, a) ->
+                    key(pkg) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AppIcon(pkg, 32.dp)
                         Spacer(Modifier.size(10.dp))
@@ -141,6 +170,8 @@ fun StatsScreen(store: MonkStore, scrollState: ScrollState, contentPadding: Padd
                                     "${a.turnedAway * 100 / a.intercepted.coerceAtLeast(1)}%",
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.widthIn(min = 44.dp),
+                                    textAlign = TextAlign.End,
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(s.pauses(a.intercepted), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -150,13 +181,17 @@ fun StatsScreen(store: MonkStore, scrollState: ScrollState, contentPadding: Padd
                                 total = max,
                                 away = a.turnedAway,
                                 opened = a.opened,
+                                pending = a.intercepted - a.turnedAway - a.opened,
                                 awayColor = MaterialTheme.colorScheme.tertiary,
                                 openedColor = MaterialTheme.colorScheme.primary,
+                                pendingColor = MaterialTheme.colorScheme.secondaryContainer,
                                 track = MaterialTheme.colorScheme.surfaceContainerHighest,
                             )
                         }
                     }
+                    }
                 }
+                if (perApp.isNotEmpty()) Hint(s.byAppHint)
             }
 
             SectionTitle(s.byHour)
@@ -169,6 +204,7 @@ fun StatsScreen(store: MonkStore, scrollState: ScrollState, contentPadding: Padd
             if (reasons.isNotEmpty()) {
                 SectionTitle(s.reasons)
                 MonkCard {
+                    Hint(s.reasonsHint)
                     val total = reasons.values.sum().coerceAtLeast(1)
                     Intention.entries
                         .map { it to (reasons[it.name] ?: 0) }
@@ -182,7 +218,7 @@ fun StatsScreen(store: MonkStore, scrollState: ScrollState, contentPadding: Padd
                             LinearProgressIndicator(
                                 progress = { n.toFloat() / total },
                                 modifier = Modifier.fillMaxWidth(),
-                                color = MaterialTheme.colorScheme.secondary,
+                                color = MaterialTheme.colorScheme.primary,
                                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             )
                         }
@@ -201,15 +237,28 @@ private fun Legend(color: Color, label: String) {
     }
 }
 
+/** Walked away, opened, then the faint pauses without an outcome — the order every stats chart keeps. */
 @Composable
-private fun StackedBar(total: Int, away: Int, opened: Int, awayColor: Color, openedColor: Color, track: Color) {
+private fun StackedBar(
+    total: Int,
+    away: Int,
+    opened: Int,
+    awayColor: Color,
+    openedColor: Color,
+    pendingColor: Color,
+    track: Color,
+    pending: Int = total - away - opened,
+) {
     Canvas(Modifier.fillMaxWidth().height(8.dp)) {
         val r = CornerRadius(4.dp.toPx())
         drawRoundRect(track, Offset.Zero, size, r)
-        val wAway = size.width * away / total
-        val wOpen = size.width * opened / total
+        val t = total.coerceAtLeast(1)
+        val wAway = size.width * away / t
+        val wOpen = size.width * opened / t
+        val wPend = size.width * pending.coerceAtLeast(0) / t
         if (wAway > 0) drawRoundRect(awayColor, Offset.Zero, Size(wAway, size.height), r)
         if (wOpen > 0) drawRoundRect(openedColor, Offset(wAway, 0f), Size(wOpen, size.height), r)
+        if (wPend > 0) drawRoundRect(pendingColor, Offset(wAway + wOpen, 0f), Size(wPend, size.height), r)
     }
 }
 
@@ -218,7 +267,8 @@ private fun BarChart(days: List<DayStats>) {
     val away = MaterialTheme.colorScheme.tertiary
     val opened = MaterialTheme.colorScheme.primary
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
-    val max = (days.maxOfOrNull { it.turnedAway + it.opened } ?: 1).coerceAtLeast(1)
+    val pending = MaterialTheme.colorScheme.secondaryContainer
+    val max = (days.maxOfOrNull { maxOf(it.intercepted, it.turnedAway + it.opened) } ?: 1).coerceAtLeast(1)
     Canvas(Modifier.fillMaxWidth().height(120.dp)) {
         val gap = 4.dp.toPx()
         val w = (size.width - gap * (days.size - 1)) / days.size
@@ -226,6 +276,8 @@ private fun BarChart(days: List<DayStats>) {
         days.forEachIndexed { i, d ->
             val x = i * (w + gap)
             drawRoundRect(track, Offset(x, 0f), Size(w, size.height), r)
+            val hAll = size.height * d.intercepted / max
+            if (hAll > 0) drawRoundRect(pending, Offset(x, size.height - hAll), Size(w, hAll), r)
             val hAway = size.height * d.turnedAway / max
             val hOpen = size.height * d.opened / max
             if (hOpen > 0) drawRoundRect(opened, Offset(x, size.height - hOpen), Size(w, hOpen), r)
@@ -236,7 +288,8 @@ private fun BarChart(days: List<DayStats>) {
 
 @Composable
 private fun HourChart(hours: List<Int>) {
-    val bar = MaterialTheme.colorScheme.secondary
+    // A plain count of pauses, not an outcome: neutral, like the "Paused" counter.
+    val bar = MaterialTheme.colorScheme.onSurfaceVariant
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
     val label = MaterialTheme.colorScheme.onSurfaceVariant
     val max = (hours.maxOrNull() ?: 1).coerceAtLeast(1)
@@ -252,8 +305,19 @@ private fun HourChart(hours: List<Int>) {
                 if (hh > 0) drawRoundRect(bar, Offset(x, size.height - hh), Size(w, hh), r)
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            listOf("0", "6", "12", "18", "23").forEach { Text(it, style = MaterialTheme.typography.labelSmall, color = label) }
+        // One cell per bar so each hour label sits under its own column.
+        Row(Modifier.fillMaxWidth()) {
+            for (h in 0 until 24) {
+                Text(
+                    if (h % 6 == 0 || h == 23) h.toString() else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = label,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
         }
     }
 }

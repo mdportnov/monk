@@ -6,24 +6,23 @@
 
 <p align="center">
   <b>фокус без компромиссов.</b><br/>
-  Кроссплатформенный CLI-блокировщик отвлечений на Rust.<br/>
-  Один бинарник, один демон, без лишнего – блокируй приложения и сайты,<br/>
-  запускай жёсткие сессии и возвращай себе внимание.
+  Блокировщик отвлечений в двух формах:<br/>
+  <b>CLI с демоном</b> для macOS, Linux и Windows и <b>приложение для Android</b>,<br/>
+  которое ставит паузу между тобой и приложениями, открытыми на автопилоте.
 </p>
 
 <p align="center">
   <a href="https://github.com/mdportnov/monk-cli/actions/workflows/ci.yml"><img src="https://github.com/mdportnov/monk-cli/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/mdportnov/monk-cli/actions/workflows/release.yml"><img src="https://github.com/mdportnov/monk-cli/actions/workflows/release.yml/badge.svg" alt="Release" /></a>
+  <a href="https://github.com/mdportnov/monk-cli/actions/workflows/mobile-ci.yml"><img src="https://github.com/mdportnov/monk-cli/actions/workflows/mobile-ci.yml/badge.svg" alt="mobile CI" /></a>
+  <a href="https://github.com/mdportnov/monk-cli/releases"><img src="https://img.shields.io/github/v/release/mdportnov/monk-cli?filter=v*&label=cli" alt="Релиз CLI" /></a>
+  <a href="https://github.com/mdportnov/monk-cli/releases?q=mobile-v"><img src="https://img.shields.io/github/v/release/mdportnov/monk-cli?filter=mobile-v*&label=android" alt="Релиз Android" /></a>
   <img src="https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue.svg" alt="Лицензия: MIT OR Apache-2.0" />
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-5a5a5a" alt="Платформы" />
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Rust-1.82%2B-DEA584?logo=rust&logoColor=black" alt="Rust" />
-  <img src="https://img.shields.io/badge/TUI-ratatui-7aa2f7" alt="ratatui" />
-  <img src="https://img.shields.io/badge/async-tokio-orange" alt="tokio" />
-  <img src="https://img.shields.io/badge/stats-SQLite-044a64?logo=sqlite&logoColor=white" alt="SQLite" />
-  <img src="https://img.shields.io/badge/unsafe-forbidden-success" alt="deny(unsafe_code)" />
+  <img src="https://img.shields.io/badge/Kotlin_Multiplatform-2.4-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin Multiplatform" />
+  <img src="https://img.shields.io/badge/Compose_Multiplatform-1.11-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose Multiplatform" />
   <img src="https://img.shields.io/badge/i18n-EN%20%2F%20RU-bb9af7" alt="EN/RU" />
 </p>
 
@@ -33,7 +32,19 @@
 
 ---
 
-## Ключевые возможности
+| | CLI для десктопа | Приложение для Android |
+| --- | --- | --- |
+| **Что это** | Один бинарник и демон: блокирует сайты и приложения на время сессии, hard mode нельзя прервать | Экран паузы в духе OneSec перед Instagram, YouTube, TikTok и всем, что открываешь не думая |
+| **Где работает** | macOS · Linux · Windows | Android 10+ |
+| **На чём** | Rust, tokio, ratatui, SQLite | Kotlin Multiplatform, Compose Material 3, служба специальных возможностей |
+| **Взять** | [Установка](#установка) | [APK из последнего релиза `mobile-v*`](https://github.com/mdportnov/monk-cli/releases) · [подробнее](#приложение-для-android) |
+| **Документация** | [ниже](#cli-для-десктопа) | [`mobile/README.md`](./mobile/README.md) (EN) |
+
+Между собой они пока не связаны: одна идея, одно имя, отдельные настройки.
+
+## CLI для десктопа
+
+### Ключевые возможности
 
 - **Честная блокировка приложений** — сканирует установленные программы на macOS, Linux (нативные, Flatpak и Snap) и Windows, ты выбираешь из реального списка, а не угадываешь имена процессов.
 - **Готовые наборы сайтов** — встроенные группы `global` и `ru` (соцсети, видео, новости, мессенджеры, шопинг, игры) с автоматическим раскрытием поддоменов.
@@ -43,7 +54,7 @@
 - **Локализация** — английский и русский из коробки через `rust-i18n`.
 - **Zero unsafe** — `#![deny(unsafe_code)]` во всём основном крейте.
 
-## Как это работает
+### Как это работает
 
 monk запускает небольшой постоянный демон — это тот же бинарник `monk`, запущенный как `monk daemon run` и зарегистрированный в менеджере сервисов ОС под именем `monkd`. Он держит состояние блокировок; CLI и TUI общаются с ним по локальному сокету. При старте сессии:
 
@@ -52,7 +63,7 @@ monk запускает небольшой постоянный демон — �
 3. Совпавшие процессы убиваются в тик-цикле и держатся закрытыми до конца сессии.
 4. В hard mode подписанный lock-файл проверяется на каждом тике — повреждение или удаление не снимают блок.
 
-## Технологии
+### Технологии
 
 | Слой          | Крейты / технологии                                                   |
 | ------------- | --------------------------------------------------------------------- |
@@ -68,9 +79,9 @@ monk запускает небольшой постоянный демон — �
 | i18n          | `rust-i18n`, `sys-locale`                                             |
 | Ошибки        | `thiserror` + `miette` с красивыми репортами                          |
 
-## Установка
+### Установка
 
-### Быстрая установка (скрипт)
+#### Быстрая установка (скрипт)
 
 Скачивает подходящий релизный бинарник, проверяет контрольную сумму и кладёт
 его в `PATH`. После этого запусти `monk setup`.
@@ -85,7 +96,7 @@ curl -fsSL https://raw.githubusercontent.com/mdportnov/monk-cli/master/assets/in
 irm https://raw.githubusercontent.com/mdportnov/monk-cli/master/assets/install.ps1 | iex
 ```
 
-### Из исходников
+#### Из исходников
 
 Нужен Rust toolchain (1.82+) — поставь через [rustup](https://rustup.rs). Одинаково работает на Linux, macOS и Windows.
 
@@ -126,20 +137,20 @@ git clone https://github.com/mdportnov/monk-cli; cd monk-cli
 powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
 ```
 
-### cargo-binstall
+#### cargo-binstall
 
 ```sh
 cargo binstall monk
 ```
 
-### Пакеты
+#### Пакеты
 
 - **Debian / Ubuntu**: `cargo deb` собирает `.deb` с systemd user unit; автодополнения bash/zsh/fish включены.
 - **Fedora / RHEL**: `cargo generate-rpm` собирает `.rpm` (автодополнения включены).
 - **Windows**: `assets/install.ps1` (выше). MSI / Scoop — скоро.
 - **macOS**: к каждому релизу приложен `.pkg` — он кладёт `monk` в `/usr/local/bin` и больше ничего не делает, `monk setup` всё равно нужно запустить. Если релиз собран без Developer ID, пакет **не подписан** и Gatekeeper не откроет его по двойному клику: правый клик → *Открыть*, либо ставьте скриптом. Homebrew tap — скоро.
 
-### Требования
+#### Требования
 
 - Терминал и права администратора на машине — блокировка правит системный файл `hosts`, а это привилегированная операция. Доступ выдаётся **один раз**, при установке.
 - Rust 1.82+ — только если собираешь из исходников.
@@ -150,7 +161,7 @@ cargo binstall monk
 - **Linux** — демон работает от **тебя** через *пользовательский* unit `systemd` (без `sudo`). Чтобы блокировка работала, monk должен иметь право писать в `/etc/hosts` (или использовать бэкенд `systemd-resolved`) — `monk doctor` подскажет, если не может.
 - **Windows** — демон это задача планировщика при входе, которой нужны повышенные права, поэтому открой терминал **от администратора** перед `monk setup` / `monk daemon install`.
 
-## Быстрый старт
+### Быстрый старт
 
 Выполняй по порядку. На **Windows** сначала открой PowerShell **от администратора**; на **macOS** при установке появится запрос пароля.
 
@@ -164,9 +175,9 @@ monk stop                   # 5. завершить — только soft mode; 
 
 Нужен интерфейс? `monk tui` открывает полный дашборд. Запустить сессию без возможности выйти — `monk start deepwork --hard`.
 
-## Команды
+### Команды
 
-### Сессии
+#### Сессии
 
 | Команда                                               | Что делает                                  |
 | ----------------------------------------------------- | ------------------------------------------- |
@@ -177,7 +188,7 @@ monk stop                   # 5. завершить — только soft mode; 
 | `monk stats`                                          | Статистика сессий                           |
 | `monk tui`                                            | Открыть интерактивный дашборд               |
 
-### Профили и приложения
+#### Профили и приложения
 
 | Команда                                                        | Что делает                                |
 | -------------------------------------------------------------- | ----------------------------------------- |
@@ -194,7 +205,7 @@ monk stop                   # 5. завершить — только soft mode; 
 
 Встроенные пресеты для `--preset`: `deepwork`, `study`, `detox`, `sleep`, `sober`, `lockdown`, `no-social`, `no-video`, `no-news`, `no-games`, `no-chat`, `no-shopping`, `no-adult`, `no-gambling`, `no-dating`, `no-ai`.
 
-### Демон
+#### Демон
 
 `monk service` — алиас для `monk daemon`. Командам `install` и `uninstall` нужны повышенные права: на macOS они сами показывают нативный запрос пароля, если запущены без `sudo`; на Windows нужен терминал от администратора; на Linux это пользовательский unit `systemd` и `sudo` не требуется. После `monk update` сервис обновляется автоматически, чтобы демон не остался на старой версии, — а `monk doctor` предупредит, если это всё-таки случилось.
 
@@ -207,7 +218,7 @@ monk stop                   # 5. завершить — только soft mode; 
 | `monk daemon install [--reinstall]` | Установить как systemd / launchd / задачу планировщика Windows |
 | `monk daemon uninstall [--purge]`   | Удалить сервис (`--purge` также стирает конфиг и данные) |
 
-### Конфиг и диагностика
+#### Конфиг и диагностика
 
 | Команда                                | Что делает                                          |
 | -------------------------------------- | --------------------------------------------------- |
@@ -219,7 +230,7 @@ monk stop                   # 5. завершить — только soft mode; 
 | `monk lang en\|ru`                     | Сменить язык интерфейса                             |
 | `monk completions SHELL`               | Сгенерировать автодополнение (bash/zsh/fish/powershell/elvish) |
 
-## Конфигурация
+### Конфигурация
 
 Расположение:
 
@@ -243,7 +254,7 @@ apps  = ["com.tinyspeck.slackmacgap", "com.hnc.Discord"]
 
 Идентификаторы приложений — стабильные ключи, которые выдаёт сканер: bundle id на macOS, `.desktop` id на Linux, путь к цели ярлыка на Windows.
 
-## Hard mode
+### Hard mode
 
 Hard mode — главная фишка. После запуска жёсткой сессии:
 
@@ -253,6 +264,47 @@ Hard mode — главная фишка. После запуска жёстко�
 - `monk panic` ставит отложенный выход (настраиваемая задержка), чтобы можно было отменить ошибочно запущенную сессию, но без мгновенного побега.
 
 Пользуйся осознанно.
+
+## Приложение для Android
+
+`mobile/` — **Monk для Android**. Выбираешь приложения, которые открываешь на автопилоте, и
+каждый их запуск упирается в экран паузы с дышащим кругом и отсчётом. Уйти, или открыть на
+несколько минут осознанно. С экрана ничего не читается: служба видит только, *какое* приложение
+вышло вперёд.
+
+- **Пауза, блок или лимит** для каждого приложения, правила по времени (скажем, Instagram закрыт
+  06:00–09:00 и после 22:00), дневной лимит открытий и замок на приложение, который снимает
+  только удаление.
+- **Перерыв, фокус, строгий режим.** Перерыв выключает защиту на время и стоит 10 секунд
+  дыхания; фокус блокирует всё и не останавливается; строгий режим замораживает настройки до
+  выбранного часа. Кнопки перерыва и фокуса в шторке.
+- **Статистика** пауз, уходов и открытий по дням, приложениям и часам, плюс экранное время
+  выбранных приложений, если дать доступ к статистике использования.
+- **Приватно.** Без аккаунта и аналитики. Единственный выход в сеть — проверка обновлений на
+  GitHub Releases, оттуда же приложение обновляет себя само.
+- Русский и English, светлая / тёмная тема / Material You.
+
+### Установка
+
+Скачай `monk-android-X.Y.Z.apk` из последнего [релиза `mobile-vX.Y.Z`](https://github.com/mdportnov/monk-cli/releases),
+установи и включи службу специальных возможностей с карточки настройки. На Android 13+ для
+APK не из магазина один раз нужно *О приложении → ⋮ → Разрешить ограниченные настройки*;
+приложение проведёт по шагам. Обновления предлагаются внутри и проверяются по SHA-256 и ключу подписи.
+
+### Сборка из исходников
+
+Нужны JDK 17 и Android SDK (платформа 36); остальное принесёт Gradle wrapper
+(Kotlin 2.4, AGP 9.2, Compose Multiplatform 1.11).
+
+```sh
+cd mobile
+./gradlew :androidApp:assembleDebug          # → androidApp/build/outputs/apk/debug/
+./gradlew :androidApp:installDebug           # на подключённый телефон
+./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest
+```
+
+Debug-сборка не обновится поверх релизной (другой ключ подписи). Как устроены служба, fail-closed
+защита запуска и подпись релизов — в [`mobile/README.md`](./mobile/README.md).
 
 ## Разработка
 

@@ -16,20 +16,32 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import com.mdportnov.monk.shared.model.TimeRule
+import com.mdportnov.monk.shared.ui.TopBarState
+import androidx.compose.runtime.SideEffect
+import dev.chrisbanes.haze.HazeState
+import com.mdportnov.monk.shared.ui.components.glassTopBarInset
+import dev.chrisbanes.haze.hazeSource
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
+import com.mdportnov.monk.shared.ui.components.HapticSwitch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -48,36 +60,47 @@ import com.mdportnov.monk.shared.ui.components.LabeledRow
 import com.mdportnov.monk.shared.ui.components.MonkCard
 import com.mdportnov.monk.shared.ui.components.SectionTitle
 import com.mdportnov.monk.shared.ui.components.SettingBlock
+import com.mdportnov.monk.shared.ui.components.Segments
 import com.mdportnov.monk.shared.ui.components.SettingRow
 import com.mdportnov.monk.shared.ui.components.SettingsDivider
 import com.mdportnov.monk.shared.ui.components.SettingsGroup
 import com.mdportnov.monk.shared.ui.components.SliderSetting
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) {
+fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, topBar: TopBarState, hazeState: HazeState) {
     val s = strings
     val config by store.config.collectAsStateWithLifecycle()
     val stats by store.stats.collectAsStateWithLifecycle()
-    val app = config.app(packageName)
-    LaunchedEffect(app == null) { if (app == null) onClose() }
-    if (app == null) return
-    // Strict mode: anything that softens the rule is frozen; tightening stays allowed.
-    val strict = config.isStrict(nowMillis())
+    // Once removed, the page keeps showing its last state while it slides away.
+    val live = config.app(packageName)
+    val last = remember { arrayOfNulls<com.mdportnov.monk.shared.model.BlockedApp>(1) }
+    LaunchedEffect(live == null) { if (live == null) onClose() }
+    val app = live?.also { last[0] = it } ?: last[0] ?: return
+    // Strict mode or a per-app lock: anything that softens the rule is frozen.
+    val strict = config.isStrict(nowMillis()) || app.locked
+    var editing by remember { mutableStateOf<TimeRule?>(null) }
+    var editingIsNew by remember { mutableStateOf(false) }
+    var confirmLock by rememberSaveable { mutableStateOf(false) }
+    var confirmRemove by rememberSaveable { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(app.label) },
-                navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, null) } },
-                actions = {
-                    IconButton(onClick = { store.removeApp(packageName); onClose() }, enabled = !strict) {
-                        Icon(Icons.Outlined.DeleteOutline, s.remove, tint = if (strict) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.error)
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    val strictGlobal = config.isStrict(nowMillis())
+    SideEffect {
+        topBar.set(
+            title = app.label,
+            visible = true,
+            level = 10,
+            navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, s.back) } },
+            actions = {
+                // Removal is the one door a lock leaves open: it is the whole point of the lock.
+                IconButton(onClick = { confirmRemove = true }, enabled = !strictGlobal) {
+                    Icon(Icons.Outlined.DeleteOutline, s.remove, tint = MaterialTheme.colorScheme.error)
+                }
+            },
+        )
+    }
+    Box(Modifier.fillMaxSize()) {
+        val padding = PaddingValues(top = glassTopBarInset())
+        Box(Modifier.fillMaxSize().hazeSource(hazeState)) {
         Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier.widthIn(max = 720.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -95,7 +118,7 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Lock, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.size(6.dp))
-                    Hint(s.strictUntil(formatClock(config.strictUntil)))
+                    Hint(if (app.locked) s.lockedNote else s.strictUntil(formatClock(config.strictUntil)))
                 }
             }
 
@@ -114,19 +137,12 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
             SectionTitle(s.modeTitle)
             SettingsGroup {
                 SettingBlock(subtitle = if (app.mode == BlockMode.BLOCK) s.modeBlockHint else s.modeDelayHint) {
-                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                        SegmentedButton(
-                            selected = app.mode == BlockMode.DELAY,
-                            enabled = !strict,
-                            onClick = { store.upsertApp(app.copy(mode = BlockMode.DELAY)) },
-                            shape = SegmentedButtonDefaults.itemShape(0, 2),
-                        ) { FitText(s.modeDelay) }
-                        SegmentedButton(
-                            selected = app.mode == BlockMode.BLOCK,
-                            onClick = { store.upsertApp(app.copy(mode = BlockMode.BLOCK)) },
-                            shape = SegmentedButtonDefaults.itemShape(1, 2),
-                        ) { FitText(s.modeBlock) }
-                    }
+                    Segments(
+                        options = listOf(BlockMode.DELAY to s.modeDelay, BlockMode.BLOCK to s.modeBlock),
+                        selected = app.mode,
+                        // Tightening (Pause → Block) stays possible under a lock; loosening does not.
+                        enabled = !strict || app.mode == BlockMode.DELAY,
+                    ) { mode -> if (!strict || mode == BlockMode.BLOCK) store.upsertApp(app.copy(mode = mode)) }
                 }
             }
 
@@ -134,7 +150,7 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
                 SectionTitle(s.delayLength)
                 SettingsGroup {
                     SettingRow(title = s.useDefault, subtitle = s.currently("${config.defaultDelaySeconds} ${s.seconds}")) {
-                        Switch(
+                        HapticSwitch(
                             checked = app.delaySeconds == null,
                             enabled = !strict,
                             onCheckedChange = { useDefault ->
@@ -155,7 +171,7 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
                 SectionTitle(s.allowLength)
                 SettingsGroup {
                     SettingRow(title = s.useDefault, subtitle = s.currently("${config.defaultAllowMinutes} ${s.minutes}")) {
-                        Switch(
+                        HapticSwitch(
                             checked = app.allowMinutes == null,
                             enabled = !strict,
                             onCheckedChange = { useDefault ->
@@ -176,7 +192,7 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
                 SectionTitle(s.dailyLimit)
                 SettingsGroup {
                     SettingRow(title = s.noLimit, subtitle = s.dailyLimitHint) {
-                        Switch(
+                        HapticSwitch(
                             checked = app.dailyLimit == null,
                             enabled = !strict,
                             onCheckedChange = { unlimited -> store.upsertApp(app.copy(dailyLimit = if (unlimited) null else 3)) },
@@ -186,13 +202,81 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
                         SettingsDivider()
                         SliderSetting(
                             title = s.dailyLimit, hint = null, value = app.dailyLimit, unit = s.times,
-                            range = 1..20, enabled = !strict,
+                            range = 1..20, enabled = !strict, format = { "$it${s.times}" },
                             onChange = { store.upsertApp(app.copy(dailyLimit = it)) },
                         )
                     }
                 }
             }
+
+            SectionTitle(s.rulesTitle)
+            SettingsGroup {
+                SettingBlock(icon = Icons.Outlined.Schedule, subtitle = s.rulesHint) {
+                    if (app.rules.isEmpty()) Hint(s.noRules)
+                }
+                app.rules.sortedBy { it.startMinute }.forEach { rule -> key(rule.id) {
+                    SettingsDivider()
+                    Surface(onClick = { if (!strict) { editing = rule; editingIsNew = false } }, color = MaterialTheme.colorScheme.surfaceContainer, enabled = !strict) {
+                        SettingRow(
+                            title = ruleSummary(rule),
+                            trailing = if (strict) null else ({ Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }),
+                        )
+                    }
+                }
+                if (!strict) {
+                    SettingsDivider()
+                    SettingBlock {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = {
+                                editing = TimeRule(id = nowMillis(), startMinute = 6 * 60, endMinute = 9 * 60)
+                                editingIsNew = true
+                            }) { Text(s.addRule) }
+                            if (app.rules.isNotEmpty()) {
+                                TextButton(onClick = { store.upsertApp(app.copy(rules = emptyList())) }) { Text(s.resetRules, color = MaterialTheme.colorScheme.error) }
+                            }
+                        }
+                    }
+                }
+            } }
+
+            SectionTitle(s.lockTitle)
+            SettingsGroup {
+                SettingRow(title = s.lockTitle, subtitle = s.lockHint, icon = Icons.Outlined.Lock) {
+                    HapticSwitch(checked = app.locked, enabled = !app.locked, onCheckedChange = { on -> if (on) confirmLock = true })
+                }
+            }
         }
         }
+        }
+    }
+
+    editing?.let { rule ->
+        RuleEditorDialog(
+            initial = rule,
+            isNew = editingIsNew,
+            onDismiss = { editing = null },
+            onSave = { store.upsertRule(packageName, it); editing = null },
+            onDelete = if (editingIsNew) null else ({ store.removeRule(packageName, rule.id); editing = null }),
+        )
+    }
+    if (confirmLock) {
+        AlertDialog(
+            onDismissRequest = { confirmLock = false },
+            title = { Text(s.lockConfirmTitle) },
+            text = { Text(s.lockConfirmBody) },
+            confirmButton = { TextButton(onClick = { store.upsertApp(app.copy(locked = true)); confirmLock = false }) { Text(s.lock) } },
+            dismissButton = { TextButton(onClick = { confirmLock = false }) { Text(s.cancel) } },
+        )
+    }
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text(s.removeAppTitle) },
+            text = { Text(s.removeAppBody(app.rules.size)) },
+            confirmButton = {
+                TextButton(onClick = { confirmRemove = false; store.removeApp(packageName); onClose() }) { Text(s.remove, color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(s.cancel) } },
+        )
     }
 }

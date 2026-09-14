@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.telecom.TelecomManager
 import android.util.Log
 import android.util.LruCache
@@ -19,6 +20,12 @@ import android.view.inputmethod.InputMethodManager
 import androidx.core.content.ContextCompat
 import com.mdportnov.monk.shared.model.Decision
 import java.lang.ref.WeakReference
+import kotlin.math.abs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Adapter between the accessibility API and [ForegroundGate]: feeds window-state events in,
@@ -36,6 +43,8 @@ import java.lang.ref.WeakReference
 class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects, InterceptSession.Host {
     private val handler = Handler(Looper.getMainLooper())
     private val graph by lazy { monkGraph }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var liveJob: Job? = null
     private val overlay by lazy { InterceptOverlay(this, graph.intercepts) }
     private val gate by lazy { ForegroundGate(packageName, MainActivity::class.java.name, this, System::currentTimeMillis) }
 
@@ -46,6 +55,15 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
 
     private val packagesChanged = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            val pkg = intent.data?.schemeSpecificPart
+            val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
+            // Uninstalled: park its settings. Installed again later: bring them back unasked.
+            if (pkg != null && !replacing) {
+                when (intent.action) {
+                    Intent.ACTION_PACKAGE_FULLY_REMOVED -> if (graph.store.archiveIfWatched(pkg)) Log.d(TAG, "archived $pkg")
+                    Intent.ACTION_PACKAGE_ADDED -> if (graph.store.restoreIfArchived(pkg)) Log.d(TAG, "restored $pkg")
+                }
+            }
             // PACKAGE_CHANGED is chatty (component toggles); one refresh per burst is plenty.
             handler.removeCallbacks(refreshSets)
             handler.postDelayed(refreshSets, 500)
@@ -57,33 +75,98 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
         override fun onReceive(context: Context, intent: Intent) = gate.onUserPresent()
     }
 
+    /**
+     * Time zone / time / date changes: rules are wall-clock, so they follow the new clock at
+     * once. Timers (focus, strict, break, allowances) are the opposite: they are promises in
+     * elapsed time, so when the wall clock is set forward or back they move with it — a focus
+     * session cannot be skipped by moving the clock past its end, nor a break stretched by
+     * moving it back. The jump is measured against the boot clock, which nobody can set.
+     */
+    private val clockChanged = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            Log.d(TAG, "clock changed: ${intent.action}")
+            if (intent.action == Intent.ACTION_TIME_CHANGED) {
+                val delta = clockDrift()
+                anchorClock()
+                if (abs(delta) >= CLOCK_JUMP_MIN_MS) graph.store.shiftTimers(delta)
+            }
+            gate.onClockChanged()
+        }
+    }
+
+    private var wallAnchor = 0L
+    private var elapsedAnchor = 0L
+    private val runtime by lazy { RuntimeState(this) }
+
+    private fun anchorClock() {
+        wallAnchor = System.currentTimeMillis()
+        elapsedAnchor = SystemClock.elapsedRealtime()
+        runtime.anchorClock()
+    }
+
+    /** How far the wall clock moved beyond what the boot clock says has elapsed since the anchor. */
+    private fun clockDrift(): Long =
+        (System.currentTimeMillis() - wallAnchor) - (SystemClock.elapsedRealtime() - elapsedAnchor)
+
     // --- lifecycle ---
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = WeakReference(this)
+        // A clock set by hand while the process was dead is caught here, same rule as live.
+        runtime.driftSinceAnchor()?.let { delta ->
+            if (abs(delta) >= CLOCK_JUMP_MIN_MS) {
+                Log.d(TAG, "clock moved ${delta}ms while offline; shifting timers")
+                graph.store.shiftTimers(delta)
+            }
+        }
+        anchorClock()
+        // Restarted mid-session: the app in front has not changed, and it produces no window
+        // event just because we came back. The config collector below judges it right away.
+        gate.restore(runtime.foreground)
         refreshSystemSets()
         ContextCompat.registerReceiver(
             this, packagesChanged,
             IntentFilter().apply {
                 addAction(Intent.ACTION_PACKAGE_ADDED)
                 addAction(Intent.ACTION_PACKAGE_REMOVED)
+                addAction(Intent.ACTION_PACKAGE_FULLY_REMOVED)
                 addAction(Intent.ACTION_PACKAGE_CHANGED)
                 addDataScheme("package")
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         ContextCompat.registerReceiver(this, userPresent, IntentFilter(Intent.ACTION_USER_PRESENT), ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(
+            this, clockChanged,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_TIMEZONE_CHANGED)
+                addAction(Intent.ACTION_TIME_CHANGED)
+                addAction(Intent.ACTION_DATE_CHANGED)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         MonkNotifications.clearServiceOff(this)
         graph.platform.refreshPermissions()
+        // The service process is the one that is always alive: it keeps the shade timer honest.
+        liveJob?.cancel()
+        liveJob = scope.launch {
+            graph.store.config.collect {
+                LiveStatus.sync(this@MonkAccessibilityService, it)
+                // A rule added or a break started while a watched app is in front must apply now.
+                gate.reevaluateForeground()
+            }
+        }
         Log.d(TAG, "connected")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        liveJob?.cancel()
         handler.removeCallbacksAndMessages(null)
         overlay.hide()
         runCatching { unregisterReceiver(packagesChanged) }
         runCatching { unregisterReceiver(userPresent) }
+        runCatching { unregisterReceiver(clockChanged) }
         instance = null
         val app = applicationContext
         // A fresh Handler on purpose: the one above was just wiped. Posted after the unbind
@@ -140,7 +223,9 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
     override fun decide(pkg: String) = graph.store.decide(pkg)
     override fun isWatched(pkg: String) = graph.store.config.value.app(pkg) != null
     override fun allowanceUntil(pkg: String) = graph.store.allowances.value[pkg]
+    override fun nextChangeMillis(pkg: String) = graph.store.millisToNextChange(pkg)
     override fun interceptShowingFor(): String? = overlay.session?.packageName ?: InterceptGate.showingFor
+    override fun interceptInFront(): Boolean = overlay.isShowing || InterceptGate.isInFront()
     override fun hideOverlay() = overlay.hide()
 
     override fun schedule(delayMs: Long, action: () -> Unit) {
@@ -153,10 +238,12 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
         scheduled = null
     }
 
+    override fun rememberForeground(pkg: String?) = runtime.rememberForeground(pkg)
+
     override fun intercept(pkg: String, decision: Decision.Intercept) {
         val app = graph.store.config.value.app(pkg) ?: return
         Log.d(TAG, "intercepting $pkg (${decision.effectiveMode})")
-        if (graph.store.config.value.overlayMode) {
+        if (graph.store.config.value.overlayMode || runtime.preferOverlay) {
             if (!showOverlay(app, decision)) performGlobalAction(GLOBAL_ACTION_HOME)
             return
         }
@@ -191,7 +278,7 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
     private val launchGuard: Runnable = object : Runnable {
         override fun run() {
             val token = launchGuardToken
-            if (InterceptGate.isResumed(token)) return
+            if (InterceptGate.isResumed(token)) { runtime.noteLaunchOk(); return }
             if (InterceptGate.isCreated(token) && guardRetries < LAUNCH_GUARD_RETRIES) {
                 // Created but not yet resumed: a cold start on a slow device, give it more time.
                 guardRetries++
@@ -200,6 +287,7 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
             }
             val session = graph.intercepts[token]
             Log.w(TAG, "intercept screen never resumed; falling back to overlay")
+            runtime.noteLaunchMiss()
             InterceptGate.clear()
             if (session == null) {
                 performGlobalAction(GLOBAL_ACTION_HOME)
@@ -213,6 +301,7 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
     // --- InterceptSession.Host ---
 
     override fun goHome() { performGlobalAction(GLOBAL_ACTION_HOME) }
+    override fun armForeground() { gate.reevaluateForeground() }
     override fun foregroundPackage(): String? = gate.lastForeground
     override fun launchApp(packageName: String) {
         packageManager.getLaunchIntentForPackage(packageName)
@@ -224,8 +313,13 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
         private const val TAG = "MonkA11y"
         private const val LAUNCH_GUARD_MS = 2500L
         private const val LAUNCH_GUARD_RETRIES = 3
+        /** NTP nudges are a second or two; anything larger is a hand on the clock. */
+        private const val CLOCK_JUMP_MIN_MS = 2_000L
 
         @Volatile private var instance: WeakReference<MonkAccessibilityService>? = null
+
+        /** True while the system holds a live binding; the enabled-services list can lag behind it for a few frames. */
+        val isConnected: Boolean get() = instance?.get() != null
 
         /** Home via the accessibility API: no task/affinity surprises, no chooser, works on every OEM. */
         fun goHomeStatic(): Boolean = instance?.get()?.performGlobalAction(GLOBAL_ACTION_HOME) == true

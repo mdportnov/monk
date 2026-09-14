@@ -4,6 +4,7 @@ import com.mdportnov.monk.shared.data.MonkStore
 import com.mdportnov.monk.shared.model.BlockMode
 import com.mdportnov.monk.shared.model.BlockedApp
 import com.mdportnov.monk.shared.model.Decision
+import com.mdportnov.monk.shared.model.RuleMode
 import com.mdportnov.monk.shared.ui.intercept.InterceptUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +27,7 @@ class InterceptSession(
         fun goHome()
         fun foregroundPackage(): String?
         fun launchApp(packageName: String)
+        fun armForeground()
     }
 
     private var decided = false
@@ -40,7 +42,7 @@ class InterceptSession(
         return InterceptUiState(
             packageName = packageName,
             label = app.label,
-            mode = app.mode,
+            mode = decision.effectiveMode,
             delaySeconds = config.delayFor(app),
             allowMinutes = config.allowFor(app),
             limitReached = decision.limitReached,
@@ -49,6 +51,8 @@ class InterceptSession(
             timesToday = store.interceptsToday(packageName),
             askIntention = config.askIntention,
             message = config.pauseMessage,
+            ruleBlockedUntil = if (decision.rule?.mode == RuleMode.BLOCK && !decision.focus) store.blockEndsAt(packageName) else null,
+            language = config.language,
         )
     }
 
@@ -59,6 +63,8 @@ class InterceptSession(
      */
     fun open(reason: String?): Boolean {
         if (decided) return true
+        // Uninstalled or removed from the list while the screen was up: nothing to open, nothing to count.
+        if (store.config.value.app(packageName) == null) { decided = true; return true }
         val now = store.decide(packageName)
         if (now is Decision.Intercept && now.effectiveMode == BlockMode.BLOCK) {
             _ui.value = uiFor(now)
@@ -67,6 +73,9 @@ class InterceptSession(
         decided = true
         store.grantAllowance(packageName, store.config.value.allowFor(app))
         store.recordOpened(packageName, reason)
+        // The app stays in front after this, so no window event will arm the expiry / boundary
+        // timer; ask the gate to judge it now (Allow) and schedule the next check.
+        nav.armForeground()
         return true
     }
 
@@ -75,6 +84,13 @@ class InterceptSession(
         decided = true
         store.recordTurnedAway(packageName)
         nav.goHome()
+    }
+
+    /** The screen went away without a choice (home gesture, back, screen off): the app was not opened, so it counts as walking away. */
+    fun abandon() {
+        if (decided) return
+        decided = true
+        store.recordTurnedAway(packageName)
     }
 
     /** Brings the watched app back in front when something else took its place meanwhile. */

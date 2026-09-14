@@ -17,9 +17,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.sp
 import com.mdportnov.monk.shared.ui.components.Pill
+import com.mdportnov.monk.shared.ui.Motion
+import com.mdportnov.monk.shared.ui.Motion.itemMotion
+import com.mdportnov.monk.shared.ui.components.Counter
+import com.mdportnov.monk.shared.ui.components.GlassActionPill
+import com.mdportnov.monk.shared.ui.components.PageHeaderSlot
+import androidx.compose.ui.text.font.FontStyle
+import dev.chrisbanes.haze.HazeState
 import com.mdportnov.monk.shared.ui.components.FitText
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,6 +41,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Accessibility
+import androidx.compose.material.icons.outlined.BatteryAlert
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.outlined.Block
@@ -42,17 +49,20 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.HourglassEmpty
-import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.outlined.PhoneIphone
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
+import com.mdportnov.monk.shared.ui.components.HowItWorksSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -61,6 +71,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,7 +83,6 @@ import com.mdportnov.monk.shared.data.MonkStore
 import com.mdportnov.monk.shared.data.formatClock
 import com.mdportnov.monk.shared.data.lastDates
 import com.mdportnov.monk.shared.data.localMoment
-import com.mdportnov.monk.shared.data.nextMidnightMillis
 import com.mdportnov.monk.shared.data.nowMillis
 import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.BlockMode
@@ -89,6 +99,12 @@ import com.mdportnov.monk.shared.ui.components.LabeledRow
 import com.mdportnov.monk.shared.ui.components.MonkCard
 import com.mdportnov.monk.shared.ui.components.SectionTitle
 import com.mdportnov.monk.shared.ui.components.UpdateCard
+import com.mdportnov.monk.shared.model.ScreenTimeReport
+import com.mdportnov.monk.shared.ui.stats.rememberScreenTime
+import androidx.compose.foundation.clickable
+import com.mdportnov.monk.shared.ui.Route
+import com.mdportnov.monk.shared.ui.LocalOpenRoute
+import com.mdportnov.monk.shared.ui.LocalHostActions
 import com.mdportnov.monk.shared.ui.theme.MonkColors
 import kotlinx.coroutines.delay
 
@@ -98,18 +114,16 @@ fun HomeScreen(
     platform: MonkPlatform,
     onAddApps: () -> Unit,
     onOpenApp: (String) -> Unit,
+    onOpenStats: () -> Unit,
     listState: LazyListState,
     contentPadding: PaddingValues,
+    hazeState: HazeState,
 ) {
     val s = strings
     val config by store.config.collectAsStateWithLifecycle()
     val stats by store.stats.collectAsStateWithLifecycle()
     val allowances by store.allowances.collectAsStateWithLifecycle()
     val permissions by platform.permissions.collectAsStateWithLifecycle()
-    LifecycleResumeEffect(Unit) {
-        platform.refreshPermissions()
-        onPauseOrDispose { }
-    }
     // A 30 s heartbeat: pause / strict / allowance countdowns and the schedule flip on their own.
     var now by remember { mutableLongStateOf(nowMillis()) }
     LaunchedEffect(Unit) {
@@ -118,8 +132,16 @@ fun HomeScreen(
             now = nowMillis()
         }
     }
+    LifecycleResumeEffect(Unit) {
+        platform.refreshPermissions()
+        now = nowMillis()
+        onPauseOrDispose { }
+    }
     val apps = remember(config.apps) { config.apps.sortedBy { it.label.lowercase() } }
-    val today = localMoment().dateIso
+    val today = remember(now) { localMoment().dateIso }
+    // Screen time of the watched apps for the week card; re-read with the heartbeat so "today" keeps moving.
+    val watchedPackages = remember(config.apps) { config.apps.map { it.packageName }.toSet() }
+    val screenTime = rememberScreenTime(platform, days = 7, packages = watchedPackages, granted = permissions.usageAccessGranted, tick = now / 60_000)
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -127,27 +149,32 @@ fun HomeScreen(
             contentPadding = contentPadding,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { Header() }
+            item(key = "header") { Header() }
             if (!platform.supportsBlocking) {
-                item { UnsupportedCard() }
+                item(key = "unsupported") { UnsupportedCard() }
             } else {
-                platform.updater?.let { u -> item { UpdateCard(u, compact = true) } }
+                platform.updater?.let { u -> item(key = "update") { Box(itemMotion()) { UpdateCard(u, compact = true) } } }
                 if (permissions.accessibilityEnabled) {
-                    item { StatusCard(store, config, permissions, now, showControls = apps.isNotEmpty()) }
-                    if (stats.days.isNotEmpty()) item { WeekCard(stats) }
+                    item(key = "status") { Box(itemMotion()) { StatusCard(store, config, permissions, now, showControls = apps.isNotEmpty()) } }
+                    if (permissions.backgroundNeedsAttention) item(key = "keepalive") { Box(itemMotion()) { KeepAliveCard(permissions, platform) } }
+                    if (apps.isNotEmpty() && config.notifyWhenOff && !permissions.notificationsGranted && !config.notifyPromptDismissed) {
+                        item(key = "notify") { Box(itemMotion()) { NotifyCard(onDismiss = { store.updateConfig { it.copy(notifyPromptDismissed = true) } }) } }
+                    }
+                    if (apps.isNotEmpty()) item(key = "today") { Box(itemMotion()) { TodayCard(config, stats, now, today, onOpenStats) } }
+                    if (stats.days.isNotEmpty() || screenTime?.available == true) item(key = "week") { Box(itemMotion()) { WeekCard(stats, screenTime, onOpenStats) } }
                 } else {
-                    item { SetupCard(permissions, platform) }
+                    item(key = "setup") { Box(itemMotion()) { SetupCard(permissions, platform) } }
                 }
             }
             if (!config.helpDismissed && apps.isEmpty()) {
-                item { HowItWorksCard(onDismiss = { store.updateConfig { it.copy(helpDismissed = true) } }) }
+                item(key = "how") { Box(itemMotion()) { HowItWorksCard(onDismiss = { store.updateConfig { it.copy(helpDismissed = true) } }) } }
             }
-            item { SectionTitle(s.blockedApps, Modifier.padding(top = 8.dp)) }
+            item(key = "apps-title") { Box(itemMotion()) { SectionTitle(s.blockedApps, Modifier.padding(top = 8.dp)) } }
             if (apps.isEmpty()) {
-                item { EmptyApps(platform, store, onAddApps) }
+                item(key = "empty") { Box(itemMotion()) { EmptyApps(platform, store, onAddApps) } }
             }
             items(apps, key = { it.packageName }) { app ->
-                Box(Modifier.animateItem()) {
+                Box(itemMotion()) {
                 AppRow(
                     app = app,
                     config = config,
@@ -158,21 +185,34 @@ fun HomeScreen(
                 )
                 }
             }
+            val gone = config.archivedApps.filter { it.uninstalledAt != null }
+            if (gone.isNotEmpty()) {
+                item(key = "gone-title") { Box(itemMotion()) { SectionTitle(s.notOnPhone, Modifier.padding(top = 8.dp)) } }
+                items(gone, key = { "gone:" + it.packageName }) { app ->
+                    Box(itemMotion()) { UninstalledRow(app, onForget = { store.forgetArchived(app.packageName) }) }
+                }
+            }
         }
-        if (apps.isNotEmpty() && platform.supportsBlocking) {
-            ExtendedFloatingActionButton(
-                onClick = onAddApps,
-                icon = { Icon(Icons.Outlined.Add, null) },
-                text = { Text(s.addApps) },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = contentPadding.calculateBottomPadding() - 8.dp, end = 16.dp),
-            )
+        AnimatedVisibility(
+            visible = apps.isNotEmpty() && platform.supportsBlocking,
+            enter = Motion.appear(),
+            exit = Motion.disappear(),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = contentPadding.calculateBottomPadding() - 16.dp, end = 20.dp),
+        ) {
+            GlassActionPill(text = s.addApps, icon = Icons.Outlined.Add, onClick = onAddApps, hazeState = hazeState)
         }
     }
 }
 
 @Composable
 private fun Header() {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
+    PageHeaderSlot(Modifier.padding(horizontal = 4.dp), inPage = true) { HomeHeading() }
+}
+
+/** The mark and the wordmark. Drawn in the page; it fades before the status bar, the glass bar takes over with the status row. */
+@Composable
+fun HomeHeading() {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         MonkMark(30.dp)
         Spacer(Modifier.size(12.dp))
         Text(
@@ -181,6 +221,7 @@ private fun Header() {
                 withStyle(SpanStyle(brush = Brush.linearGradient(listOf(MonkColors.Blue, MonkColors.Violet)))) { append("_") }
             },
             style = MaterialTheme.typography.headlineMedium,
+            maxLines = 1,
         )
     }
 }
@@ -206,106 +247,95 @@ fun MonkMark(size: Dp) {
     }
 }
 
+/**
+ * The day at a glance: today's counters, a live countdown when a focus session or a pause is
+ * running, and one line to keep the reason in view.
+ */
 @Composable
-private fun StatusCard(store: MonkStore, config: MonkConfig, permissions: PermissionStatus, now: Long, showControls: Boolean) {
+private fun TodayCard(config: MonkConfig, stats: Stats, now: Long, today: String, onOpenStats: () -> Unit) {
     val s = strings
-    val moment = localMoment()
-    val scheduleActive = config.schedule.isActive(moment.dayIso, moment.minuteOfDay)
-    val strict = config.isStrict(now)
-    val paused = config.isPaused(now)
-    val focus = config.isFocus(now)
-    val effective = config.enabled && permissions.accessibilityEnabled && !paused
-    var focusCandidate by remember { mutableStateOf<Long?>(null) }
-    val subtitle = when {
-        !config.enabled -> s.protectionOff
-        !permissions.accessibilityEnabled -> s.setupAccessibility
-        paused -> s.pausedUntil(formatClock(config.pausedUntil))
-        focus -> s.focusUntil(formatClock(config.focusUntil))
-        !scheduleActive && !focus -> s.protectionPaused
-        strict -> s.strictUntil(formatClock(config.strictUntil))
-        else -> s.protectionOn
+    val day = stats.day(today)
+    val quote = remember(today, config.language) { Quotes.of(config.language, localMoment().dayOfYear) }
+    val running: Pair<String, Long>? = when {
+        config.isFocus(now) -> s.focus to config.focusUntil
+        config.isPaused(now) -> s.pauseFor to config.pausedUntil
+        else -> null
     }
-    val dotColor = when {
-        effective && scheduleActive -> MonkColors.Mint
-        effective -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)
-        else -> MaterialTheme.colorScheme.outline
-    }
-    MonkCard {
+    MonkCard(onClick = onOpenStats) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(color = dotColor, shape = CircleShape, modifier = Modifier.size(10.dp)) {}
-            Spacer(Modifier.size(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(s.protection, style = MaterialTheme.typography.titleMedium)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(s.statsToday, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            if (running != null) {
+                // The hero already counts minutes down; here the end time, so the two never repeat.
+                Pill(
+                    if (running.first == s.focus) s.focusUntil(formatClock(running.second)) else s.pausedUntil(formatClock(running.second)),
+                    if (running.first == s.focus) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            if (strict || focus) {
-                Icon(Icons.Outlined.Lock, s.strictLocked, tint = MaterialTheme.colorScheme.primary)
-            } else {
-                Switch(checked = config.enabled, onCheckedChange = { on -> store.updateConfig { it.copy(enabled = on, pausedUntil = 0) } })
-            }
+            Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (showControls && config.enabled && permissions.accessibilityEnabled && !focus) {
-            Hint(s.pauseFocusHint)
-            if (paused) {
-                OutlinedButton(onClick = store::resumeProtection) { Text(s.resume) }
-            } else {
-                if (!strict) {
-                    ChipRow(s.pauseFor) {
-                        PauseChip(s.pause15) { store.pauseProtection(nowMillis() + 15 * 60_000L) }
-                        PauseChip(s.pause60) { store.pauseProtection(nowMillis() + 60 * 60_000L) }
-                        PauseChip(s.pauseDay) { store.pauseProtection(nextMidnightMillis()) }
-                    }
-                }
-                ChipRow(s.focus) {
-                    PauseChip(s.focus25) { focusCandidate = nowMillis() + 25 * 60_000L }
-                    PauseChip(s.focus50) { focusCandidate = nowMillis() + 50 * 60_000L }
-                }
-            }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Counter(day.intercepted, s.intercepted)
+            Counter(day.turnedAway, s.turnedAway, MaterialTheme.colorScheme.tertiary)
+            Counter(day.opened, s.opened, MaterialTheme.colorScheme.primary)
         }
-    }
-    focusCandidate?.let { until ->
-        AlertDialog(
-            onDismissRequest = { focusCandidate = null },
-            title = { Text(s.focusConfirmTitle) },
-            text = { Text(s.focusConfirmBody(formatClock(until))) },
-            confirmButton = { TextButton(onClick = { store.startFocus(until); focusCandidate = null }) { Text(s.start) } },
-            dismissButton = { TextButton(onClick = { focusCandidate = null }) { Text(s.cancel) } },
-        )
+        // The counters only add up once every pause has ended; say so while they do not.
+        val pending = day.intercepted - day.turnedAway - day.opened
+        if (pending > 0) Hint(s.pendingCount(pending))
+        // A pull-quote: a thin gradient rule on the left, the line set a size up, no quote marks.
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier.width(3.dp).height(40.dp).clip(RoundedCornerShape(2.dp))
+                    .background(Brush.verticalGradient(listOf(MonkColors.Blue, MonkColors.Violet))),
+            )
+            Text(
+                quote,
+                style = MaterialTheme.typography.titleMedium.copy(fontStyle = FontStyle.Italic, fontWeight = FontWeight.Medium, lineHeight = 22.sp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                modifier = Modifier.weight(1f).align(Alignment.CenterVertically),
+            )
+        }
     }
 }
 
+/** The week in one card; the whole card leads to the Stats tab. Screen time appears once usage access is granted. */
 @Composable
-private fun ChipRow(label: String, chips: @Composable () -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Box(Modifier.height(32.dp).padding(end = 4.dp), contentAlignment = Alignment.Center) {
-            Text(label.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        chips()
-    }
-}
-
-@Composable
-private fun PauseChip(label: String, onClick: () -> Unit) {
-    AssistChip(onClick = onClick, label = { Text(label) })
-}
-
-@Composable
-private fun WeekCard(stats: Stats) {
+private fun WeekCard(stats: Stats, screenTime: ScreenTimeReport?, onOpenStats: () -> Unit) {
     val s = strings
-    val days = remember(stats) { lastDates(7).map { stats.day(it) } }
+    val today = localMoment().dateIso
+    val dates = remember(today) { lastDates(7) }
+    val days = remember(stats, dates) { dates.map { stats.day(it) } }
     val paused = days.sumOf { it.intercepted }
     val away = days.sumOf { it.turnedAway }
-    val streak = remember(stats) { stats.walkAwayStreak(lastDates(90)) }
-    MonkCard {
+    val streak = remember(stats, today) { stats.walkAwayStreak(lastDates(90)) }
+    MonkCard(onClick = onOpenStats) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(s.thisWeek, style = MaterialTheme.typography.titleMedium)
                 if (paused == 0) Hint(s.noWeekData) else Text(s.weekLine(paused, away), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Sparkline(days.map { it.turnedAway }, days.map { it.opened })
+            Spacer(Modifier.width(4.dp))
+            Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (screenTime?.available == true) {
+            // Its own tap target inside the card: the line leads to the full screen-time page, the card to Stats.
+            val open = LocalOpenRoute.current
+            Row(
+                Modifier.fillMaxWidth().clickable { open(Route.ScreenTime) }.padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    s.screenTimeTodayLine(s.duration(screenTime.phoneByDate[today] ?: 0L), s.duration(screenTime.watchedByDate(today))),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            }
         }
         if (paused > 0) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Two sentences now, not two numbers: let them wrap on a narrow screen.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Pill(s.successRate(away * 100 / paused), MaterialTheme.colorScheme.tertiary)
                 if (streak > 0) Pill(s.streak(streak), MaterialTheme.colorScheme.primary)
             }
@@ -361,6 +391,87 @@ private fun SetupCard(permissions: PermissionStatus, platform: MonkPlatform) {
     }
 }
 
+/**
+ * Android 13+: the watchdog notification needs a runtime grant nobody is asked for otherwise.
+ * Shown once there is something to watch; "Not now" hides it for good, Settings keeps the switch.
+ */
+@Composable
+private fun NotifyCard(onDismiss: () -> Unit) {
+    val s = strings
+    val host = LocalHostActions.current
+    MonkCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Outlined.NotificationsActive, null, tint = MaterialTheme.colorScheme.primary) }
+            Column {
+                Text(s.notifyWhenOff, style = MaterialTheme.typography.titleMedium)
+                Text(s.system, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Text(s.notifyPromptBody, style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = host.requestNotificationPermission, modifier = Modifier.weight(1f)) { FitText(s.notifyPermission) }
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { FitText(s.notNow) }
+        }
+    }
+}
+
+/**
+ * The OS side of "the service must not die": shown under the status card only while a switch
+ * still points the wrong way, in the setup card's clothes. Each row is a live check with the
+ * one deep link that flips it.
+ */
+@Composable
+private fun KeepAliveCard(permissions: PermissionStatus, platform: MonkPlatform) {
+    val s = strings
+    MonkCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Outlined.BatteryAlert, null, tint = MaterialTheme.colorScheme.primary) }
+            Column {
+                Text(s.keepAliveTitle, style = MaterialTheme.typography.titleMedium)
+                Text(s.system, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Text(s.keepAliveHint, style = MaterialTheme.typography.bodyMedium)
+        val batteryOk = permissions.batteryUnrestricted && !permissions.backgroundRestricted && !permissions.sleeping
+        KeepAliveRow(
+            ok = batteryOk,
+            title = s.battery,
+            detail = when {
+                permissions.backgroundRestricted -> s.batteryRestricted
+                permissions.sleeping -> s.batterySleeping
+                !permissions.batteryUnrestricted -> s.batteryOptimized
+                else -> s.batteryUnrestricted
+            },
+            action = s.allow,
+            onAction = { if (permissions.backgroundRestricted || permissions.sleeping) platform.openAppInfo() else platform.requestBatteryUnrestricted() },
+        )
+        if (permissions.samsung) Hint(s.samsungSleepHint)
+    }
+}
+
+@Composable
+private fun KeepAliveRow(ok: Boolean, title: String, detail: String, action: String, onAction: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Icon(
+            if (ok) Icons.Outlined.CheckCircle else Icons.Outlined.ErrorOutline,
+            null,
+            tint = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(22.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (!ok) TextButton(onClick = onAction) { Text(action) }
+    }
+}
+
 /** Numbered circles with one line each. */
 @Composable
 private fun Steps(steps: List<String>) {
@@ -393,14 +504,18 @@ private fun UnsupportedCard() {
 @Composable
 private fun HowItWorksCard(onDismiss: () -> Unit) {
     val s = strings
+    var open by rememberSaveable { mutableStateOf(false) }
     MonkCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(s.howTitle, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = onDismiss) { Text(s.gotIt) }
         }
         Steps(listOf(s.howStep1, s.howStep2, s.howStep3).map { it.substringAfter(". ") })
-        Hint(s.howStep4)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { open = true }) { Text(s.learnMore) }
+        }
     }
+    if (open) HowItWorksSheet(onDismiss = { open = false })
 }
 
 @Composable
@@ -416,7 +531,7 @@ private fun EmptyApps(platform: MonkPlatform, store: MonkStore, onAddApps: () ->
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 suggested.forEach { app ->
                     AssistChip(
-                        onClick = { store.upsertApp(BlockedApp(app.packageName, app.label)) },
+                        onClick = { store.addApp(app.packageName, app.label) },
                         label = { Text(app.label) },
                         leadingIcon = { AppIcon(app.packageName, 18.dp) },
                     )
@@ -426,13 +541,34 @@ private fun EmptyApps(platform: MonkPlatform, store: MonkStore, onAddApps: () ->
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (suggested.isNotEmpty()) {
                 Button(
-                    onClick = { suggested.forEach { store.upsertApp(BlockedApp(it.packageName, it.label)) } },
+                    onClick = { suggested.forEach { store.addApp(it.packageName, it.label) } },
                     modifier = Modifier.weight(1f),
                 ) { FitText(s.addSuggested) }
             }
             OutlinedButton(onClick = onAddApps, modifier = Modifier.weight(1f)) {
                 FitText(if (suggested.isNotEmpty()) s.chooseManually else s.addApps)
             }
+        }
+    }
+}
+
+@Composable
+private fun UninstalledRow(app: BlockedApp, onForget: () -> Unit) {
+    val s = strings
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(44.dp).clip(MaterialTheme.shapes.small).background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Outlined.PhoneIphone, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Spacer(Modifier.size(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(app.label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(app.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(4.dp))
+                Text(s.uninstalledHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TextButton(onClick = onForget) { Text(s.forget) }
         }
     }
 }
@@ -458,7 +594,7 @@ private fun AppRow(
                 AppIcon(app.packageName, 44.dp)
                 Spacer(Modifier.size(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(app.label, style = MaterialTheme.typography.titleMedium)
+                    Text(app.label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         ModeChip(app, config)

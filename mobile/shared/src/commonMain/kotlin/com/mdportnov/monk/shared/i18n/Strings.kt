@@ -338,6 +338,16 @@ class Strings(private val ru: Boolean) {
     val aboutAccessibilityHint get() = t("The accessibility service never reads screen content.", "Служба специальных возможностей не читает содержимое экрана.")
     val aboutSource get() = t("Open source", "Открытый код")
     val aboutSourceHint get() = t("Part of the monk project on GitHub.", "Часть проекта monk на GitHub.")
+
+    // Morrow — the other app from the same workshop; the page it links to has the Android build.
+    val morrowSection get() = t("Also from Punto Cero", "Ещё от Punto Cero")
+    val morrowName get() = "Morrow"
+    val morrowHint get() = t(
+        "Calendar, tasks and habits in one system. Read about it and download it for Android.",
+        "Календарь, задачи и привычки в одной системе. Почитать и скачать для Android.",
+    )
+    val morrowUrl get() = t("https://puntocero.space/en/morrow", "https://puntocero.space/ru/morrow")
+
     fun version(v: String) = t("Version $v", "Версия $v")
     val checkUpdates get() = t("Check for updates", "Проверить обновления")
     val updateChecking get() = t("Checking…", "Проверяю…")

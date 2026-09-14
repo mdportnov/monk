@@ -3,6 +3,10 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.7.5
+
+- A Morrow entry under "About": the other app from the same workshop, one tap to its page, where it is described and downloaded for Android.
+
 ## 1.7.4
 
 - The home list can be scrolled past the "Add apps" button: with a short list the last app stayed pinned under it, and there was never enough scroll left for the header to settle into the bar.

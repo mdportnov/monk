@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import com.mdportnov.monk.shared.ui.components.Pill
 import com.mdportnov.monk.shared.ui.components.PageHeaderSlot
 import com.mdportnov.monk.shared.ui.components.PageTitle
+import com.mdportnov.monk.shared.ui.components.MorrowMark
 import com.mdportnov.monk.shared.ui.components.PoweredBy
 import com.mdportnov.monk.shared.ui.home.MonkMark
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -380,6 +381,26 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
             }
         }
         platform.updater?.let { UpdateCard(it, compact = false) }
+
+        // The other app from the same workshop. The page it opens is where Morrow is described
+        // and where its Android build is downloaded; Monk itself knows nothing more about it.
+        SectionTitle(s.morrowSection)
+        SettingsGroup {
+            Surface(onClick = { platform.openUrl(s.morrowUrl) }, color = MaterialTheme.colorScheme.surfaceContainer) {
+                Row(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    MorrowMark(40.dp)
+                    Column(Modifier.weight(1f)) {
+                        Text(s.morrowName, style = MaterialTheme.typography.titleMedium)
+                        Text(s.morrowHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(Icons.Outlined.OpenInNew, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
         PoweredBy(onClick = { platform.openUrl(s.madeWithUrl) })
     }
 

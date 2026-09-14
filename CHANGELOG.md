@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The repository is now `mdportnov/monk`: it holds both the CLI and the
+  Android app, so a name ending in `-cli` described half of it. GitHub
+  redirects the old paths, and the install one-liners, the systemd units and
+  the self-updater all follow the new one. The crates.io package stays
+  `monk-cli` — a published crate name cannot be changed.
+
+### Fixed
+
+- `monk update` no longer reports an unexpected release tag: it asked GitHub
+  for the repository's latest release, which is an Android release whenever
+  the app shipped more recently than the CLI. It now takes the newest `v*`
+  tag and leaves `mobile-v*` to the app.
+
 ## [0.3.1] - 2026-09-01
 
 ### Changed

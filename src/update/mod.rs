@@ -117,19 +117,46 @@ fn curl(args: &[&str]) -> Result<Vec<u8>> {
 #[derive(Debug, Deserialize)]
 struct ReleaseJson {
     tag_name: String,
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    prerelease: bool,
 }
 
-/// Ask the GitHub API for the latest published release tag.
-pub fn fetch_latest() -> Result<UpdateStatus> {
-    let url = format!("https://api.github.com/repos/{REPO}/releases/latest");
-    let body = curl(&["-H", "Accept: application/vnd.github+json", &url])?;
-    let rel: ReleaseJson = serde_json::from_slice(&body)
-        .map_err(|e| Error::Other(format!("unexpected GitHub API response: {e}")))?;
-    let latest = rel.tag_name.trim_start_matches('v').to_string();
-    if parse_version(&latest).is_none() {
-        return Err(Error::Other(format!("unexpected release tag `{}`", rel.tag_name)));
+/// Tag prefix of the Android app's releases, which share this repository.
+const MOBILE_TAG_PREFIX: &str = "mobile-v";
+
+/// The newest CLI release among `tags`, as (version, tag). Tags that belong to the Android
+/// app or that are not semver are skipped: the repository publishes both.
+fn pick_latest<'a>(tags: impl IntoIterator<Item = &'a str>) -> Option<(String, String)> {
+    let mut best: Option<(String, String)> = None;
+    for tag in tags {
+        if tag.starts_with(MOBILE_TAG_PREFIX) {
+            continue;
+        }
+        let version = tag.trim_start_matches('v');
+        if parse_version(version).is_none() {
+            continue;
+        }
+        if best.as_ref().is_none_or(|(b, _)| is_newer(version, b)) {
+            best = Some((version.to_string(), tag.to_string()));
+        }
     }
-    Ok(UpdateStatus { newer: is_newer(&latest, CURRENT_VERSION), latest, tag: rel.tag_name })
+    best
+}
+
+/// Ask the GitHub API for the latest published CLI release tag.
+pub fn fetch_latest() -> Result<UpdateStatus> {
+    // Not `/releases/latest`: that is whatever the repository published last, and the Android
+    // app releases from here too, so a `mobile-v*` tag would answer for the CLI.
+    let url = format!("https://api.github.com/repos/{REPO}/releases?per_page=30");
+    let body = curl(&["-H", "Accept: application/vnd.github+json", &url])?;
+    let rels: Vec<ReleaseJson> = serde_json::from_slice(&body)
+        .map_err(|e| Error::Other(format!("unexpected GitHub API response: {e}")))?;
+    let published = rels.iter().filter(|r| !r.draft && !r.prerelease).map(|r| r.tag_name.as_str());
+    let (latest, tag) = pick_latest(published)
+        .ok_or_else(|| Error::Other("no published CLI release found".to_string()))?;
+    Ok(UpdateStatus { newer: is_newer(&latest, CURRENT_VERSION), latest, tag })
 }
 
 // ---------------------------------------------------------------------------
@@ -372,6 +399,20 @@ mod tests {
         assert!(is_newer("1.0.0-rc.2", "1.0.0-rc.1"));
         assert!(!is_newer("garbage", "0.0.1"));
         assert!(!is_newer("0.0.2", "garbage"));
+    }
+
+    #[test]
+    fn the_android_app_never_answers_for_the_cli() {
+        // The repository publishes both; a mobile release is usually the most recent one.
+        let tags = ["mobile-v1.7.2", "v0.3.1", "mobile-v1.7.0", "v0.3.0"];
+        assert_eq!(pick_latest(tags), Some(("0.3.1".to_string(), "v0.3.1".to_string())));
+        // Newest wins whatever the order, junk tags are skipped, and mobile-only means none.
+        assert_eq!(
+            pick_latest(["v0.2.0", "nightly", "v0.10.0"]),
+            Some(("0.10.0".to_string(), "v0.10.0".to_string()))
+        );
+        assert_eq!(pick_latest(["mobile-v1.7.2"]), None);
+        assert_eq!(pick_latest([]), None);
     }
 
     #[test]

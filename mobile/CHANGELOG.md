@@ -3,6 +3,12 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.7.4
+
+- The home list can be scrolled past the "Add apps" button: with a short list the last app stayed pinned under it, and there was never enough scroll left for the header to settle into the bar.
+- The top bar never goes blank: before protection is set up, scrolling used to leave an empty strip of glass where the wordmark had been, and the condensed status line went missing once its card had scrolled away.
+- The quote of the day drops the coloured rule beside it.
+
 ## 1.7.2
 
 - One truth for the protection state everywhere: the card, the compact bar, the shade tiles and the notification agree. Off by schedule says when it comes back, the switch turns Monk off without a countdown then, breaks are refused while the schedule has protection off, focus stays available.

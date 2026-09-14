@@ -47,6 +47,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Velocity
 import com.mdportnov.monk.shared.ui.HeaderAnchor
 import com.mdportnov.monk.shared.ui.LocalHeaderAnchor
@@ -137,6 +139,7 @@ fun MainScreen(
         val column = (maxWidth - railWidth).coerceAtMost(720.dp)
         val startX = railWidth + (maxWidth - railWidth - column) / 2 + 16.dp + 4.dp
         val startY = top + 12.dp + PageHeaderPad
+        val nominalTitleHeight = with(LocalDensity.current) { (MaterialTheme.typography.headlineMedium.fontSize.value * 1.25f).sp.toDp() }
         with(LocalDensity.current) {
             val x = startX.toPx()
             val y = startY.toPx()
@@ -160,8 +163,12 @@ fun MainScreen(
             val glyphHalf = 32.dp.toPx()
             val barBottom = (top + 56.dp).toPx()
             val lead = 24.dp.toPx()
+            // A title tab restored while scrolled never lays its slot out; give it the slot's
+            // nominal height so its progress is measured, not guessed.
+            val nominalSlot = (nominalTitleHeight + PageHeaderPad * 2).toPx()
             SideEffect {
                 anchors.values.forEach { it.startX = x; it.startY = y; it.tail = tail }
+                anchors.forEach { (t, a) -> if (t != Tab.Home && a.slotHeight == 0f) a.slotHeight = nominalSlot }
                 home.cardTop = cardTop
                 home.cardX = cardX; home.cardWidth = cardWidth; home.cardPad = cardPad; home.glyphHalf = glyphHalf
                 home.rowHeight = glyphHalf * 2; home.barBottom = barBottom; home.lead = lead

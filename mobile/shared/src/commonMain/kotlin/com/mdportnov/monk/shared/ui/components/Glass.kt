@@ -52,6 +52,7 @@ import com.mdportnov.monk.shared.ui.theme.MonkColors
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animate
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -147,21 +148,33 @@ private class GlassProgress {
     private var from = 0f
     /** 0 = still showing the value the previous page left, 1 = live. Reset synchronously on a switch. */
     var blend by mutableFloatStateOf(1f)
+    /** True only while a page-switch blend is running; otherwise the surface is the heading's live value. */
+    var animating by mutableStateOf(false)
+        private set
+    /** Bumped on every switch: keys the blend effect (a key flipping back within one frame still restarts it) and lets a late-ending blend leave a newer one alone. */
+    var generation by mutableIntStateOf(0)
+        private set
 
-    /** Live once the blend is over: exactly what the heading reads, from the same anchor. */
-    fun current(): Float = if (blend >= 1f) target() else lerp(from, target(), blend)
+    /** Exactly what the heading reads, from the same anchor — except during the switch blend. */
+    fun current(): Float {
+        val live = target().let { if (it.isNaN()) 0f else it }
+        return if (!animating || blend >= 1f) live else lerp(from, live, blend)
+    }
     /** The glass itself lags the heading a little: it forms as the content arrives, not before. */
     fun surface(): Float = smoothstep(0.15f, 1f, current())
 
-    /** Called on every composition of the bar; only a new page restarts the blend, and it does so before the next draw. */
+    /** Called on every composition of the bar; only a new page starts a blend, before the next draw. */
     fun update(newKey: Any, newTarget: () -> Float) {
         if (key != newKey) {
             from = Snapshot.withoutReadObservation { if (key == null) newTarget() else current() }
-            if (key != null) blend = 0f
+            if (key != null) { blend = 0f; animating = true; generation++ }
         }
         key = newKey
         target = newTarget
     }
+
+    /** Ends the blend started for [gen]; a blend cancelled by a newer switch leaves the newer one alone. */
+    fun finish(gen: Int) { if (gen == generation) animating = false }
 }
 
 internal fun smoothstep(edge0: Float, edge1: Float, x: Float): Float {
@@ -188,9 +201,14 @@ fun GlassTopBar(
     val heading = Heading(bar.title, bar.level, bar.navigationIcon, bar.actions, bar.heading, bar.anchor, bar.visible)
     val glass = remember { GlassProgress() }
     glass.update(heading.key, heading::progress)
-    LaunchedEffect(heading.key) {
-        if (glass.blend >= 1f) return@LaunchedEffect
-        animate(0f, 1f, animationSpec = Motion.standard()) { v, _ -> glass.blend = v }
+    LaunchedEffect(glass.generation) {
+        if (!glass.animating) return@LaunchedEffect
+        val gen = glass.generation
+        try {
+            animate(0f, 1f, animationSpec = Motion.standard()) { v, _ -> glass.blend = v }
+        } finally {
+            glass.finish(gen)
+        }
     }
     // Only a formed bar shields the rows beneath; at rest the header area must still start a scroll.
     val shields by remember(glass) { derivedStateOf { glass.current() >= 0.5f } }

@@ -3,6 +3,10 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.7.1
+
+- Fixed: after returning to the app the glass bar could stay drawn, empty, over a fully open home screen.
+
 ## 1.7.0
 
 - Per-app time rules: block or free an app on chosen days and hours, several rules per app, windows across midnight. Reset in one tap, or lock the app so only deleting it changes anything.

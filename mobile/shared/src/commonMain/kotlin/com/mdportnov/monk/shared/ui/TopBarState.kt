@@ -50,12 +50,16 @@ class HeaderAnchor(val scrollPx: () -> Float) {
 
     /** 0 = large header at rest, 1 = compact bar. */
     fun progress(): Float {
+        // Only live scroll state and measured geometry, never a latched value: with the geometry
+        // still unknown the header is open (p = 0) and corrects itself the frame it is measured.
         val row = rowTop()
-        if (row != null) return ((barBottom + lead - row) / (rowHeight + lead)).coerceIn(0f, 1f)
+        val travel = rowHeight + lead
+        if (row != null && travel > 0f && row.isFinite()) return ((barBottom + lead - row) / travel).coerceIn(0f, 1f)
+        if (row != null && !row.isFinite()) return if (row < 0f) 1f else 0f
         val r = range
+        if (r <= 0f) return 0f
         val at = scrollPx()
-        // Slot not laid out yet (a tab restored under a pushed page): a scrolled page is condensed.
-        if (r <= 0f) return if (at > 0f) 1f else 0f
+        if (at <= 0f) return 0f
         return (at / r).coerceIn(0f, 1f)
     }
 

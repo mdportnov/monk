@@ -78,8 +78,11 @@ fun MainScreen(
     val anchors = remember {
         Tab.entries.associateWith { t ->
             val sc = scrolls.getValue(t)
+            // Past the first item the offset says nothing about the distance home: infinity, not
+            // a huge number, so settling reads it as "scroll to the top" and never animates a
+            // scroll of 3.4e38 px, which leaves the list measured off the map for a frame.
             if (t == Tab.Home) HeaderAnchor {
-                if (sc.list.firstVisibleItemIndex > 0) Float.MAX_VALUE else sc.list.firstVisibleItemScrollOffset.toFloat()
+                if (sc.list.firstVisibleItemIndex > 0) Float.POSITIVE_INFINITY else sc.list.firstVisibleItemScrollOffset.toFloat()
             } else HeaderAnchor { sc.column.value.toFloat() }
         }
     }
@@ -109,7 +112,7 @@ fun MainScreen(
                 val delta = anchor.settleDelta() ?: return Velocity.Zero
                 when {
                     tab != Tab.Home -> scroll.column.animateScrollBy(delta, Motion.standard())
-                    delta == Float.NEGATIVE_INFINITY -> scroll.list.animateScrollToItem(0)
+                    !delta.isFinite() -> scroll.list.animateScrollToItem(0)
                     else -> scroll.list.animateScrollBy(delta, Motion.standard())
                 }
                 return Velocity.Zero

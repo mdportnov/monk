@@ -8,7 +8,6 @@ import android.os.PowerManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.graphics.drawable.Icon
 import android.net.Uri
@@ -52,7 +51,6 @@ class AndroidPlatform(private val app: Context, override val updater: Updater) :
 
     private fun readPermissions() = PermissionStatus(
         accessibilityEnabled = isAccessibilityServiceEnabled(app),
-        mayNeedRestrictedSettingsUnlock = isRestrictedSideload(),
         notificationsGranted = MonkNotifications.granted(app),
         tilesAdded = TileRegistry.added.value.size,
         tilesTotal = 2,
@@ -172,18 +170,6 @@ class AndroidPlatform(private val app: Context, override val updater: Updater) :
 
     private fun launch(intent: Intent) {
         runCatching { app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-    }
-
-    /**
-     * Android 13+ blocks the accessibility toggle for APKs installed from a downloaded file
-     * (browser, file manager, F-Droid-style installers). `adb install` and store installs are not
-     * affected. The user must tap the greyed toggle once, then App info → ⋮ → Allow restricted settings.
-     */
-    private fun isRestrictedSideload(): Boolean {
-        if (Build.VERSION.SDK_INT < 33) return false
-        val source = runCatching { app.packageManager.getInstallSourceInfo(app.packageName) }.getOrNull() ?: return false
-        return source.packageSource == PackageInstaller.PACKAGE_SOURCE_DOWNLOADED_FILE ||
-            source.packageSource == PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE
     }
 
     companion object {

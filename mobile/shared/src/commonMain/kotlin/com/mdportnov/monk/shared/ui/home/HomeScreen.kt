@@ -192,7 +192,7 @@ fun HomeScreen(
                     if (apps.isNotEmpty()) item(key = "today") { Box(itemMotion()) { TodayCard(config, stats, now, today, onOpenStats) } }
                     if (stats.days.isNotEmpty() || screenTime?.available == true) item(key = "week") { Box(itemMotion()) { WeekCard(stats, screenTime, onOpenStats) } }
                 } else {
-                    item(key = "setup") { Box(itemMotion()) { SetupCard(permissions, platform) } }
+                    item(key = "setup") { Box(itemMotion()) { SetupCard(platform) } }
                 }
             }
             if (!config.helpDismissed && apps.isEmpty()) {
@@ -395,7 +395,7 @@ private fun Sparkline(away: List<Int>, opened: List<Int>) {
 
 /** Replaces the status card while the service is off: one job, one button, the exact path. */
 @Composable
-private fun SetupCard(permissions: PermissionStatus, platform: MonkPlatform) {
+private fun SetupCard(platform: MonkPlatform) {
     val s = strings
     MonkCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -411,10 +411,11 @@ private fun SetupCard(permissions: PermissionStatus, platform: MonkPlatform) {
         Text(s.setupAccessibilityHint, style = MaterialTheme.typography.bodyMedium)
         Steps(s.setupSteps)
         Button(onClick = platform::openAccessibilitySettings, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(s.openAccessibilitySettings) }
-        if (permissions.mayNeedRestrictedSettingsUnlock) {
-            Hint(s.setupRestricted)
-            TextButton(onClick = platform::openAppInfo) { Text(s.appInfo) }
-        }
+        // Said whatever the install source claims: `adb install` and an APK handed over by a
+        // file manager both report a source that looks unrestricted, and the person is then left
+        // in front of a dead switch with "App was denied access" and no explanation anywhere.
+        Hint(s.setupRestricted)
+        TextButton(onClick = platform::openAppInfo) { Text(s.appInfo) }
     }
 }
 

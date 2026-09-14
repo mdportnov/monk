@@ -226,7 +226,9 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
                             trailing = if (strict) null else ({ Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }),
                         )
                     }
-                }
+                } }
+                // Outside the loop over rules: with no rule yet there is nothing to iterate, and
+                // the one way to make the first one would have been missing.
                 if (!strict) {
                     SettingsDivider()
                     SettingBlock {
@@ -241,7 +243,7 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
                         }
                     }
                 }
-            } }
+            }
 
             SectionTitle(s.lockTitle)
             SettingsGroup {

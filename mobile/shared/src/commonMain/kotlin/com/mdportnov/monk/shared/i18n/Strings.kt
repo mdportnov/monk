@@ -164,8 +164,8 @@ class Strings(private val ru: Boolean) {
     val selectSuggested get() = t("Select all", "Выбрать все")
     val chooseManually get() = t("Choose from list", "Выбрать из списка")
     val setupRestricted get() = t(
-        "Android 13+: the switch is greyed out for apps installed outside the store. Tap it once anyway, then open App info → ⋮ → Allow restricted settings, and come back.",
-        "Android 13+: у приложений не из магазина переключатель серый. Всё равно нажмите его один раз, затем откройте «О приложении» → ⋮ → «Разрешить ограниченные настройки» и вернитесь.",
+        "Switch greyed out, or \"App was denied access\"? Android 13+ holds it back for apps installed from a file. Tap it once anyway, then open App info → ⋮ → Allow restricted settings, and come back.",
+        "Переключатель серый или пишет «App was denied access»? Android 13+ держит его у приложений, установленных из файла. Всё равно нажмите его один раз, затем откройте «О приложении» → ⋮ → «Разрешить ограниченные настройки» и вернитесь.",
     )
     val enable get() = t("Enable", "Включить")
     val appInfo get() = t("App info", "О приложении")

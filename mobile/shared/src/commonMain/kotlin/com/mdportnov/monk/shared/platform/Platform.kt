@@ -10,8 +10,6 @@ import kotlinx.coroutines.flow.StateFlow
 data class PermissionStatus(
     /** The accessibility service that watches foreground apps. Required. */
     val accessibilityEnabled: Boolean,
-    /** APKs installed from a downloaded file on Android 13+ need "Allow restricted settings" first. */
-    val mayNeedRestrictedSettingsUnlock: Boolean,
     /** POST_NOTIFICATIONS on Android 13+; true where notifications need no runtime grant. */
     val notificationsGranted: Boolean = true,
     /** Quick Settings tiles: how many of the app's tiles are in the shade, and whether the OS can add them for us (Android 13+). */

@@ -12,10 +12,11 @@ import android.view.inputmethod.InputMethodManager
 import com.mdportnov.monk.shared.model.InstalledApp
 import com.mdportnov.monk.shared.platform.MonkPlatform
 import com.mdportnov.monk.shared.platform.PermissionStatus
+import com.mdportnov.monk.shared.platform.Updater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class AndroidPlatform(private val app: Context) : MonkPlatform {
+class AndroidPlatform(private val app: Context, override val updater: Updater) : MonkPlatform {
     override val supportsBlocking = true
 
     override suspend fun installedApps(): List<InstalledApp> = withContext(Dispatchers.IO) {

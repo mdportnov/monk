@@ -15,4 +15,10 @@ class MainActivity : ComponentActivity() {
             MonkApp(onBackHandler = { enabled, onBack -> BackHandler(enabled, onBack) })
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        // Throttled inside (6 h); foreground is the one moment a check reliably runs.
+        MonkApplication.updater(this)?.check(force = false)
+    }
 }

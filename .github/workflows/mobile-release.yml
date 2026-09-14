@@ -1,0 +1,80 @@
+# Android release: push a `mobile-vX.Y.Z` tag (the bare `vX.Y.Z` tags belong to the CLI).
+# The app's self-updater reads these releases: it needs the `.apk` and the `.apk.sha256` next to
+# it, and the APK must be signed with the one release keystore (MONK_KEYSTORE_* secrets).
+name: mobile-release
+
+on:
+  push:
+    tags:
+      - "mobile-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version X.Y.Z (a mobile-vX.Y.Z tag is created)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: version
+        id: v
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ github.event.inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#mobile-v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: keystore
+        shell: bash
+        env:
+          MONK_KEYSTORE_B64: ${{ secrets.MONK_KEYSTORE_B64 }}
+        run: |
+          [ -n "$MONK_KEYSTORE_B64" ] || { echo "::error::MONK_KEYSTORE_B64 secret missing"; exit 1; }
+          echo "$MONK_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/monk-release.jks"
+
+      - name: build
+        shell: bash
+        env:
+          MONK_KEYSTORE_FILE: ${{ runner.temp }}/monk-release.jks
+          MONK_KEYSTORE_PASSWORD: ${{ secrets.MONK_KEYSTORE_PASSWORD }}
+          MONK_KEY_ALIAS: ${{ secrets.MONK_KEY_ALIAS }}
+          MONK_KEY_PASSWORD: ${{ secrets.MONK_KEY_PASSWORD }}
+        run: |
+          ./gradlew :shared:testAndroidHostTest :androidApp:assembleRelease \
+            -PmonkVersion="${{ steps.v.outputs.version }}" --no-daemon
+
+      - name: package
+        shell: bash
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          mkdir -p dist
+          cp androidApp/build/outputs/apk/release/androidApp-release.apk "dist/monk-android-$v.apk"
+          (cd dist && sha256sum "monk-android-$v.apk" > "monk-android-$v.apk.sha256")
+          cat "dist/monk-android-$v.apk.sha256"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mobile-v${{ steps.v.outputs.version }}
+          name: Monk Android ${{ steps.v.outputs.version }}
+          generate_release_notes: true
+          files: |
+            mobile/dist/monk-android-${{ steps.v.outputs.version }}.apk
+            mobile/dist/monk-android-${{ steps.v.outputs.version }}.apk.sha256

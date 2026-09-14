@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mdportnov.monk.shared.MonkRuntime
 import com.mdportnov.monk.shared.data.MonkStore
 import com.mdportnov.monk.shared.data.formatClock
 import com.mdportnov.monk.shared.data.nextMidnightMillis
@@ -40,6 +41,7 @@ import com.mdportnov.monk.shared.ui.components.Hint
 import com.mdportnov.monk.shared.ui.components.LabeledRow
 import com.mdportnov.monk.shared.ui.components.MonkCard
 import com.mdportnov.monk.shared.ui.components.SectionTitle
+import com.mdportnov.monk.shared.ui.components.UpdateCard
 import kotlin.math.roundToInt
 
 @Composable
@@ -156,6 +158,7 @@ fun SettingsScreen(store: MonkStore, modifier: Modifier = Modifier) {
         }
 
         SectionTitle(s.about)
+        MonkRuntime.platform.updater?.let { UpdateCard(it, compact = false) }
         MonkCard {
             Text(s.aboutText, style = MaterialTheme.typography.bodyMedium)
             Hint(s.language)

@@ -20,7 +20,10 @@
         </intent>
     </queries>
 
-    <!-- No INTERNET permission on purpose: nothing leaves the device. -->
+    <!-- Network is used for exactly one thing: GitHub Releases, to check for and download updates. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Self-update hands the downloaded APK to the system PackageInstaller. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- allowBackup=false: the watch list would otherwise ride along in Google Drive backups,
          which contradicts the "everything stays on the device" promise in the About card. -->
@@ -55,6 +58,11 @@
             android:showOnLockScreen="false"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.Monk.Intercept" />
+
+        <!-- Self-update: PackageInstaller session status callbacks. -->
+        <receiver
+            android:name=".update.InstallResultReceiver"
+            android:exported="false" />
 
         <service
             android:name=".MonkAccessibilityService"

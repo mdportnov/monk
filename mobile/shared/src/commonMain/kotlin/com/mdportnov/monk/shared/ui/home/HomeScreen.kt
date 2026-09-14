@@ -65,6 +65,7 @@ import com.mdportnov.monk.shared.ui.components.Hint
 import com.mdportnov.monk.shared.ui.components.LabeledRow
 import com.mdportnov.monk.shared.ui.components.MonkCard
 import com.mdportnov.monk.shared.ui.components.SectionTitle
+import com.mdportnov.monk.shared.ui.components.UpdateCard
 import com.mdportnov.monk.shared.ui.theme.MonkColors
 import kotlinx.coroutines.delay
 
@@ -105,6 +106,7 @@ fun HomeScreen(
             if (!platform.supportsBlocking) {
                 item { UnsupportedCard() }
             } else {
+                platform.updater?.let { u -> item { UpdateCard(u, compact = true) } }
                 item { StatusCard(store, config, permissions, now) }
                 if (!permissions.accessibilityEnabled) {
                     item { SetupCard(permissions, platform) }

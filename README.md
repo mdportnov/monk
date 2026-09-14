@@ -33,6 +33,13 @@
 
 ---
 
+## Android app
+
+`mobile/` holds **Monk for Android** — a OneSec-style pause between you and the apps you open on
+autopilot, built with Kotlin Multiplatform and Compose. Grab the APK from the latest
+`mobile-v*` release; it updates itself from GitHub Releases afterwards. See
+[`mobile/README.md`](./mobile/README.md).
+
 ## Highlights
 
 - **Real app blocking** — scans installed applications on macOS, Linux (native, Flatpak and Snap) and Windows, so you pick from a curated list instead of guessing process names.

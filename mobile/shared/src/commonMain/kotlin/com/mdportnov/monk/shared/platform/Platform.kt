@@ -19,6 +19,7 @@ interface MonkPlatform {
     fun permissions(): PermissionStatus
     fun openAccessibilitySettings()
     fun openAppInfo()
+    val updater: Updater?
 }
 
 @Composable

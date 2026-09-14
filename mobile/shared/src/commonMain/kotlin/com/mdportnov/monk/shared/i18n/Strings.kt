@@ -114,9 +114,24 @@ class Strings(private val ru: Boolean) {
     val resetStatsConfirm get() = t("Delete all statistics? Apps and settings stay.", "Удалить всю статистику? Приложения и настройки останутся.")
     val delete get() = t("Delete", "Удалить")
     val about get() = t("About", "О приложении")
+    fun version(v: String) = t("Version $v", "Версия $v")
+    val checkUpdates get() = t("Check for updates", "Проверить обновления")
+    val updateChecking get() = t("Checking…", "Проверяю…")
+    val updateUpToDate get() = t("You are on the latest version.", "У вас последняя версия.")
+    fun updateAvailable(v: String) = t("Monk $v is available", "Доступен Monk $v")
+    fun updateSize(mb: String) = t("$mb MB, from GitHub Releases", "$mb МБ, из GitHub Releases")
+    val updateInstall get() = t("Update", "Обновить")
+    val updateRetry get() = t("Retry", "Повторить")
+    fun updateDownloading(pct: Int) = t("Downloading… $pct%", "Загружаю… $pct%")
+    val updateVerifying get() = t("Verifying checksum…", "Проверяю контрольную сумму…")
+    val updateInstalling get() = t("Installing…", "Устанавливаю…")
+    val updateNeedsPermission get() = t("Allow Monk to install updates, then come back.", "Разрешите Monk устанавливать обновления и вернитесь.")
+    val updateAllow get() = t("Allow", "Разрешить")
+    fun updateFailed(reason: String) = t("Update failed: $reason", "Обновление не удалось: $reason")
+    val releaseNotes get() = t("What's new", "Что нового")
     val aboutText get() = t(
-        "Monk puts a moment of friction between you and the apps you open on autopilot. No internet permission, no backup: everything stays on the device.",
-        "Monk ставит секунду трения между вами и приложениями, которые открываются на автопилоте. Без доступа в интернет и без бэкапа: всё остаётся на телефоне.",
+        "Monk puts a moment of friction between you and the apps you open on autopilot. Everything stays on the device; the network is used only to check GitHub for updates.",
+        "Monk ставит секунду трения между вами и приложениями, которые открываются на автопилоте. Всё остаётся на телефоне; сеть нужна только для проверки обновлений на GitHub.",
     )
     val language get() = t("Language follows the system", "Язык берётся из системы")
     val dayShort get() = if (ru) listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс") else listOf("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su")

@@ -2,7 +2,16 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.kotlinSerialization)
 }
+
+// Version comes from the release tag (mobile-vX.Y.Z → -PmonkVersion=X.Y.Z in CI); local builds
+// are 0.0.0-dev so a sideloaded dev build always sees the published release as newer.
+val monkVersion: String = providers.gradleProperty("monkVersion").orNull
+    ?: System.getenv("MONK_VERSION")
+    ?: "0.0.0-dev"
+val monkVersionCode: Int = monkVersion.substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 }
+    .let { p -> (p.getOrElse(0) { 0 } * 1_000_000 + p.getOrElse(1) { 0 } * 1_000 + p.getOrElse(2) { 0 }).coerceAtLeast(1) }
 
 android {
     namespace = "com.mdportnov.monk"
@@ -12,8 +21,8 @@ android {
         applicationId = "com.mdportnov.monk"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = monkVersionCode
+        versionName = monkVersion
     }
 
     buildFeatures {
@@ -65,4 +74,5 @@ dependencies {
     implementation(compose.ui)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.serialization.json)
 }

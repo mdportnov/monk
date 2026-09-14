@@ -51,6 +51,31 @@ androidApp/    Application, MainActivity, InterceptActivity, MonkAccessibilitySe
 iosApp/        XcodeGen spec + SwiftUI shell (needs Xcode + `xcodegen`)
 ```
 
+## Install and update
+
+Download `monk-android-X.Y.Z.apk` from the latest `mobile-vX.Y.Z` release on GitHub, install it,
+enable the accessibility service from the setup card. From then on Monk checks GitHub Releases
+itself (at most every 6 hours, on foreground) and offers the update in the app: the APK is
+streamed to private cache, its SHA-256 compared with the published one, and handed to the system
+installer. Android accepts the update only if it is signed with the same key, so releases are
+signed with one keystore that must never change (`~/.monk/release-signing` locally,
+`MONK_KEYSTORE_*` secrets in CI).
+
+## Release
+
+```sh
+git tag mobile-v1.2.3 && git push origin mobile-v1.2.3
+```
+
+`.github/workflows/mobile-release.yml` builds the signed APK, writes the checksum and publishes
+both to the release `mobile-v1.2.3`. Versions come from the tag; local builds are `0.0.0-dev`.
+A local release-signed build:
+
+```sh
+set -a; source ~/.monk/release-signing/credentials.env; set +a
+./gradlew :androidApp:assembleRelease -PmonkVersion=1.2.3
+```
+
 ## Build
 
 ```sh

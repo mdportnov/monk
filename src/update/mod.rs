@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::{paths, Error, Result};
 
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
-const REPO: &str = "mdportnov/monk-cli";
+const REPO: &str = "mdportnov/monk";
 const CACHE_TTL_SECS: u64 = 24 * 60 * 60;
 const CURL_TIMEOUT_SECS: u32 = 15;
 

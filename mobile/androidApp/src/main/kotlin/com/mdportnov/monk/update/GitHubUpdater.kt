@@ -26,7 +26,7 @@ import java.net.URL
 import java.security.MessageDigest
 
 /**
- * Self-update from GitHub Releases of `mdportnov/monk-cli`.
+ * Self-update from GitHub Releases of `mdportnov/monk`.
  *
  * Only releases tagged `mobile-vX.Y.Z` count (the `vX.Y.Z` tags belong to the Rust CLI). Each
  * one carries `monk-android-X.Y.Z.apk` plus a `.sha256` next to it; the APK is streamed into
@@ -140,7 +140,9 @@ class GitHubUpdater(private val context: Context) : Updater {
 
     private fun download(release: Release, onProgress: (Float) -> Unit): File {
         // Only our own repository's release assets; the download redirects to GitHub's object store.
-        if (!release.apkUrl.startsWith("https://github.com/mdportnov/monk-cli/releases/download/")) error("untrusted url")
+        // The repository was renamed monk-cli → monk, and GitHub keeps serving the old path, so an
+        // asset url minted before the rename is ours too.
+        if (RELEASE_PREFIXES.none { release.apkUrl.startsWith(it) }) error("untrusted url")
         val expected = release.shaUrl?.let { get(it).trim().split(Regex("\\s+")).firstOrNull()?.lowercase() }
             ?: error("no checksum published")
         val dir = File(context.cacheDir, "updates").apply { mkdirs() }
@@ -233,7 +235,13 @@ class GitHubUpdater(private val context: Context) : Updater {
 
     companion object {
         private const val TAG = "MonkUpdate"
-        private const val API = "https://api.github.com/repos/mdportnov/monk-cli"
+        private const val API = "https://api.github.com/repos/mdportnov/monk"
+
+        /** Trusted asset hosts: the repository today and the name it carried before the rename. */
+        private val RELEASE_PREFIXES = listOf(
+            "https://github.com/mdportnov/monk/releases/download/",
+            "https://github.com/mdportnov/monk-cli/releases/download/",
+        )
         private const val TAG_PREFIX = "mobile-v"
         private const val KEY_LAST_CHECK = "last_check"
         private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L

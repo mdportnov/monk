@@ -12,10 +12,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mdportnov/monk-cli/actions/workflows/ci.yml"><img src="https://github.com/mdportnov/monk-cli/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/mdportnov/monk-cli/actions/workflows/mobile-ci.yml"><img src="https://github.com/mdportnov/monk-cli/actions/workflows/mobile-ci.yml/badge.svg" alt="mobile CI" /></a>
-  <a href="https://github.com/mdportnov/monk-cli/releases"><img src="https://img.shields.io/github/v/release/mdportnov/monk-cli?filter=v*&label=cli" alt="Релиз CLI" /></a>
-  <a href="https://github.com/mdportnov/monk-cli/releases?q=mobile-v"><img src="https://img.shields.io/github/v/release/mdportnov/monk-cli?filter=mobile-v*&label=android" alt="Релиз Android" /></a>
+  <a href="https://github.com/mdportnov/monk/actions/workflows/ci.yml"><img src="https://github.com/mdportnov/monk/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/mdportnov/monk/actions/workflows/mobile-ci.yml"><img src="https://github.com/mdportnov/monk/actions/workflows/mobile-ci.yml/badge.svg" alt="mobile CI" /></a>
+  <a href="https://github.com/mdportnov/monk/releases"><img src="https://img.shields.io/github/v/release/mdportnov/monk?filter=v*&label=cli" alt="Релиз CLI" /></a>
+  <a href="https://github.com/mdportnov/monk/releases?q=mobile-v"><img src="https://img.shields.io/github/v/release/mdportnov/monk?filter=mobile-v*&label=android" alt="Релиз Android" /></a>
   <img src="https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue.svg" alt="Лицензия: MIT OR Apache-2.0" />
 </p>
 
@@ -37,7 +37,7 @@
 | **Что это** | Один бинарник и демон: блокирует сайты и приложения на время сессии, hard mode нельзя прервать | Экран паузы в духе OneSec перед Instagram, YouTube, TikTok и всем, что открываешь не думая |
 | **Где работает** | macOS · Linux · Windows | Android 10+ |
 | **На чём** | Rust, tokio, ratatui, SQLite | Kotlin Multiplatform, Compose Material 3, служба специальных возможностей |
-| **Взять** | [Установка](#установка) | [APK из последнего релиза `mobile-v*`](https://github.com/mdportnov/monk-cli/releases) · [подробнее](#приложение-для-android) |
+| **Взять** | [Установка](#установка) | [APK из последнего релиза `mobile-v*`](https://github.com/mdportnov/monk/releases) · [подробнее](#приложение-для-android) |
 | **Документация** | [ниже](#cli-для-десктопа) | [`mobile/README.md`](./mobile/README.md) (EN) |
 
 Между собой они пока не связаны: одна идея, одно имя, отдельные настройки.
@@ -88,12 +88,12 @@ monk запускает небольшой постоянный демон — �
 
 ```sh
 # Linux / macOS  → ставит в ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/mdportnov/monk-cli/master/assets/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mdportnov/monk/master/assets/install.sh | bash
 ```
 
 ```powershell
 # Windows (PowerShell 5+)  → ставит в %LOCALAPPDATA%\monk\bin
-irm https://raw.githubusercontent.com/mdportnov/monk-cli/master/assets/install.ps1 | iex
+irm https://raw.githubusercontent.com/mdportnov/monk/master/assets/install.ps1 | iex
 ```
 
 #### Из исходников
@@ -101,8 +101,8 @@ irm https://raw.githubusercontent.com/mdportnov/monk-cli/master/assets/install.p
 Нужен Rust toolchain (1.82+) — поставь через [rustup](https://rustup.rs). Одинаково работает на Linux, macOS и Windows.
 
 ```sh
-git clone https://github.com/mdportnov/monk-cli
-cd monk-cli
+git clone https://github.com/mdportnov/monk
+cd monk
 
 # Вариант A — собрать release-бинарник и положить в PATH (рекомендуется)
 cargo install --path .     # → ~/.cargo/bin/monk  (%USERPROFILE%\.cargo\bin\monk.exe на Windows)
@@ -127,13 +127,13 @@ C-линковщик, нужный сборке Rust — [Xcode Command Line Too
 
 ```sh
 # Linux / macOS
-git clone https://github.com/mdportnov/monk-cli && cd monk-cli
+git clone https://github.com/mdportnov/monk && cd monk
 ./scripts/setup.sh
 ```
 
 ```powershell
 # Windows (PowerShell 5+) — открой терминал от администратора для привилегированного шага
-git clone https://github.com/mdportnov/monk-cli; cd monk-cli
+git clone https://github.com/mdportnov/monk; cd monk
 powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
 ```
 
@@ -286,7 +286,7 @@ Hard mode — главная фишка. После запуска жёстко�
 
 ### Установка
 
-Скачай `monk-android-X.Y.Z.apk` из последнего [релиза `mobile-vX.Y.Z`](https://github.com/mdportnov/monk-cli/releases),
+Скачай `monk-android-X.Y.Z.apk` из последнего [релиза `mobile-vX.Y.Z`](https://github.com/mdportnov/monk/releases),
 установи и включи службу специальных возможностей с карточки настройки. На Android 13+ для
 APK не из магазина один раз нужно *О приложении → ⋮ → Разрешить ограниченные настройки*;
 приложение проведёт по шагам. Обновления предлагаются внутри и проверяются по SHA-256 и ключу подписи.

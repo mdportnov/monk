@@ -12,10 +12,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mdportnov/monk-cli/actions/workflows/ci.yml"><img src="https://github.com/mdportnov/monk-cli/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/mdportnov/monk-cli/actions/workflows/mobile-ci.yml"><img src="https://github.com/mdportnov/monk-cli/actions/workflows/mobile-ci.yml/badge.svg" alt="mobile CI" /></a>
-  <a href="https://github.com/mdportnov/monk-cli/releases"><img src="https://img.shields.io/github/v/release/mdportnov/monk-cli?filter=v*&label=cli" alt="CLI release" /></a>
-  <a href="https://github.com/mdportnov/monk-cli/releases?q=mobile-v"><img src="https://img.shields.io/github/v/release/mdportnov/monk-cli?filter=mobile-v*&label=android" alt="Android release" /></a>
+  <a href="https://github.com/mdportnov/monk/actions/workflows/ci.yml"><img src="https://github.com/mdportnov/monk/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/mdportnov/monk/actions/workflows/mobile-ci.yml"><img src="https://github.com/mdportnov/monk/actions/workflows/mobile-ci.yml/badge.svg" alt="mobile CI" /></a>
+  <a href="https://github.com/mdportnov/monk/releases"><img src="https://img.shields.io/github/v/release/mdportnov/monk?filter=v*&label=cli" alt="CLI release" /></a>
+  <a href="https://github.com/mdportnov/monk/releases?q=mobile-v"><img src="https://img.shields.io/github/v/release/mdportnov/monk?filter=mobile-v*&label=android" alt="Android release" /></a>
   <img src="https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue.svg" alt="License: MIT OR Apache-2.0" />
 </p>
 
@@ -37,7 +37,7 @@
 | **What it is** | One binary, one daemon: blocks sites and apps for a session, hard mode you cannot quit | A OneSec-style pause screen before Instagram, YouTube, TikTok and whatever else you open without thinking |
 | **Runs on** | macOS · Linux · Windows | Android 10+ |
 | **Built with** | Rust, tokio, ratatui, SQLite | Kotlin Multiplatform, Compose Material 3, an accessibility service |
-| **Get it** | [Install](#installation) | [APK from the latest `mobile-v*` release](https://github.com/mdportnov/monk-cli/releases) · [details](#android-app) |
+| **Get it** | [Install](#installation) | [APK from the latest `mobile-v*` release](https://github.com/mdportnov/monk/releases) · [details](#android-app) |
 | **Docs** | [below](#desktop-cli) | [`mobile/README.md`](./mobile/README.md) |
 
 The two do not talk to each other yet: same idea, same name, separate configs.
@@ -89,12 +89,12 @@ your `PATH`. Then run `monk setup`.
 
 ```sh
 # Linux / macOS  → installs to ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/mdportnov/monk-cli/master/assets/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mdportnov/monk/master/assets/install.sh | bash
 ```
 
 ```powershell
 # Windows (PowerShell 5+)  → installs to %LOCALAPPDATA%\monk\bin
-irm https://raw.githubusercontent.com/mdportnov/monk-cli/master/assets/install.ps1 | iex
+irm https://raw.githubusercontent.com/mdportnov/monk/master/assets/install.ps1 | iex
 ```
 
 #### From source
@@ -102,8 +102,8 @@ irm https://raw.githubusercontent.com/mdportnov/monk-cli/master/assets/install.p
 Needs the Rust toolchain (1.82+) — install via [rustup](https://rustup.rs). Works the same on Linux, macOS, and Windows.
 
 ```sh
-git clone https://github.com/mdportnov/monk-cli
-cd monk-cli
+git clone https://github.com/mdportnov/monk
+cd monk
 
 # Option A — build the release binary and put it on your PATH (recommended)
 cargo install --path .     # → ~/.cargo/bin/monk  (%USERPROFILE%\.cargo\bin\monk.exe on Windows)
@@ -129,13 +129,13 @@ script if it is missing.
 
 ```sh
 # Linux / macOS
-git clone https://github.com/mdportnov/monk-cli && cd monk-cli
+git clone https://github.com/mdportnov/monk && cd monk
 ./scripts/setup.sh
 ```
 
 ```powershell
 # Windows (PowerShell 5+) — open the terminal as Administrator for the privileged step
-git clone https://github.com/mdportnov/monk-cli; cd monk-cli
+git clone https://github.com/mdportnov/monk; cd monk
 powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
 ```
 
@@ -306,7 +306,7 @@ sees *which* app came to the front.
 
 ### Install
 
-Download `monk-android-X.Y.Z.apk` from the latest [`mobile-vX.Y.Z` release](https://github.com/mdportnov/monk-cli/releases),
+Download `monk-android-X.Y.Z.apk` from the latest [`mobile-vX.Y.Z` release](https://github.com/mdportnov/monk/releases),
 install it, and turn on the accessibility service from the setup card. On Android 13+ a
 sideloaded APK needs *App info → ⋮ → Allow restricted settings* once; the app walks you through it.
 Updates are offered inside the app and verified by SHA-256 and the signing key.

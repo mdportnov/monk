@@ -27,7 +27,7 @@ function Ask($msg) {
 # ----- locate repo root ------------------------------------------------------
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path (Join-Path $RepoRoot 'Cargo.toml'))) {
-    Fail "run this from a clone of monk-cli (Cargo.toml not found)"
+    Fail "run this from a clone of monk (Cargo.toml not found)"
 }
 Set-Location $RepoRoot
 

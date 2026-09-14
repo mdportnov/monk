@@ -351,7 +351,7 @@ daemon.
   (1.82) check, and quieted an unmaintained-advisory notice for the transitive,
   build-time `proc-macro-error2` dependency. All CI jobs are green.
 
-[Unreleased]: https://github.com/mdportnov/monk-cli/compare/v0.3.1...HEAD
-[0.3.1]: https://github.com/mdportnov/monk-cli/releases/tag/v0.3.1
-[0.3.0]: https://github.com/mdportnov/monk-cli/releases/tag/v0.3.0
-[0.2.0]: https://github.com/mdportnov/monk-cli/releases/tag/v0.2.0
+[Unreleased]: https://github.com/mdportnov/monk/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/mdportnov/monk/releases/tag/v0.3.1
+[0.3.0]: https://github.com/mdportnov/monk/releases/tag/v0.3.0
+[0.2.0]: https://github.com/mdportnov/monk/releases/tag/v0.2.0

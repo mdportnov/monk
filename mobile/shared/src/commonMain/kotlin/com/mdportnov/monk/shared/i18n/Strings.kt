@@ -330,14 +330,14 @@ class Strings(private val ru: Boolean) {
     val delete get() = t("Delete", "Удалить")
     val about get() = t("About", "О приложении")
     val madeWithUrl get() = "https://mikeportnov.com"
-    val sourceUrl get() = "https://github.com/mdportnov/monk-cli"
+    val sourceUrl get() = "https://github.com/mdportnov/monk"
     val aboutTagline get() = t("A second of friction before the apps you open on autopilot.", "Секунда трения перед приложениями, которые вы открываете на автопилоте.")
     val aboutPrivacy get() = t("Everything stays on the phone", "Всё остаётся на телефоне")
     val aboutPrivacyHint get() = t("No account, no analytics. The network is used only to check GitHub for updates.", "Без аккаунта и аналитики. Интернет нужен только для проверки обновлений на GitHub.")
     val aboutAccessibility get() = t("Reads only which app is in front", "Видит только, какое приложение на экране")
     val aboutAccessibilityHint get() = t("The accessibility service never reads screen content.", "Служба специальных возможностей не читает содержимое экрана.")
     val aboutSource get() = t("Open source", "Открытый код")
-    val aboutSourceHint get() = t("Part of the monk CLI project on GitHub.", "Часть проекта monk CLI на GitHub.")
+    val aboutSourceHint get() = t("Part of the monk project on GitHub.", "Часть проекта monk на GitHub.")
     fun version(v: String) = t("Version $v", "Версия $v")
     val checkUpdates get() = t("Check for updates", "Проверить обновления")
     val updateChecking get() = t("Checking…", "Проверяю…")

@@ -4,7 +4,7 @@
 # Keep both files in sync — tests/packaging.rs enforces it.
 [Unit]
 Description=monk focus & distraction blocker daemon
-Documentation=https://github.com/mdportnov/monk-cli
+Documentation=https://github.com/mdportnov/monk
 After=network.target
 StartLimitIntervalSec=0
 StartLimitBurst=0

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="mdportnov/monk-cli"
+REPO="mdportnov/monk"
 BIN="monk"
 INSTALL_DIR="${MONK_INSTALL_DIR:-$HOME/.local/bin}"
 

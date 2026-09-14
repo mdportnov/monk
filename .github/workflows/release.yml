@@ -213,7 +213,7 @@ jobs:
           crate=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
           version="${GITHUB_REF_NAME#v}"
           code=$(curl -sS -o /dev/null -w '%{http_code}' \
-            -H 'User-Agent: monk-release (https://github.com/mdportnov/monk-cli)' \
+            -H 'User-Agent: monk-release (https://github.com/mdportnov/monk)' \
             "https://crates.io/api/v1/crates/${crate}/${version}")
           if [ "$code" = "200" ]; then
             echo "::notice::${crate} ${version} is already on crates.io — nothing to publish"

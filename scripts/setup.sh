@@ -31,7 +31,7 @@ ask() {
 # ----- locate repo root ------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-[ -f "$REPO_ROOT/Cargo.toml" ] || err "run this from a clone of monk-cli (Cargo.toml not found)"
+[ -f "$REPO_ROOT/Cargo.toml" ] || err "run this from a clone of monk (Cargo.toml not found)"
 cd "$REPO_ROOT"
 
 printf '%s%s monk — build from source %s\n' "$BOLD" "$BLUE" "$RESET"

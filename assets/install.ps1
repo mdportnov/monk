@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-$Repo = 'mdportnov/monk-cli'
+$Repo = 'mdportnov/monk'
 $Bin  = 'monk'
 $InstallDir = if ($env:MONK_INSTALL_DIR) { $env:MONK_INSTALL_DIR } else { "$env:LOCALAPPDATA\monk\bin" }
 

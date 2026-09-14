@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import com.mdportnov.monk.shared.model.InstalledApp
+import kotlinx.coroutines.flow.StateFlow
 
 data class PermissionStatus(
     /** The accessibility service that watches foreground apps. Required. */
@@ -18,10 +19,11 @@ interface MonkPlatform {
     /** false on iOS: the UI shows an "unsupported" card instead of the blocker controls. */
     val supportsBlocking: Boolean
     suspend fun installedApps(): List<InstalledApp>
-    fun permissions(): PermissionStatus
+    /** Latest known permission state; the platform refreshes it on resume and on service changes. */
+    val permissions: StateFlow<PermissionStatus>
+    fun refreshPermissions()
     fun openAccessibilitySettings()
     fun openAppInfo()
-    fun requestNotificationPermission()
     /** Offers to add the Quick Settings tiles (Android 13+); no-op elsewhere. */
     fun requestAddTiles()
     val updater: Updater?

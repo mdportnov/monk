@@ -57,6 +57,8 @@ data class Schedule(
 
 @Serializable
 data class MonkConfig(
+    /** Bumped only for non-additive changes; additive fields with defaults need no bump. */
+    val schemaVersion: Int = CURRENT_SCHEMA,
     val enabled: Boolean = true,
     val defaultDelaySeconds: Int = 10,
     val defaultAllowMinutes: Int = 5,
@@ -90,6 +92,10 @@ data class MonkConfig(
     fun isPaused(now: Long) = pausedUntil > now
     fun isStrict(now: Long) = strictUntil > now
     fun isFocus(now: Long) = focusUntil > now
+
+    companion object {
+        const val CURRENT_SCHEMA = 1
+    }
 }
 
 @Serializable

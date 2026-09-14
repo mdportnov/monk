@@ -17,7 +17,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.mdportnov.monk.shared.MonkRuntime
+import com.mdportnov.monk.shared.MonkGraph
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import com.mdportnov.monk.shared.model.ThemeMode
 import com.mdportnov.monk.shared.ui.apps.AddAppsScreen
 import com.mdportnov.monk.shared.ui.apps.AppDetailScreen
@@ -49,18 +51,24 @@ fun resolveDarkTheme(mode: ThemeMode): Boolean = when (mode) {
     ThemeMode.DARK -> true
 }
 
+private data class ThemeChoice(val mode: ThemeMode, val dynamic: Boolean)
+
 @Composable
 fun MonkApp(
+    graph: MonkGraph,
     onBackHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
     /** Lets the host paint window background and system bars to match; called on every change. */
     onThemeResolved: (dark: Boolean) -> Unit = {},
 ) {
+    val store = graph.store
     val nav = remember { Navigator() }
     onBackHandler(nav.canGoBack) { nav.pop() }
-    val config by MonkRuntime.store.config.collectAsStateWithLifecycle()
-    val dark = resolveDarkTheme(config.theme)
+    // Only the theme choice reaches the root: a slider commit elsewhere must not recompose it.
+    val themeFlow = remember(store) { store.config.map { ThemeChoice(it.theme, it.dynamicColor) }.distinctUntilChanged() }
+    val choice by themeFlow.collectAsStateWithLifecycle(ThemeChoice(store.config.value.theme, store.config.value.dynamicColor))
+    val dark = resolveDarkTheme(choice.mode)
     LaunchedEffect(dark) { onThemeResolved(dark) }
-    MonkTheme(darkTheme = dark, dynamicColor = config.dynamicColor) {
+    MonkTheme(darkTheme = dark, dynamicColor = choice.dynamic) {
         Surface(Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = nav.current,
@@ -73,18 +81,18 @@ fun MonkApp(
             ) { route ->
                 when (route) {
                     Route.Main -> MainScreen(
-                        store = MonkRuntime.store,
-                        platform = MonkRuntime.platform,
+                        store = store,
+                        platform = graph.platform,
                         onAddApps = { nav.push(Route.AddApps) },
                         onOpenApp = { nav.push(Route.AppDetail(it)) },
                     )
                     Route.AddApps -> AddAppsScreen(
-                        store = MonkRuntime.store,
-                        platform = MonkRuntime.platform,
+                        store = store,
+                        platform = graph.platform,
                         onClose = { nav.pop() },
                     )
                     is Route.AppDetail -> AppDetailScreen(
-                        store = MonkRuntime.store,
+                        store = store,
                         packageName = route.packageName,
                         onClose = { nav.pop() },
                     )

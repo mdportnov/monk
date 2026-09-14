@@ -2,23 +2,18 @@ package com.mdportnov.monk
 
 import android.accessibilityservice.AccessibilityService
 import android.graphics.PixelFormat
+import android.os.Build
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.View
 import android.view.WindowManager
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.SavedStateRegistry
@@ -32,9 +27,10 @@ import com.mdportnov.monk.shared.ui.intercept.InterceptScreen
  * permission, is not subject to background-activity-start rules, and covers the whole display —
  * split-screen, desktop windows, OEM ROMs that drop activity launches. Compose needs a
  * lifecycle / saved-state / view-model owner on the view tree; a service has none, so this
- * host provides a minimal one.
+ * host provides a minimal one. [pause]/[resume] mirror an Activity under the notification shade,
+ * so the countdown stops there just like it does for the Activity.
  */
-class InterceptOverlay(private val service: AccessibilityService) {
+class InterceptOverlay(private val service: AccessibilityService, private val registry: InterceptRegistry) {
     private val wm = service.getSystemService(WindowManager::class.java)
     private var view: ComposeView? = null
     private var owner: Owner? = null
@@ -44,13 +40,14 @@ class InterceptOverlay(private val service: AccessibilityService) {
     val isShowing get() = view != null
 
     fun show(session: InterceptSession) {
-        hide(countAbandoned = true)
+        hide()
         this.session = session
         val owner = Owner().also { this.owner = it }
         val compose = ComposeView(service).apply {
             setViewTreeLifecycleOwner(owner)
             setViewTreeSavedStateRegistryOwner(owner)
             setViewTreeViewModelStoreOwner(owner)
+            fitsSystemWindows = false
             isFocusable = true
             isFocusableInTouchMode = true
             setOnKeyListener { _, code, event ->
@@ -62,38 +59,26 @@ class InterceptOverlay(private val service: AccessibilityService) {
                 }
             }
             setContent {
-                // A service window gets no system-bar insets: pad by hand so the buttons clear
-                // the gesture area and the orb clears the status bar.
-                Box(Modifier.fillMaxSize().background(Color(0xFF0B0D12)).padding(top = 32.dp, bottom = 40.dp)) {
+                val ui by session.ui.collectAsStateWithLifecycle()
                 InterceptScreen(
-                    packageName = session.packageName,
-                    label = session.app.label,
-                    mode = session.app.mode,
-                    delaySeconds = session.config.delayFor(session.app),
-                    allowMinutes = session.config.allowFor(session.app),
-                    limitReached = session.limitReached,
-                    dailyLimit = session.app.dailyLimit,
-                    focusUntil = session.focusUntil,
-                    timesToday = session.timesToday,
-                    askIntention = session.config.askIntention,
-                    message = session.config.pauseMessage,
+                    state = ui,
                     onOpen = { reason -> open(session, reason?.name) },
                     onDismiss = { dismiss(session) },
                 )
-                }
             }
         }
+        // Full-screen but with real insets: no LAYOUT_NO_LIMITS, so safeDrawingPadding() inside
+        // the screen sees the status bar and the gesture area like it does in an Activity.
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            if (android.os.Build.VERSION.SDK_INT >= 28) layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            if (Build.VERSION.SDK_INT >= 28) layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            if (Build.VERSION.SDK_INT >= 30) fitInsetsTypes = 0
         }
         runCatching { wm.addView(compose, params) }
             .onSuccess {
@@ -104,25 +89,28 @@ class InterceptOverlay(private val service: AccessibilityService) {
             .onFailure { owner.destroy(); this.owner = null; this.session = null }
     }
 
+    /** Something (the shade, a system dialog) is over the overlay: freeze the countdown. */
+    fun pause() { owner?.pause() }
+    fun resume() { owner?.resume() }
+
     private fun open(session: InterceptSession, reason: String?) {
-        if (session.isDecided) return
-        session.open(reason)
-        hide(countAbandoned = false)
+        if (!session.open(reason)) return
+        hide()
         session.relaunchIfHidden()
     }
 
     private fun dismiss(session: InterceptSession) {
-        if (session.isDecided) return
         session.dismiss()
-        hide(countAbandoned = false)
+        hide()
     }
 
-    /** Removes the window. An undecided session is simply abandoned (no stats), like leaving the Activity via Home. */
-    fun hide(countAbandoned: Boolean) {
+    /** Removes the window. An undecided session is abandoned like an Activity left via Home. */
+    fun hide() {
         view?.let { v -> runCatching { wm.removeViewImmediate(v) } }
         view = null
         owner?.destroy()
         owner = null
+        session?.let { registry.remove(it.token) }
         session = null
     }
 
@@ -137,7 +125,8 @@ class InterceptOverlay(private val service: AccessibilityService) {
         override val lifecycle: Lifecycle get() = registry
         override val savedStateRegistry: SavedStateRegistry get() = savedState.savedStateRegistry
         override val viewModelStore: ViewModelStore get() = store
-        fun resume() { registry.currentState = Lifecycle.State.RESUMED }
+        fun resume() { if (registry.currentState != Lifecycle.State.DESTROYED) registry.currentState = Lifecycle.State.RESUMED }
+        fun pause() { if (registry.currentState == Lifecycle.State.RESUMED) registry.currentState = Lifecycle.State.STARTED }
         fun destroy() {
             if (registry.currentState != Lifecycle.State.DESTROYED) registry.currentState = Lifecycle.State.DESTROYED
             store.clear()

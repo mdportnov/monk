@@ -84,7 +84,7 @@ class GitHubUpdater(private val context: Context) : Updater {
             _state.value = UpdateState.Downloading(release.version, 0f)
             val apk = runCatching {
                 withContext(Dispatchers.IO) {
-                    download(release) { p -> scope.launch { _state.value = UpdateState.Downloading(release.version, p) } }
+                    download(release) { p -> _state.value = UpdateState.Downloading(release.version, p) }
                 }
             }
             apk.onFailure { e ->
@@ -139,9 +139,8 @@ class GitHubUpdater(private val context: Context) : Updater {
     }
 
     private fun download(release: Release, onProgress: (Float) -> Unit): File {
-        if (!release.apkUrl.startsWith("https://github.com/") && !release.apkUrl.startsWith("https://objects.githubusercontent.com/")) {
-            error("untrusted url")
-        }
+        // Only our own repository's release assets; the download redirects to GitHub's object store.
+        if (!release.apkUrl.startsWith("https://github.com/mdportnov/monk-cli/releases/download/")) error("untrusted url")
         val expected = release.shaUrl?.let { get(it).trim().split(Regex("\\s+")).firstOrNull()?.lowercase() }
             ?: error("no checksum published")
         val dir = File(context.cacheDir, "updates").apply { mkdirs() }
@@ -176,7 +175,7 @@ class GitHubUpdater(private val context: Context) : Updater {
         } finally {
             conn.disconnect()
         }
-        scope.launch { _state.value = UpdateState.Verifying(release.version) }
+        _state.value = UpdateState.Verifying(release.version)
         val actual = digest.digest().joinToString("") { "%02x".format(it) }
         if (actual != expected) {
             target.delete()

@@ -29,6 +29,7 @@ class SharedPrefsStore(context: Context) : KeyValueStore {
     private val prefs: SharedPreferences = context.getSharedPreferences("monk", Context.MODE_PRIVATE)
     override fun getString(key: String): String? = prefs.getString(key, null)
     override fun putString(key: String, value: String) { prefs.edit().putString(key, value).apply() }
+    override fun remove(key: String) { prefs.edit().remove(key).apply() }
 }
 
 actual fun systemLanguage(): String = Locale.getDefault().language

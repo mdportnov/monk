@@ -165,7 +165,7 @@ class Strings(private val ru: Boolean) {
         "Monk ставит секунду трения между вами и приложениями, которые открываются на автопилоте. Всё остаётся на телефоне; сеть нужна только для проверки обновлений на GitHub.",
     )
     val language get() = t("Language follows the system", "Язык берётся из системы")
-    val dayShort get() = if (ru) listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс") else listOf("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su")
+    val dayShort: List<String> = if (ru) listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс") else listOf("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su")
 
     // Stats
     val statsToday get() = t("Today", "Сегодня")
@@ -201,10 +201,12 @@ class Strings(private val ru: Boolean) {
     fun interceptWait(seconds: Int) = t("Wait ${seconds}s", "Подождите ${seconds}с")
     fun interceptFocusTitle(time: String) = t("Focus until $time", "Фокус до $time")
     val interceptFocusHint get() = t("You started this session. Everything waits.", "Вы сами начали эту сессию. Всё подождёт.")
-    fun timesToday(n: Int) = t(
-        when (n) { 1 -> "1st time today"; 2 -> "2nd time today"; 3 -> "3rd time today"; else -> "${n}th time today" },
-        "$n-й раз сегодня",
-    )
+    fun timesToday(n: Int) = t("${ordinal(n)} time today", "$n-й раз сегодня")
+
+    private fun ordinal(n: Int): String {
+        val suffix = if (n % 100 in 11..13) "th" else when (n % 10) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }
+        return "$n$suffix"
+    }
 
     val iosTitle get() = t("iOS is not supported yet", "iOS пока не поддерживается")
     val iosBody get() = t(

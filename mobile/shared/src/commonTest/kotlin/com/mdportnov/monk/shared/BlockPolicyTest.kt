@@ -126,6 +126,17 @@ class BlockPolicyTest {
     }
 
     @Test
+    fun unreadableConfigIsBackedUpNotDropped() {
+        val kv = InMemoryStore()
+        kv.putString("config", "{not json")
+        var reported: String? = null
+        val store = MonkStore(kv, onLoadFailure = { key, _ -> reported = key })
+        assertEquals("config", reported)
+        assertEquals("{not json", store.configBackup())
+        assertEquals(MonkConfig(), store.config.value)
+    }
+
+    @Test
     fun walkAwayStreakSkipsEmptyToday() {
         val stats = Stats(
             days = listOf(

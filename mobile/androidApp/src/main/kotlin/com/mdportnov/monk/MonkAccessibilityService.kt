@@ -13,237 +13,225 @@ import android.os.Handler
 import android.os.Looper
 import android.telecom.TelecomManager
 import android.util.Log
+import android.util.LruCache
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
-import com.mdportnov.monk.shared.MonkRuntime
+import androidx.core.content.ContextCompat
 import com.mdportnov.monk.shared.model.Decision
 import java.lang.ref.WeakReference
 
 /**
- * Watches window changes and, when a watched app comes to the front, drops [InterceptActivity]
- * on top of it. Reads only the package + class name of the window: canRetrieveWindowContent is
- * off in the service config, so screen content never reaches this process.
+ * Adapter between the accessibility API and [ForegroundGate]: feeds window-state events in,
+ * carries the effects out (Activity launch with a fail-closed guard, overlay, Home, timers).
+ * Reads only package + class of each window: canRetrieveWindowContent is off in the service
+ * config, so screen content never reaches this process.
  *
  * Starting an Activity from a bound accessibility service is exempt from background-launch
  * limits (Android 10–16). Some OEM ROMs still drop it silently, so the launch is fail-closed: if
- * the intercept screen has not resumed within [LAUNCH_GUARD_MS] the user is sent Home instead.
+ * the intercept screen has not resumed within the guard window, the overlay takes over, and
+ * Home is the last resort.
  *
  * All callbacks run on the main thread, which is also where the UI mutates MonkStore.
  */
-class MonkAccessibilityService : AccessibilityService() {
+class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects, InterceptSession.Host {
     private val handler = Handler(Looper.getMainLooper())
-    private val overlay by lazy { InterceptOverlay(this) }
+    private val graph by lazy { monkGraph }
+    private val overlay by lazy { InterceptOverlay(this, graph.intercepts) }
+    private val gate by lazy { ForegroundGate(packageName, MainActivity::class.java.name, this, System::currentTimeMillis) }
 
-    /** The last Activity window we saw that belongs to a "real" app (not launcher/system/IME). */
-    private var lastForeground: String? = null
-    private var lastLaunchAt = 0L
     private var launchers: Set<String> = emptySet()
-    private var imes: Set<String> = emptySet()
-    private var transient: Set<String> = emptySet()
+    private var transientPkgs: Set<String> = emptySet()
+    private val activityWindowCache = LruCache<String, Boolean>(256)
+    private var scheduled: Runnable? = null
 
     private val packagesChanged = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) = refreshSystemSets()
-    }
-
-    /** An app that surfaced while the keyguard was up is judged once the user actually unlocks. */
-    private var pendingAfterUnlock: String? = null
-    private val userPresent = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            val pkg = pendingAfterUnlock ?: return
-            pendingAfterUnlock = null
-            if (pkg == lastForeground) evaluate(pkg)
+            // PACKAGE_CHANGED is chatty (component toggles); one refresh per burst is plenty.
+            handler.removeCallbacks(refreshSets)
+            handler.postDelayed(refreshSets, 500)
         }
     }
+    private val refreshSets = Runnable { refreshSystemSets() }
 
-    /** Re-checks the foreground app when its allowance runs out while it is still open. */
-    private val allowanceExpiry = Runnable { lastForeground?.let { evaluate(it) } }
-
-    /** Fail-closed guard: fires if InterceptActivity never showed up. */
-    private var guardRetries = 0
-    private val launchGuard: Runnable = object : Runnable {
-        override fun run() {
-            val pkg = InterceptGate.showing ?: return
-            if (InterceptGate.resumed) return
-            // Created but not yet resumed: a cold start on a slow device, give it more time.
-            if (InterceptGate.created && guardRetries < LAUNCH_GUARD_RETRIES) {
-                guardRetries++
-                handler.postDelayed(this, LAUNCH_GUARD_MS)
-                return
-            }
-            // The Activity never made it (OEM dropped the launch): fall back to the overlay, which
-            // no ROM can refuse. Home only if even that fails.
-            Log.w(TAG, "intercept screen for $pkg never resumed; falling back to overlay")
-            InterceptGate.showing = null
-            if (!showOverlay(pkg)) performGlobalAction(GLOBAL_ACTION_HOME)
-        }
+    private val userPresent = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = gate.onUserPresent()
     }
+
+    // --- lifecycle ---
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = WeakReference(this)
         refreshSystemSets()
-        registerReceiver(
-            packagesChanged,
+        ContextCompat.registerReceiver(
+            this, packagesChanged,
             IntentFilter().apply {
                 addAction(Intent.ACTION_PACKAGE_ADDED)
                 addAction(Intent.ACTION_PACKAGE_REMOVED)
                 addAction(Intent.ACTION_PACKAGE_CHANGED)
                 addDataScheme("package")
             },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
         )
-        registerReceiver(userPresent, IntentFilter(Intent.ACTION_USER_PRESENT))
+        ContextCompat.registerReceiver(this, userPresent, IntentFilter(Intent.ACTION_USER_PRESENT), ContextCompat.RECEIVER_NOT_EXPORTED)
         MonkNotifications.clearServiceOff(this)
+        graph.platform.refreshPermissions()
         Log.d(TAG, "connected")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         handler.removeCallbacksAndMessages(null)
-        overlay.hide(countAbandoned = true)
-        // Posted after the unbind settles: by then the system knows whether we are really off.
-        val app = applicationContext
-        Handler(Looper.getMainLooper()).postDelayed({ MonkNotifications.serviceOff(app) }, 3_000)
+        overlay.hide()
         runCatching { unregisterReceiver(packagesChanged) }
         runCatching { unregisterReceiver(userPresent) }
         instance = null
+        val app = applicationContext
+        // A fresh Handler on purpose: the one above was just wiped. Posted after the unbind
+        // settles, so the system already knows whether we are really off.
+        Handler(Looper.getMainLooper()).postDelayed({
+            MonkNotifications.serviceOff(app)
+            app.monkGraph.platform.refreshPermissions()
+        }, 3_000)
         return super.onUnbind(intent)
     }
 
     private fun refreshSystemSets() {
         launchers = SystemPackages.launchers(this)
-        imes = imePackages(this)
-        transient = SystemPackages.essential(this) + imes + setOf("android")
+        val imes = (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).inputMethodList.map { it.packageName }
+        transientPkgs = SystemPackages.essential(this, launchers) + imes + "android"
+        activityWindowCache.evictAll()
     }
+
+    // --- events in ---
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
-        // An overlay covers exactly one app; anything else surfacing means the user left it.
-        overlay.session?.let { s ->
-            if (pkg != packageName && pkg != s.packageName && (pkg in launchers || isActivityWindowOf(pkg, event))) {
-                overlay.hide(countAbandoned = true)
-            }
+        // Overlay under the shade / a system dialog: freeze the countdown, like an Activity would.
+        if (overlay.isShowing) {
+            if (pkg == "com.android.systemui") overlay.pause() else if (pkg == packageName) overlay.resume()
         }
-        if (pkg == packageName) {
-            // Monk's own UI in front means the watched app is not; the intercept screen itself
-            // is transparent (it sits on top of the app it covers).
-            if (event.className?.toString() == MainActivity::class.java.name) {
-                lastForeground = pkg
-                handler.removeCallbacks(allowanceExpiry)
-            }
-            return
-        }
-        if (pkg in launchers) {
-            // Home: whatever was open has been left; the next entry is a fresh decision.
-            lastForeground = pkg
-            handler.removeCallbacks(allowanceExpiry)
-            return
-        }
-        // Shade, keyguard, keyboard, permission dialogs, dialer: neither "entering an app" nor
-        // "leaving" one. They do not touch lastForeground so the allowance timer keeps running.
-        if (pkg in transient) return
-        // Dialogs, popups, PiP and bubbles arrive with the same event type. Only a real Activity
-        // window counts as "the user opened this app".
-        if (!isActivityWindow(pkg, event.className?.toString())) return
-
-        val gateOpenFor = InterceptGate.showing
-        if (pkg == lastForeground && gateOpenFor != pkg) return
-        // The app resurfacing above a live intercept (notification deep link, relaunch): re-cover
-        // it, but not for the echo events the relaunch itself produces.
-        if (gateOpenFor == pkg && System.currentTimeMillis() - lastLaunchAt < RELAUNCH_DEBOUNCE_MS) return
-        lastForeground = pkg
-        if (isKeyguardLocked()) {
-            pendingAfterUnlock = pkg
-            return
-        }
-        if (isInCall()) return
-        evaluate(pkg)
+        gate.onWindow(pkg, event.className?.toString())
     }
 
-    private fun evaluate(pkg: String) {
-        if (!MonkRuntime.isInitialized) return
-        handler.removeCallbacks(allowanceExpiry)
-        val store = MonkRuntime.store
-        when (val decision = store.decide(pkg)) {
-            Decision.Allow -> {
-                // Inside an allowance: come back when it ends, in case the app is still open.
-                if (store.config.value.app(pkg) == null) return
-                val until = store.allowances.value[pkg] ?: return
-                val delay = until - System.currentTimeMillis()
-                if (delay > 0) handler.postDelayed(allowanceExpiry, delay + 250)
-            }
-            is Decision.Intercept -> {
-                Log.d(TAG, "intercepting ${decision.app.packageName} (${decision.effectiveMode})")
-                if (store.config.value.overlayMode) {
-                    if (!showOverlay(pkg)) performGlobalAction(GLOBAL_ACTION_HOME)
-                    return
-                }
-                InterceptGate.showing = pkg
-                InterceptGate.resumed = false
-                InterceptGate.created = false
-                guardRetries = 0
-                val intent = Intent(this, InterceptActivity::class.java)
-                    .putExtra(InterceptActivity.EXTRA_PACKAGE, pkg)
-                    .addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK or
-                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                            Intent.FLAG_ACTIVITY_NO_ANIMATION,
-                    )
-                lastLaunchAt = System.currentTimeMillis()
-                val started = runCatching { startActivity(intent) }.isSuccess
-                if (!started) {
-                    Log.w(TAG, "startActivity threw; sending Home")
-                    InterceptGate.showing = null
-                    performGlobalAction(GLOBAL_ACTION_HOME)
-                    return
-                }
-                handler.removeCallbacks(launchGuard)
-                handler.postDelayed(launchGuard, LAUNCH_GUARD_MS)
-            }
-        }
-    }
+    override fun onInterrupt() = Unit
 
-    private fun showOverlay(pkg: String): Boolean {
-        val session = InterceptSession.start(this, pkg) ?: return false
-        overlay.show(session)
-        return overlay.isShowing
-    }
+    // --- ForegroundGate.Effects ---
 
-    private fun isActivityWindowOf(pkg: String, event: AccessibilityEvent) = isActivityWindow(pkg, event.className?.toString())
+    override fun isLauncher(pkg: String) = pkg in launchers
+    override fun isTransient(pkg: String) = pkg in transientPkgs
 
-    private fun isActivityWindow(pkg: String, className: String?): Boolean {
+    override fun isActivityWindow(pkg: String, className: String?): Boolean {
         if (className.isNullOrEmpty()) return false
-        return runCatching { packageManager.getActivityInfo(ComponentName(pkg, className), 0) }.isSuccess
+        val key = "$pkg/$className"
+        activityWindowCache.get(key)?.let { return it }
+        val isActivity = runCatching { packageManager.getActivityInfo(ComponentName(pkg, className), 0) }.isSuccess
+        activityWindowCache.put(key, isActivity)
+        return isActivity
     }
 
-    private fun isKeyguardLocked(): Boolean =
-        (getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
+    override fun isKeyguardLocked() = (getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
 
-    private fun isInCall(): Boolean {
+    override fun isInCall(): Boolean {
         val mode = (getSystemService(Context.AUDIO_SERVICE) as AudioManager).mode
         return mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_RINGTONE
     }
 
-    override fun onInterrupt() = Unit
+    override fun decide(pkg: String) = graph.store.decide(pkg)
+    override fun isWatched(pkg: String) = graph.store.config.value.app(pkg) != null
+    override fun allowanceUntil(pkg: String) = graph.store.allowances.value[pkg]
+    override fun interceptShowingFor(): String? = overlay.session?.packageName ?: InterceptGate.showingFor
+    override fun hideOverlay() = overlay.hide()
+
+    override fun schedule(delayMs: Long, action: () -> Unit) {
+        cancelScheduled()
+        scheduled = Runnable { scheduled = null; action() }.also { handler.postDelayed(it, delayMs) }
+    }
+
+    override fun cancelScheduled() {
+        scheduled?.let { handler.removeCallbacks(it) }
+        scheduled = null
+    }
+
+    override fun intercept(pkg: String, decision: Decision.Intercept) {
+        val app = graph.store.config.value.app(pkg) ?: return
+        Log.d(TAG, "intercepting $pkg (${decision.effectiveMode})")
+        if (graph.store.config.value.overlayMode) {
+            if (!showOverlay(app, decision)) performGlobalAction(GLOBAL_ACTION_HOME)
+            return
+        }
+        val session = graph.intercepts.create(app, decision, this)
+        InterceptGate.launching(session.token, pkg)
+        val intent = Intent(this, InterceptActivity::class.java)
+            .putExtra(InterceptActivity.EXTRA_TOKEN, session.token)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        if (runCatching { startActivity(intent) }.isFailure) {
+            Log.w(TAG, "startActivity threw; overlay instead")
+            InterceptGate.clear()
+            graph.intercepts.remove(session.token)
+            if (!showOverlay(app, decision)) performGlobalAction(GLOBAL_ACTION_HOME)
+            return
+        }
+        guardRetries = 0
+        handler.removeCallbacks(launchGuard)
+        launchGuardToken = session.token
+        handler.postDelayed(launchGuard, LAUNCH_GUARD_MS)
+    }
+
+    private fun showOverlay(app: com.mdportnov.monk.shared.model.BlockedApp, decision: Decision.Intercept): Boolean {
+        val session = graph.intercepts.create(app, decision, this)
+        overlay.show(session)
+        if (!overlay.isShowing) graph.intercepts.remove(session.token)
+        return overlay.isShowing
+    }
+
+    /** Fail-closed guard: the Activity never resumed → overlay; overlay impossible → Home. */
+    private var guardRetries = 0
+    private var launchGuardToken = -1L
+    private val launchGuard: Runnable = object : Runnable {
+        override fun run() {
+            val token = launchGuardToken
+            if (InterceptGate.isResumed(token)) return
+            if (InterceptGate.isCreated(token) && guardRetries < LAUNCH_GUARD_RETRIES) {
+                // Created but not yet resumed: a cold start on a slow device, give it more time.
+                guardRetries++
+                handler.postDelayed(this, LAUNCH_GUARD_MS)
+                return
+            }
+            val session = graph.intercepts[token]
+            Log.w(TAG, "intercept screen never resumed; falling back to overlay")
+            InterceptGate.clear()
+            if (session == null) {
+                performGlobalAction(GLOBAL_ACTION_HOME)
+                return
+            }
+            overlay.show(session)
+            if (!overlay.isShowing) performGlobalAction(GLOBAL_ACTION_HOME)
+        }
+    }
+
+    // --- InterceptSession.Host ---
+
+    override fun goHome() { performGlobalAction(GLOBAL_ACTION_HOME) }
+    override fun foregroundPackage(): String? = gate.lastForeground
+    override fun launchApp(packageName: String) {
+        packageManager.getLaunchIntentForPackage(packageName)
+            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ?.let { runCatching { startActivity(it) } }
+    }
 
     companion object {
         private const val TAG = "MonkA11y"
         private const val LAUNCH_GUARD_MS = 2500L
         private const val LAUNCH_GUARD_RETRIES = 3
-        private const val RELAUNCH_DEBOUNCE_MS = 1000L
 
         @Volatile private var instance: WeakReference<MonkAccessibilityService>? = null
 
         /** Home via the accessibility API: no task/affinity surprises, no chooser, works on every OEM. */
-        fun goHome(): Boolean = instance?.get()?.performGlobalAction(GLOBAL_ACTION_HOME) == true
+        fun goHomeStatic(): Boolean = instance?.get()?.performGlobalAction(GLOBAL_ACTION_HOME) == true
 
-        /** Package of the app under the intercept screen, as the service last saw it. */
-        fun currentForeground(): String? = instance?.get()?.lastForeground
-
-        private fun imePackages(context: Context): Set<String> {
-            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-            return imm.inputMethodList.map { it.packageName }.toSet()
-        }
+        /** A tile started a focus session: the app in front must be judged again right away. */
+        fun reevaluateForeground() { instance?.get()?.let { it.gate.reevaluateForeground() } }
     }
 }
 
@@ -272,10 +260,10 @@ object SystemPackages {
     fun launchers(context: Context): Set<String> =
         resolveAll(context, Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))
 
-    fun essential(context: Context): Set<String> {
+    fun essential(context: Context, launchers: Set<String> = launchers(context)): Set<String> {
         val out = HashSet(fixed)
         out += context.packageName
-        out += launchers(context)
+        out += launchers
         out += resolveAll(context, Intent(android.provider.Settings.ACTION_SETTINGS))
         out += resolveAll(context, Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
         out += resolveAll(context, Intent(Intent.ACTION_DIAL))

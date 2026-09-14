@@ -59,7 +59,7 @@
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:showOnLockScreen="false"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|locale|fontScale|density"
             android:theme="@style/Theme.Monk.Intercept" />
 
         <!-- Warn if the service did not survive a reboot or an update. -->
@@ -71,6 +71,10 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".ServiceCheckReceiver"
+            android:exported="false" />
 
         <!-- Quick Settings tiles. -->
         <service

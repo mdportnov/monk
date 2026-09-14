@@ -43,8 +43,22 @@ rules, covers split-screen. It is also the automatic fallback when the Activity 
 focus session after a confirmation. **Service watchdog**: a notification when the accessibility
 service is off while apps are watched (on unbind, after boot, after an update); opt-in in Settings.
 
-Known gap: work-profile clones of a watched app are intercepted too and "Open" launches the
-personal instance.
+Known gaps: work-profile clones of a watched app are intercepted too and "Open" launches the
+personal instance; pause / strict / focus deadlines are wall-clock, so moving the system clock
+forward ends them early (Settings is deliberately never gated).
+
+## Architecture
+
+- `shared` owns the model (`BlockPolicy`, `MonkStore`), the Compose UI and the platform
+  contracts (`MonkPlatform`, `Updater`). The UI receives a `MonkGraph` explicitly; there is no
+  global service locator in common code.
+- `androidApp` builds an `AndroidGraph` in `MonkApplication` (store, platform, updater,
+  `InterceptRegistry`), reachable as `context.monkGraph`.
+- `ForegroundGate` is the accessibility service's decision tree without Android types (JVM unit
+  tests in `androidApp/src/test`); `MonkAccessibilityService` is the adapter that feeds it window
+  events and carries out its effects (launch, overlay, Home, timers).
+- One intercept = one `InterceptSession` keyed by a token, created and counted once by the
+  service; `InterceptActivity` and `InterceptOverlay` are two renderers of its `InterceptUiState`.
 
 ## Layout
 
@@ -88,6 +102,7 @@ set -a; source ~/.monk/release-signing/credentials.env; set +a
 ```sh
 ./gradlew :androidApp:assembleDebug        # APK → androidApp/build/outputs/apk/debug/
 ./gradlew :shared:testAndroidHostTest      # shared unit tests on the JVM
+./gradlew :androidApp:testDebugUnitTest    # service decision tree + version compare
 ./gradlew :androidApp:installDebug         # onto a connected device / emulator
 ```
 

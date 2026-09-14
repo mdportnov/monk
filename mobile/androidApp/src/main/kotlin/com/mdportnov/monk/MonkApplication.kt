@@ -2,21 +2,35 @@ package com.mdportnov.monk
 
 import android.app.Application
 import android.content.Context
-import com.mdportnov.monk.shared.MonkRuntime
+import android.util.Log
+import com.mdportnov.monk.shared.MonkGraph
+import com.mdportnov.monk.shared.data.MonkStore
 import com.mdportnov.monk.shared.platform.SharedPrefsStore
 import com.mdportnov.monk.update.GitHubUpdater
 
+/** Android object graph: everything the shared graph has, plus what only Android needs. */
+class AndroidGraph(
+    val shared: MonkGraph,
+    val platform: AndroidPlatform,
+    val updater: GitHubUpdater,
+    val intercepts: InterceptRegistry,
+) {
+    val store get() = shared.store
+}
+
 class MonkApplication : Application() {
-    lateinit var updater: GitHubUpdater
+    lateinit var graph: AndroidGraph
         private set
 
     override fun onCreate() {
         super.onCreate()
-        updater = GitHubUpdater(this)
-        MonkRuntime.init(SharedPrefsStore(this), AndroidPlatform(this, updater))
-    }
-
-    companion object {
-        fun updater(context: Context): GitHubUpdater? = (context.applicationContext as? MonkApplication)?.updater
+        val store = MonkStore(SharedPrefsStore(this)) { key, e -> Log.e("Monk", "could not read $key; kept as $key.bak", e) }
+        val updater = GitHubUpdater(this)
+        val platform = AndroidPlatform(this, updater)
+        graph = AndroidGraph(MonkGraph(store, platform), platform, updater, InterceptRegistry(store))
     }
 }
+
+/** The one place Android components resolve their dependencies. */
+val Context.monkGraph: AndroidGraph
+    get() = (applicationContext as MonkApplication).graph

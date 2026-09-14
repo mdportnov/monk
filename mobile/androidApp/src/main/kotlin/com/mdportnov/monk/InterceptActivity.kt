@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mdportnov.monk.shared.ui.intercept.InterceptScreen
 
 /**
@@ -31,19 +32,10 @@ class InterceptActivity : ComponentActivity() {
         }
         setContent {
             val s = session ?: return@setContent
+            val ui by s.ui.collectAsStateWithLifecycle()
             BackHandler { dismiss(s) }
             InterceptScreen(
-                packageName = s.packageName,
-                label = s.app.label,
-                mode = s.app.mode,
-                delaySeconds = s.config.delayFor(s.app),
-                allowMinutes = s.config.allowFor(s.app),
-                limitReached = s.limitReached,
-                dailyLimit = s.app.dailyLimit,
-                focusUntil = s.focusUntil,
-                timesToday = s.timesToday,
-                askIntention = s.config.askIntention,
-                message = s.config.pauseMessage,
+                state = ui,
                 onOpen = { reason -> open(s, reason?.name) },
                 onDismiss = { dismiss(s) },
             )
@@ -57,27 +49,22 @@ class InterceptActivity : ComponentActivity() {
     }
 
     private fun bind(intent: Intent): Boolean {
-        val pkg = intent.getStringExtra(EXTRA_PACKAGE).orEmpty()
-        val s = InterceptSession.start(this, pkg) ?: return false
+        val token = intent.getLongExtra(EXTRA_TOKEN, -1L)
+        val s = monkGraph.intercepts[token] ?: return false
         session = s
-        InterceptGate.showing = pkg
-        InterceptGate.created = true
+        InterceptGate.created(token)
         return true
     }
 
     override fun onResume() {
         super.onResume()
-        // The service gave up on us and already sent the user Home: do not pop up over the launcher.
-        if (InterceptGate.showing != session?.packageName) {
-            finishAndRemoveTask()
-            return
-        }
-        InterceptGate.resumed = true
+        val s = session ?: return
+        // The service gave up on this launch and moved on: do not pop up over whatever is there now.
+        if (!InterceptGate.resumed(s.token)) finishAndRemoveTask()
     }
 
     private fun open(s: InterceptSession, reason: String?) {
-        if (s.isDecided) return
-        s.open(reason)
+        if (!s.open(reason)) return
         // The app's task is right underneath; finishing reveals it. Relaunch only if something
         // else has taken its place meanwhile — a relaunch would otherwise reset a deep link.
         finishAndRemoveTask()
@@ -85,24 +72,61 @@ class InterceptActivity : ComponentActivity() {
     }
 
     private fun dismiss(s: InterceptSession) {
-        if (s.isDecided) return
         s.dismiss()
         finishAndRemoveTask()
     }
 
     override fun onDestroy() {
-        if (InterceptGate.showing == session?.packageName) InterceptGate.showing = null
+        session?.let { s ->
+            InterceptGate.closed(s.token)
+            monkGraph.intercepts.remove(s.token)
+        }
         super.onDestroy()
     }
 
     companion object {
-        const val EXTRA_PACKAGE = "package"
+        const val EXTRA_TOKEN = "token"
     }
 }
 
-/** Which package the intercept screen is covering, so the service can tell "shown" from "dropped". */
+/**
+ * Which intercept is on screen, keyed by token so a dying instance cannot clear the gate a
+ * fresh one just opened. All access on the main thread.
+ */
 object InterceptGate {
-    @Volatile var showing: String? = null
-    @Volatile var created: Boolean = false
-    @Volatile var resumed: Boolean = false
+    private var token: Long = -1
+    private var pkg: String? = null
+    private var isCreated = false
+    private var isResumed = false
+
+    val showingFor: String? get() = pkg
+
+    fun launching(token: Long, pkg: String) {
+        this.token = token
+        this.pkg = pkg
+        isCreated = false
+        isResumed = false
+    }
+
+    fun created(token: Long) { if (token == this.token) isCreated = true }
+    fun isCreated(token: Long) = token == this.token && isCreated
+
+    /** true if this token is still the live one; marks it resumed. */
+    fun resumed(token: Long): Boolean {
+        if (token != this.token) return false
+        isResumed = true
+        return true
+    }
+
+    fun isResumed(token: Long) = token == this.token && isResumed
+
+    fun closed(token: Long) {
+        if (token != this.token) return
+        this.token = -1
+        pkg = null
+        isCreated = false
+        isResumed = false
+    }
+
+    fun clear() { closed(token) }
 }

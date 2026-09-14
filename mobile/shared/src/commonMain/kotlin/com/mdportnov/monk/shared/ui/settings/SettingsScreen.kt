@@ -35,7 +35,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.mdportnov.monk.shared.MonkRuntime
+import com.mdportnov.monk.shared.platform.MonkPlatform
+import com.mdportnov.monk.shared.ui.LocalHostActions
 import com.mdportnov.monk.shared.data.MonkStore
 import com.mdportnov.monk.shared.data.formatClock
 import com.mdportnov.monk.shared.data.nextMidnightMillis
@@ -51,9 +52,11 @@ import com.mdportnov.monk.shared.ui.components.UpdateCard
 import kotlin.math.roundToInt
 
 @Composable
-fun SettingsScreen(store: MonkStore, modifier: Modifier = Modifier) {
+fun SettingsScreen(store: MonkStore, platform: MonkPlatform, modifier: Modifier = Modifier) {
     val s = strings
     val config by store.config.collectAsStateWithLifecycle()
+    val permissions by platform.permissions.collectAsStateWithLifecycle()
+    val host = LocalHostActions.current
     val strict = config.isStrict(nowMillis())
     var strictCandidate by remember { mutableStateOf<Long?>(null) }
     var confirmReset by remember { mutableStateOf(false) }
@@ -105,7 +108,6 @@ fun SettingsScreen(store: MonkStore, modifier: Modifier = Modifier) {
             )
         }
 
-        val platform = MonkRuntime.platform
         if (platform.supportsBlocking) {
             SectionTitle(s.reliability)
             MonkCard {
@@ -115,8 +117,8 @@ fun SettingsScreen(store: MonkStore, modifier: Modifier = Modifier) {
                 LabeledRow(title = s.notifyWhenOff, subtitle = s.notifyWhenOffHint) {
                     Switch(checked = config.notifyWhenOff, onCheckedChange = { on -> store.updateConfig { it.copy(notifyWhenOff = on) } })
                 }
-                if (config.notifyWhenOff && !platform.permissions().notificationsGranted) {
-                    OutlinedButton(onClick = platform::requestNotificationPermission) { Text(s.notifyPermission) }
+                if (config.notifyWhenOff && !permissions.notificationsGranted) {
+                    OutlinedButton(onClick = host.requestNotificationPermission) { Text(s.notifyPermission) }
                 }
                 LabeledRow(title = s.quickTiles, subtitle = s.quickTilesHint) {}
                 OutlinedButton(onClick = platform::requestAddTiles) { Text(s.addTiles) }
@@ -200,7 +202,7 @@ fun SettingsScreen(store: MonkStore, modifier: Modifier = Modifier) {
         }
 
         SectionTitle(s.about)
-        MonkRuntime.platform.updater?.let { UpdateCard(it, compact = false) }
+        platform.updater?.let { UpdateCard(it, compact = false) }
         MonkCard {
             Text(s.aboutText, style = MaterialTheme.typography.bodyMedium)
             Hint(s.language)

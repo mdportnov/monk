@@ -3,6 +3,15 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.4.0
+
+- Theme choice applies everywhere: window background and status-bar icons follow it from the first frame; Material You option on Android 12+.
+- Update download is 8× smaller (R8 shrinking).
+- Focus started from the tile now wins over a pause screen that was already open.
+- Closing a pause screen right before reopening the same app can no longer let it through.
+- Overlay respects the status bar and gesture area; its countdown pauses under the shade.
+- Unreadable settings are kept as a backup instead of being reset.
+
 ## 1.3.0
 
 - A face of its own: Montserrat, white cards on a tinted ground, a wordmark with the gradient underscore.

@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import com.mdportnov.monk.shared.data.KeyValueStore
 import com.mdportnov.monk.shared.model.InstalledApp
+import kotlinx.coroutines.flow.MutableStateFlow
 import platform.Foundation.NSLocale
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.currentLocale
@@ -29,10 +30,10 @@ class UserDefaultsStore : KeyValueStore {
 object IosPlatform : MonkPlatform {
     override val supportsBlocking = false
     override suspend fun installedApps(): List<InstalledApp> = emptyList()
-    override fun permissions() = PermissionStatus(accessibilityEnabled = false, mayNeedRestrictedSettingsUnlock = false)
+    override val permissions = MutableStateFlow(PermissionStatus(accessibilityEnabled = false, mayNeedRestrictedSettingsUnlock = false))
+    override fun refreshPermissions() = Unit
     override fun openAccessibilitySettings() = Unit
     override fun openAppInfo() = Unit
-    override fun requestNotificationPermission() = Unit
     override fun requestAddTiles() = Unit
     override val updater: Updater? = null
 }

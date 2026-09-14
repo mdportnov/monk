@@ -102,7 +102,6 @@ private fun montserrat(): FontFamily = FontFamily(
     Font(Res.font.Montserrat_Bold, FontWeight.Bold),
 )
 
-@Composable
 private fun monkTypography(family: FontFamily) = Typography(
     displayLarge = TextStyle(fontFamily = family, fontWeight = FontWeight.Bold, fontSize = 44.sp, letterSpacing = (-1.5).sp),
     displayMedium = TextStyle(fontFamily = family, fontWeight = FontWeight.Bold, fontSize = 36.sp, letterSpacing = (-1).sp),
@@ -129,6 +128,7 @@ fun MonkTheme(
 ) {
     val strings = remember { stringsForSystem() }
     val family = montserrat()
+    val typography = remember(family) { monkTypography(family) }
     val dynamic = if (dynamicColor) platformDynamicColorScheme(darkTheme) else null
     // Material You keeps its own surfaces but our accent semantics stay: tertiary must read as
     // "walked away" (green-ish) and error as "blocked", so those two are pinned.
@@ -141,7 +141,7 @@ fun MonkTheme(
         MaterialTheme(
             colorScheme = scheme,
             shapes = MonkShapes,
-            typography = monkTypography(family),
+            typography = typography,
             content = content,
         )
     }

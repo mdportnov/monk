@@ -61,7 +61,7 @@ fun MainScreen(
         when (tab) {
             Tab.Home -> HomeScreen(store, platform, onAddApps, onOpenApp, m)
             Tab.Stats -> StatsScreen(store, m)
-            Tab.Settings -> SettingsScreen(store, m)
+            Tab.Settings -> SettingsScreen(store, platform, m)
         }
     }
 }

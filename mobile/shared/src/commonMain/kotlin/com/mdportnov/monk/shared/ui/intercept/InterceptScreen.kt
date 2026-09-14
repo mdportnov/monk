@@ -65,22 +65,21 @@ import kotlinx.coroutines.delay
  */
 @Composable
 fun InterceptScreen(
-    packageName: String,
-    label: String,
-    mode: BlockMode,
-    delaySeconds: Int,
-    allowMinutes: Int,
-    limitReached: Boolean,
-    dailyLimit: Int?,
-    /** Epoch millis of the focus session end, when one is running. */
-    focusUntil: Long?,
-    timesToday: Int,
-    askIntention: Boolean,
-    /** The user's own line; empty = built-in copy. */
-    message: String = "",
+    state: InterceptUiState,
     onOpen: (Intention?) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val packageName = state.packageName
+    val label = state.label
+    val mode = state.mode
+    val delaySeconds = state.delaySeconds
+    val allowMinutes = state.allowMinutes
+    val limitReached = state.limitReached
+    val dailyLimit = state.dailyLimit
+    val focusUntil = state.focusUntil
+    val timesToday = state.timesToday
+    val askIntention = state.askIntention
+    val message = state.message
     MonkTheme(darkTheme = true) {
         val s = strings
         val focus = focusUntil != null

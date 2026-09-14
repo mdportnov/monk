@@ -11,7 +11,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.ContextCompat
-import com.mdportnov.monk.shared.MonkRuntime
 import com.mdportnov.monk.shared.i18n.stringsForSystem
 
 object MonkNotifications {
@@ -24,8 +23,7 @@ object MonkNotifications {
 
     /** "Protection stopped" — only when the user opted in, apps are watched, and the service is really off. */
     fun serviceOff(context: Context) {
-        if (!MonkRuntime.isInitialized) return
-        val config = MonkRuntime.store.config.value
+        val config = context.monkGraph.store.config.value
         if (!config.notifyWhenOff || config.apps.isEmpty()) return
         if (AndroidPlatform.isAccessibilityServiceEnabled(context)) return
         if (!granted(context)) return

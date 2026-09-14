@@ -19,9 +19,17 @@ import kotlinx.serialization.json.Json
  * on Android the accessibility service, the intercept screen and the main UI all share it, and
  * every caller is on the main thread — the class is not otherwise thread-safe.
  */
-class MonkStore(private val kv: KeyValueStore) {
+class MonkStore(
+    private val kv: KeyValueStore,
+    /** Where decode failures go; the platform wires a logger. */
+    private val onLoadFailure: (key: String, error: Throwable) -> Unit = { _, _ -> },
+) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val allowSerializer = MapSerializer(String.serializer(), Long.serializer())
+
+    /** Non-null when the stored config could not be read; the raw blob is kept under [KEY_CONFIG_BACKUP]. */
+    var configLoadError: Throwable? = null
+        private set
 
     private val _config = MutableStateFlow(load(KEY_CONFIG, MonkConfig.serializer()) ?: MonkConfig())
     val config: StateFlow<MonkConfig> = _config
@@ -120,11 +128,26 @@ class MonkStore(private val kv: KeyValueStore) {
         kv.putString(KEY_STATS, json.encodeToString(Stats.serializer(), next))
     }
 
-    private fun <T> load(key: String, serializer: KSerializer<T>): T? =
-        kv.getString(key)?.let { raw -> runCatching { json.decodeFromString(serializer, raw) }.getOrNull() }
+    /**
+     * Unreadable data is never silently replaced: the raw blob moves to a `.bak` key (the next
+     * write would otherwise overwrite the only copy) and the failure is reported.
+     */
+    private fun <T> load(key: String, serializer: KSerializer<T>): T? {
+        val raw = kv.getString(key) ?: return null
+        return runCatching { json.decodeFromString(serializer, raw) }.getOrElse { e ->
+            kv.putString("$key.bak", raw)
+            if (key == KEY_CONFIG) configLoadError = e
+            onLoadFailure(key, e)
+            null
+        }
+    }
+
+    /** Last backed-up config blob, for a "restore" affordance or a bug report. */
+    fun configBackup(): String? = kv.getString(KEY_CONFIG_BACKUP)
 
     private companion object {
         const val KEY_CONFIG = "config"
+        const val KEY_CONFIG_BACKUP = "config.bak"
         const val KEY_STATS = "stats"
         const val KEY_ALLOW = "allowances"
     }

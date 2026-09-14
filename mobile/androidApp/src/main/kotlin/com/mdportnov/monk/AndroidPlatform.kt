@@ -1,23 +1,44 @@
 package com.mdportnov.monk
 
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.StatusBarManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import android.view.inputmethod.InputMethodManager
+import com.mdportnov.monk.shared.i18n.stringsForSystem
 import com.mdportnov.monk.shared.model.InstalledApp
 import com.mdportnov.monk.shared.platform.MonkPlatform
 import com.mdportnov.monk.shared.platform.PermissionStatus
 import com.mdportnov.monk.shared.platform.Updater
+import com.mdportnov.monk.tiles.FocusTileService
+import com.mdportnov.monk.tiles.PauseTileService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 
 class AndroidPlatform(private val app: Context, override val updater: Updater) : MonkPlatform {
     override val supportsBlocking = true
+
+    private val _permissions = MutableStateFlow(readPermissions())
+    override val permissions: StateFlow<PermissionStatus> = _permissions
+
+    /** Called on Activity resume and when the accessibility service connects / unbinds. */
+    override fun refreshPermissions() { _permissions.value = readPermissions() }
+
+    private fun readPermissions() = PermissionStatus(
+        accessibilityEnabled = isAccessibilityServiceEnabled(app),
+        mayNeedRestrictedSettingsUnlock = isRestrictedSideload(),
+        notificationsGranted = MonkNotifications.granted(app),
+    )
 
     override suspend fun installedApps(): List<InstalledApp> = withContext(Dispatchers.IO) {
         val pm = app.packageManager
@@ -38,40 +59,26 @@ class AndroidPlatform(private val app: Context, override val updater: Updater) :
             .toList()
     }
 
-    override fun permissions() = PermissionStatus(
-        accessibilityEnabled = isAccessibilityServiceEnabled(app),
-        mayNeedRestrictedSettingsUnlock = isRestrictedSideload(),
-        notificationsGranted = MonkNotifications.granted(app),
-    )
-
-    /** Set by MainActivity while it is alive: runtime permissions need an Activity. */
-    @Volatile var notificationPermissionRequester: (() -> Unit)? = null
-
-    override fun requestNotificationPermission() {
-        notificationPermissionRequester?.invoke() ?: openAppInfo()
-    }
-
-    override fun requestAddTiles() {
-        if (Build.VERSION.SDK_INT < 33) return
-        val sbm = app.getSystemService(android.app.StatusBarManager::class.java) ?: return
-        val icon = android.graphics.drawable.Icon.createWithResource(app, R.drawable.ic_tile_focus)
-        val s = com.mdportnov.monk.shared.i18n.stringsForSystem()
-        runCatching {
-            sbm.requestAddTileService(
-                android.content.ComponentName(app, com.mdportnov.monk.tiles.FocusTileService::class.java),
-                s.tileFocus, icon, app.mainExecutor,
-            ) { }
-            sbm.requestAddTileService(
-                android.content.ComponentName(app, com.mdportnov.monk.tiles.PauseTileService::class.java),
-                s.tilePause, android.graphics.drawable.Icon.createWithResource(app, R.drawable.ic_tile_pause), app.mainExecutor,
-            ) { }
-        }
-    }
-
     override fun openAccessibilitySettings() = launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 
     override fun openAppInfo() =
         launch(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${app.packageName}")))
+
+    override fun requestAddTiles() {
+        if (Build.VERSION.SDK_INT < 33) return
+        val sbm = app.getSystemService(StatusBarManager::class.java) ?: return
+        val s = stringsForSystem()
+        runCatching {
+            sbm.requestAddTileService(
+                ComponentName(app, FocusTileService::class.java), s.tileFocus,
+                Icon.createWithResource(app, R.drawable.ic_tile_focus), app.mainExecutor,
+            ) { }
+            sbm.requestAddTileService(
+                ComponentName(app, PauseTileService::class.java), s.tilePause,
+                Icon.createWithResource(app, R.drawable.ic_tile_pause), app.mainExecutor,
+            ) { }
+        }
+    }
 
     private fun launch(intent: Intent) {
         runCatching { app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -85,8 +92,8 @@ class AndroidPlatform(private val app: Context, override val updater: Updater) :
     private fun isRestrictedSideload(): Boolean {
         if (Build.VERSION.SDK_INT < 33) return false
         val source = runCatching { app.packageManager.getInstallSourceInfo(app.packageName) }.getOrNull() ?: return false
-        return source.packageSource == android.content.pm.PackageInstaller.PACKAGE_SOURCE_DOWNLOADED_FILE ||
-            source.packageSource == android.content.pm.PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE
+        return source.packageSource == PackageInstaller.PACKAGE_SOURCE_DOWNLOADED_FILE ||
+            source.packageSource == PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE
     }
 
     companion object {

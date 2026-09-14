@@ -33,7 +33,7 @@ kotlin {
     }
 
         compilerOptions {
-        freeCompilerArgs.addAll("-Xexpect-actual-classes", "-opt-in=kotlin.time.ExperimentalTime")
+        freeCompilerArgs.add("-opt-in=kotlin.time.ExperimentalTime")
     }
 
     sourceSets {
@@ -54,7 +54,6 @@ kotlin {
         }
         androidMain.dependencies {
             implementation(libs.androidx.core.ktx)
-            implementation(libs.androidx.activity.compose)
         }
     }
 }

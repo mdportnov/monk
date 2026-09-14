@@ -4,7 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
-import com.mdportnov.monk.MonkApplication
+import com.mdportnov.monk.monkGraph
 
 /**
  * Status callbacks of a committed [PackageInstaller] session. STATUS_PENDING_USER_ACTION hands us
@@ -20,8 +20,8 @@ class InstallResultReceiver : BroadcastReceiver() {
                     runCatching { context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 }
             }
-            PackageInstaller.STATUS_SUCCESS -> MonkApplication.updater(context)?.onInstallResult(true, null)
-            else -> MonkApplication.updater(context)?.onInstallResult(false, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
+            PackageInstaller.STATUS_SUCCESS -> context.monkGraph.updater.onInstallResult(true, null)
+            else -> context.monkGraph.updater.onInstallResult(false, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
         }
     }
 

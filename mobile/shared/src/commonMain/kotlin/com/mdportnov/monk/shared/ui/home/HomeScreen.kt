@@ -97,9 +97,9 @@ fun HomeScreen(
     val config by store.config.collectAsStateWithLifecycle()
     val stats by store.stats.collectAsStateWithLifecycle()
     val allowances by store.allowances.collectAsStateWithLifecycle()
-    var permissions by remember { mutableStateOf(platform.permissions()) }
+    val permissions by platform.permissions.collectAsStateWithLifecycle()
     LifecycleResumeEffect(Unit) {
-        permissions = platform.permissions()
+        platform.refreshPermissions()
         onPauseOrDispose { }
     }
     // A 30 s heartbeat: pause / strict / allowance countdowns and the schedule flip on their own.
@@ -278,11 +278,10 @@ private fun PauseChip(label: String, onClick: () -> Unit) {
 @Composable
 private fun WeekCard(stats: Stats) {
     val s = strings
-    val week = lastDates(7)
-    val days = week.map { stats.day(it) }
+    val days = remember(stats) { lastDates(7).map { stats.day(it) } }
     val paused = days.sumOf { it.intercepted }
     val away = days.sumOf { it.turnedAway }
-    val streak = stats.walkAwayStreak(lastDates(90))
+    val streak = remember(stats) { stats.walkAwayStreak(lastDates(90)) }
     MonkCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {

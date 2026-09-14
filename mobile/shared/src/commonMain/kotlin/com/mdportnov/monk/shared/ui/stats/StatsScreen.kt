@@ -124,7 +124,7 @@ fun StatsScreen(store: MonkStore, modifier: Modifier = Modifier) {
 
             SectionTitle(s.byApp)
             MonkCard {
-                val perApp = stats.perApp(dates)
+                val perApp = remember(stats, dates) { stats.perApp(dates) }
                 if (perApp.isEmpty()) Hint(s.noData)
                 val max = perApp.maxOfOrNull { it.second.intercepted }?.coerceAtLeast(1) ?: 1
                 perApp.forEach { (pkg, a) ->
@@ -159,10 +159,10 @@ fun StatsScreen(store: MonkStore, modifier: Modifier = Modifier) {
             SectionTitle(s.byHour)
             MonkCard {
                 Hint(s.byHourHint)
-                HourChart(stats.byHour(dates))
+                HourChart(remember(stats, dates) { stats.byHour(dates) })
             }
 
-            val reasons = stats.reasons(dates)
+            val reasons = remember(stats, dates) { stats.reasons(dates) }
             if (reasons.isNotEmpty()) {
                 SectionTitle(s.reasons)
                 MonkCard {

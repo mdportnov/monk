@@ -40,6 +40,7 @@ import com.mdportnov.monk.shared.data.MonkStore
 import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.BlockedApp
 import com.mdportnov.monk.shared.model.InstalledApp
+import com.mdportnov.monk.shared.model.SuggestedApps
 import com.mdportnov.monk.shared.platform.AppIcon
 import com.mdportnov.monk.shared.platform.MonkPlatform
 
@@ -58,6 +59,7 @@ fun AddAppsScreen(store: MonkStore, platform: MonkPlatform, onClose: () -> Unit)
         val q = query.trim().lowercase()
         apps.orEmpty().filter { q.isEmpty() || it.label.lowercase().contains(q) || it.packageName.contains(q) }
     }
+    val suggested = remember(apps) { SuggestedApps.pick(apps.orEmpty()) }
     val added = selected - already
 
     Scaffold(
@@ -103,26 +105,53 @@ fun AddAppsScreen(store: MonkStore, platform: MonkPlatform, onClose: () -> Unit)
                     }
                 }
                 else -> LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-                    items(visible, key = { it.packageName }) { app ->
-                        val checked = app.packageName in selected
-                        Surface(
-                            onClick = { selected = if (checked) selected - app.packageName else selected + app.packageName },
-                            color = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                AppIcon(app.packageName, 40.dp)
-                                Spacer(Modifier.size(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(app.label, style = MaterialTheme.typography.bodyLarge)
-                                    Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (query.isBlank() && suggested.isNotEmpty()) {
+                        item {
+                            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(s.suggested, style = MaterialTheme.typography.titleSmall)
+                                        Text(s.suggestedHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    TextButton(onClick = { selected = selected + suggested.map { it.packageName } }) { Text(s.addSuggested) }
                                 }
-                                Checkbox(checked = checked, onCheckedChange = null)
                             }
                         }
+                        items(suggested, key = { "s:" + it.packageName }) { app ->
+                            AppPickRow(app, app.packageName in selected) { on -> selected = if (on) selected + app.packageName else selected - app.packageName }
+                        }
+                        item {
+                            Text(
+                                s.allApps,
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+                    items(visible, key = { it.packageName }) { app ->
+                        AppPickRow(app, app.packageName in selected) { on -> selected = if (on) selected + app.packageName else selected - app.packageName }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AppPickRow(app: InstalledApp, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Surface(
+        onClick = { onChange(!checked) },
+        color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            AppIcon(app.packageName, 40.dp)
+            Spacer(Modifier.size(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(app.label, style = MaterialTheme.typography.bodyLarge)
+                Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Checkbox(checked = checked, onCheckedChange = null)
         }
     }
 }

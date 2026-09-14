@@ -44,7 +44,11 @@ import com.mdportnov.monk.shared.data.localMoment
 import com.mdportnov.monk.shared.ui.components.LabeledRow
 import com.mdportnov.monk.shared.ui.components.MonkCard
 import com.mdportnov.monk.shared.ui.components.SectionTitle
-import com.mdportnov.monk.shared.ui.settings.DurationPicker
+import com.mdportnov.monk.shared.ui.components.SettingBlock
+import com.mdportnov.monk.shared.ui.components.SettingRow
+import com.mdportnov.monk.shared.ui.components.SettingsDivider
+import com.mdportnov.monk.shared.ui.components.SettingsGroup
+import com.mdportnov.monk.shared.ui.components.SliderSetting
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,27 +108,28 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
             }
 
             SectionTitle(s.modeTitle)
-            MonkCard {
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    SegmentedButton(
-                        selected = app.mode == BlockMode.DELAY,
-                        enabled = !strict,
-                        onClick = { store.upsertApp(app.copy(mode = BlockMode.DELAY)) },
-                        shape = SegmentedButtonDefaults.itemShape(0, 2),
-                    ) { Text(s.modeDelay) }
-                    SegmentedButton(
-                        selected = app.mode == BlockMode.BLOCK,
-                        onClick = { store.upsertApp(app.copy(mode = BlockMode.BLOCK)) },
-                        shape = SegmentedButtonDefaults.itemShape(1, 2),
-                    ) { Text(s.modeBlock) }
+            SettingsGroup {
+                SettingBlock(subtitle = if (app.mode == BlockMode.BLOCK) s.modeBlockHint else s.modeDelayHint) {
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        SegmentedButton(
+                            selected = app.mode == BlockMode.DELAY,
+                            enabled = !strict,
+                            onClick = { store.upsertApp(app.copy(mode = BlockMode.DELAY)) },
+                            shape = SegmentedButtonDefaults.itemShape(0, 2),
+                        ) { Text(s.modeDelay) }
+                        SegmentedButton(
+                            selected = app.mode == BlockMode.BLOCK,
+                            onClick = { store.upsertApp(app.copy(mode = BlockMode.BLOCK)) },
+                            shape = SegmentedButtonDefaults.itemShape(1, 2),
+                        ) { Text(s.modeBlock) }
+                    }
                 }
-                Hint(if (app.mode == BlockMode.BLOCK) s.modeBlockHint else s.modeDelayHint)
             }
 
             if (app.mode == BlockMode.DELAY) {
                 SectionTitle(s.delayLength)
-                MonkCard {
-                    LabeledRow(title = s.useDefault, subtitle = "${config.defaultDelaySeconds} ${s.seconds}") {
+                SettingsGroup {
+                    SettingRow(title = s.useDefault, subtitle = "${config.defaultDelaySeconds} ${s.seconds}") {
                         Switch(
                             checked = app.delaySeconds == null,
                             enabled = !strict,
@@ -134,19 +139,18 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
                         )
                     }
                     if (app.delaySeconds != null) {
-                        DurationPicker(
-                            value = app.delaySeconds,
-                            range = 3..120,
-                            unit = s.seconds,
-                            enabled = !strict,
+                        SettingsDivider()
+                        SliderSetting(
+                            title = s.delayLength, hint = s.delayLengthHint, value = app.delaySeconds, unit = s.seconds,
+                            range = 3..120, enabled = !strict,
                             onChange = { store.upsertApp(app.copy(delaySeconds = it)) },
                         )
                     }
                 }
 
                 SectionTitle(s.allowLength)
-                MonkCard {
-                    LabeledRow(title = s.useDefault, subtitle = "${config.defaultAllowMinutes} ${s.minutes}") {
+                SettingsGroup {
+                    SettingRow(title = s.useDefault, subtitle = "${config.defaultAllowMinutes} ${s.minutes}") {
                         Switch(
                             checked = app.allowMinutes == null,
                             enabled = !strict,
@@ -156,19 +160,18 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
                         )
                     }
                     if (app.allowMinutes != null) {
-                        DurationPicker(
-                            value = app.allowMinutes,
-                            range = 1..60,
-                            unit = s.minutes,
-                            enabled = !strict,
+                        SettingsDivider()
+                        SliderSetting(
+                            title = s.allowLength, hint = s.allowLengthHint, value = app.allowMinutes, unit = s.minutes,
+                            range = 1..60, enabled = !strict,
                             onChange = { store.upsertApp(app.copy(allowMinutes = it)) },
                         )
                     }
                 }
 
                 SectionTitle(s.dailyLimit)
-                MonkCard {
-                    LabeledRow(title = s.noLimit, subtitle = s.dailyLimitHint) {
+                SettingsGroup {
+                    SettingRow(title = s.noLimit, subtitle = s.dailyLimitHint) {
                         Switch(
                             checked = app.dailyLimit == null,
                             enabled = !strict,
@@ -176,11 +179,10 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit) 
                         )
                     }
                     if (app.dailyLimit != null) {
-                        DurationPicker(
-                            value = app.dailyLimit,
-                            range = 1..20,
-                            unit = s.times,
-                            enabled = !strict,
+                        SettingsDivider()
+                        SliderSetting(
+                            title = s.dailyLimit, hint = null, value = app.dailyLimit, unit = s.times,
+                            range = 1..20, enabled = !strict,
                             onChange = { store.upsertApp(app.copy(dailyLimit = it)) },
                         )
                     }

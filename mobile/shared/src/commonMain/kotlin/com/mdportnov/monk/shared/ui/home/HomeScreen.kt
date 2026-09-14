@@ -28,10 +28,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Accessibility
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -73,6 +76,8 @@ import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.BlockMode
 import com.mdportnov.monk.shared.model.BlockedApp
 import com.mdportnov.monk.shared.model.MonkConfig
+import com.mdportnov.monk.shared.model.InstalledApp
+import com.mdportnov.monk.shared.model.SuggestedApps
 import com.mdportnov.monk.shared.model.Stats
 import com.mdportnov.monk.shared.platform.AppIcon
 import com.mdportnov.monk.shared.platform.MonkPlatform
@@ -91,7 +96,8 @@ fun HomeScreen(
     platform: MonkPlatform,
     onAddApps: () -> Unit,
     onOpenApp: (String) -> Unit,
-    modifier: Modifier = Modifier,
+    listState: LazyListState,
+    contentPadding: PaddingValues,
 ) {
     val s = strings
     val config by store.config.collectAsStateWithLifecycle()
@@ -113,9 +119,10 @@ fun HomeScreen(
     val apps = remember(config.apps) { config.apps.sortedBy { it.label.lowercase() } }
     val today = localMoment().dateIso
 
-    Box(modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize()) {
         LazyColumn(
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+            state = listState,
+            contentPadding = contentPadding,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { Header() }
@@ -123,15 +130,19 @@ fun HomeScreen(
                 item { UnsupportedCard() }
             } else {
                 platform.updater?.let { u -> item { UpdateCard(u, compact = true) } }
-                item { StatusCard(store, config, permissions, now) }
-                if (!permissions.accessibilityEnabled) {
+                if (permissions.accessibilityEnabled) {
+                    item { StatusCard(store, config, permissions, now) }
+                    item { WeekCard(stats) }
+                } else {
                     item { SetupCard(permissions, platform) }
                 }
-                item { WeekCard(stats) }
+            }
+            if (!config.helpDismissed && apps.isEmpty()) {
+                item { HowItWorksCard(onDismiss = { store.updateConfig { it.copy(helpDismissed = true) } }) }
             }
             item { SectionTitle(s.blockedApps, Modifier.padding(top = 8.dp)) }
             if (apps.isEmpty()) {
-                item { EmptyApps(onAddApps) }
+                item { EmptyApps(platform, store, onAddApps) }
             }
             items(apps, key = { it.packageName }) { app ->
                 Box(Modifier.animateItem()) {
@@ -151,7 +162,7 @@ fun HomeScreen(
                 onClick = onAddApps,
                 icon = { Icon(Icons.Outlined.Add, null) },
                 text = { Text(s.addApps) },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = contentPadding.calculateBottomPadding() - 8.dp, end = 16.dp),
             )
         }
     }
@@ -232,6 +243,7 @@ private fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permis
             }
         }
         if (config.enabled && permissions.accessibilityEnabled && !focus) {
+            Hint(s.pauseFocusHint)
             if (paused) {
                 OutlinedButton(onClick = store::resumeProtection) { Text(s.resume) }
             } else {
@@ -322,25 +334,43 @@ private fun Sparkline(away: List<Int>, opened: List<Int>) {
     }
 }
 
+/** Replaces the status card while the service is off: one job, one button, the exact path. */
 @Composable
 private fun SetupCard(permissions: PermissionStatus, platform: MonkPlatform) {
     val s = strings
     MonkCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.ErrorOutline, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.size(8.dp))
-            Text(s.setupTitle, style = MaterialTheme.typography.titleMedium)
-        }
-        LabeledRow(title = s.setupAccessibility, subtitle = s.setupAccessibilityHint) {
-            if (permissions.accessibilityEnabled) {
-                Icon(Icons.Outlined.CheckCircle, s.enabled, tint = MonkColors.Mint)
-            } else {
-                Button(onClick = platform::openAccessibilitySettings) { Text(s.enable) }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Outlined.Accessibility, null, tint = MaterialTheme.colorScheme.primary) }
+            Column {
+                Text(s.setupTitle, style = MaterialTheme.typography.titleMedium)
+                Text(s.setupAccessibility, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        Text(s.setupAccessibilityHint, style = MaterialTheme.typography.bodyMedium)
+        Steps(s.setupSteps)
+        Button(onClick = platform::openAccessibilitySettings, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(s.openAccessibilitySettings) }
         if (permissions.mayNeedRestrictedSettingsUnlock) {
             Hint(s.setupRestricted)
             TextButton(onClick = platform::openAppInfo) { Text(s.appInfo) }
+        }
+    }
+}
+
+/** Numbered circles with one line each. */
+@Composable
+private fun Steps(steps: List<String>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        steps.forEachIndexed { i, text ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.size(22.dp).background(MaterialTheme.colorScheme.primary, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) { Text("${i + 1}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary) }
+                Text(text, style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 }
@@ -359,15 +389,50 @@ private fun UnsupportedCard() {
 }
 
 @Composable
-private fun EmptyApps(onAddApps: () -> Unit) {
+private fun HowItWorksCard(onDismiss: () -> Unit) {
     val s = strings
+    MonkCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(s.howTitle, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = onDismiss) { Text(s.gotIt) }
+        }
+        Steps(listOf(s.howStep1, s.howStep2, s.howStep3).map { it.substringAfter(". ") })
+        Hint(s.howStep4)
+    }
+}
+
+@Composable
+private fun EmptyApps(platform: MonkPlatform, store: MonkStore, onAddApps: () -> Unit) {
+    val s = strings
+    var suggested by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
+    LaunchedEffect(Unit) { if (platform.supportsBlocking) suggested = SuggestedApps.pick(platform.installedApps()) }
     MonkCard {
         Text(s.noApps, style = MaterialTheme.typography.titleMedium)
         Text(s.noAppsHint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedButton(onClick = onAddApps) {
-            Icon(Icons.Outlined.Add, null)
-            Spacer(Modifier.size(6.dp))
-            Text(s.addApps)
+        if (suggested.isNotEmpty()) {
+            Text(s.suggested, style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                suggested.forEach { app ->
+                    AssistChip(
+                        onClick = { store.upsertApp(BlockedApp(app.packageName, app.label)) },
+                        label = { Text(app.label) },
+                        leadingIcon = { AppIcon(app.packageName, 18.dp) },
+                    )
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (suggested.isNotEmpty()) {
+                Button(
+                    onClick = { suggested.forEach { store.upsertApp(BlockedApp(it.packageName, it.label)) } },
+                    modifier = Modifier.weight(1f),
+                ) { Text(s.addSuggested) }
+            }
+            OutlinedButton(onClick = onAddApps, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Outlined.Add, null)
+                Spacer(Modifier.size(6.dp))
+                Text(s.allApps)
+            }
         }
     }
 }

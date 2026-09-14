@@ -17,7 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mdportnov.monk.shared.i18n.LocalStrings
-import com.mdportnov.monk.shared.i18n.stringsForSystem
+import com.mdportnov.monk.shared.i18n.stringsFor
 import com.mdportnov.monk.shared.resources.Montserrat_Bold
 import com.mdportnov.monk.shared.resources.Montserrat_Medium
 import com.mdportnov.monk.shared.resources.Montserrat_Regular
@@ -124,9 +124,10 @@ private fun monkTypography(family: FontFamily) = Typography(
 fun MonkTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
+    language: String = "system",
     content: @Composable () -> Unit,
 ) {
-    val strings = remember { stringsForSystem() }
+    val strings = remember(language) { stringsFor(language) }
     val family = montserrat()
     val typography = remember(family) { monkTypography(family) }
     val dynamic = if (dynamicColor) platformDynamicColorScheme(darkTheme) else null

@@ -26,6 +26,8 @@ interface MonkPlatform {
     fun openAppInfo()
     /** Offers to add the Quick Settings tiles (Android 13+); no-op elsewhere. */
     fun requestAddTiles()
+    /** Tell the OS the app's language ("system" = follow the device), so system-facing strings match. */
+    fun applyAppLanguage(language: String)
     val updater: Updater?
 }
 

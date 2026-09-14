@@ -71,6 +71,10 @@ data class MonkConfig(
     /** Epoch millis; until then every watched app is blocked outright. One-way. 0 = off. */
     val focusUntil: Long = 0,
     val theme: ThemeMode = ThemeMode.SYSTEM,
+    /** "system", "en" or "ru". */
+    val language: String = "system",
+    /** The "How Monk works" card on Home was dismissed. */
+    val helpDismissed: Boolean = false,
     /** Material You palette from the wallpaper (Android 12+). Ignored where unsupported. */
     val dynamicColor: Boolean = false,
     /** Ask "why?" on the pause screen before opening; the answer lands in stats. */

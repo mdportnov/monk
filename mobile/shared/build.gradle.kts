@@ -48,6 +48,8 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
+            implementation(libs.haze)
+            implementation(libs.haze.materials)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

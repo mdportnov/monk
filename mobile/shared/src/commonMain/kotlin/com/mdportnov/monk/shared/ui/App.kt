@@ -51,7 +51,7 @@ fun resolveDarkTheme(mode: ThemeMode): Boolean = when (mode) {
     ThemeMode.DARK -> true
 }
 
-private data class ThemeChoice(val mode: ThemeMode, val dynamic: Boolean)
+private data class ThemeChoice(val mode: ThemeMode, val dynamic: Boolean, val language: String)
 
 @Composable
 fun MonkApp(
@@ -64,11 +64,13 @@ fun MonkApp(
     val nav = remember { Navigator() }
     onBackHandler(nav.canGoBack) { nav.pop() }
     // Only the theme choice reaches the root: a slider commit elsewhere must not recompose it.
-    val themeFlow = remember(store) { store.config.map { ThemeChoice(it.theme, it.dynamicColor) }.distinctUntilChanged() }
-    val choice by themeFlow.collectAsStateWithLifecycle(ThemeChoice(store.config.value.theme, store.config.value.dynamicColor))
+    val themeFlow = remember(store) { store.config.map { ThemeChoice(it.theme, it.dynamicColor, it.language) }.distinctUntilChanged() }
+    val c0 = store.config.value
+    val choice by themeFlow.collectAsStateWithLifecycle(ThemeChoice(c0.theme, c0.dynamicColor, c0.language))
     val dark = resolveDarkTheme(choice.mode)
     LaunchedEffect(dark) { onThemeResolved(dark) }
-    MonkTheme(darkTheme = dark, dynamicColor = choice.dynamic) {
+    LaunchedEffect(choice.language) { graph.platform.applyAppLanguage(choice.language) }
+    MonkTheme(darkTheme = dark, dynamicColor = choice.dynamic, language = choice.language) {
         Surface(Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = nav.current,

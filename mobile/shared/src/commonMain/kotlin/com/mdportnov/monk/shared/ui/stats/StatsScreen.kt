@@ -11,7 +11,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -50,7 +51,7 @@ import com.mdportnov.monk.shared.ui.components.SectionTitle
 private enum class Range(val days: Int) { Today(1), Week(7), All(90) }
 
 @Composable
-fun StatsScreen(store: MonkStore, modifier: Modifier = Modifier) {
+fun StatsScreen(store: MonkStore, scrollState: ScrollState, contentPadding: PaddingValues) {
     val s = strings
     val stats by store.stats.collectAsStateWithLifecycle()
     val config by store.config.collectAsStateWithLifecycle()
@@ -63,7 +64,7 @@ fun StatsScreen(store: MonkStore, modifier: Modifier = Modifier) {
     val labels = remember(config.apps) { config.apps.associate { it.packageName to it.label } }
 
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(s.tabStats, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 4.dp))
@@ -93,6 +94,7 @@ fun StatsScreen(store: MonkStore, modifier: Modifier = Modifier) {
             } else {
                 Hint(s.statsEmpty)
             }
+            Hint(s.walkedAwayHint)
         }
 
         if (intercepted > 0) {

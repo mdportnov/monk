@@ -38,13 +38,41 @@ class Strings(private val ru: Boolean) {
     fun pauses(n: Int) = t(if (n == 1) "1 pause" else "$n pauses", "$n ${plural(n, "остановка", "остановки", "остановок")}")
     val strictLocked get() = t("Locked by strict mode", "Заблокировано строгим режимом")
 
+    // Onboarding / help
+    val howTitle get() = t("How Monk works", "Как работает Monk")
+    val howStep1 get() = t("1. Pick the apps you open on autopilot.", "1. Выберите приложения, которые открываете на автопилоте.")
+    val howStep2 get() = t("2. When you open one, Monk shows a pause screen with a short countdown instead of the app.", "2. При открытии вместо приложения появляется экран паузы с коротким отсчётом.")
+    val howStep3 get() = t("3. After the countdown you choose: open it for a few minutes, or walk away.", "3. После отсчёта вы решаете: открыть на несколько минут или уйти.")
+    val howStep4 get() = t("Block mode skips the choice: the app just does not open.", "Режим «Запрет» без выбора: приложение просто не открывается.")
+    val gotIt get() = t("Got it", "Понятно")
+    val suggested get() = t("Suggested", "Рекомендуем")
+    val suggestedHint get() = t("Installed on this phone and known to eat time.", "Стоят на этом телефоне и известны тем, что съедают время.")
+    val allApps get() = t("All apps", "Все приложения")
+    val pauseFocusHint get() = t("Pause turns protection off for a while. Focus blocks every watched app and cannot be stopped early.", "Пауза отключает защиту на время. Фокус закрывает все приложения под контролем и не останавливается раньше срока.")
+    val delayLengthHint get() = t("How long the countdown on the pause screen lasts before you may open the app.", "Сколько длится отсчёт на экране паузы, прежде чем приложение можно открыть.")
+    val allowLengthHint get() = t("After you choose to open, how long the app stays available before Monk asks again.", "После того как вы решили открыть: сколько приложение доступно, прежде чем Monk спросит снова.")
+    val walkedAwayHint get() = t("«Walked away» = closed the pause screen without opening the app.", "«Ушли» = закрыли экран паузы, не открыв приложение.")
+    val languageTitle get() = t("Language", "Язык")
+    val languageSystem get() = t("System", "Система")
+
     // Setup
-    val setupTitle get() = t("Finish setup", "Завершите настройку")
+    val setupTitle get() = t("Turn on protection", "Включите защиту")
     val setupAccessibility get() = t("Accessibility service", "Служба специальных возможностей")
     val setupAccessibilityHint get() = t(
         "Monk needs it to notice which app is in front. It never reads screen content.",
         "Нужна, чтобы Monk видел, какое приложение открыто. Содержимое экрана не читается.",
     )
+    val setupSteps: List<String> get() = if (ru) listOf(
+        "Откройте «Установленные приложения» (или «Скачанные»)",
+        "Выберите Monk и включите переключатель",
+        "Подтвердите «Разрешить» и вернитесь сюда",
+    ) else listOf(
+        "Open \"Installed apps\" (or \"Downloaded apps\")",
+        "Choose Monk and turn it on",
+        "Confirm \"Allow\" and come back",
+    )
+    val openAccessibilitySettings get() = t("Open accessibility settings", "Открыть настройки специальных возможностей")
+    val addSuggested get() = t("Add suggested", "Добавить рекомендуемые")
     val setupRestricted get() = t(
         "Android 13+: the switch is greyed out for sideloaded apps. Tap it once anyway, then open App info → ⋮ → Allow restricted settings, and come back.",
         "Android 13+: для установленных вручную приложений переключатель серый. Всё равно нажмите его один раз, затем откройте О приложении → ⋮ → Разрешить ограниченные настройки и вернитесь.",
@@ -135,7 +163,7 @@ class Strings(private val ru: Boolean) {
     fun strictConfirmBody(time: String) = t("Nothing can be softened until $time. Not even by you.", "До $time ничего нельзя ослабить. Даже вам.")
     val confirm get() = t("Enable", "Включить")
     val appearance get() = t("Appearance", "Оформление")
-    val themeSystem get() = t("System", "Как в системе")
+    val themeSystem get() = t("System", "Система")
     val themeLight get() = t("Light", "Светлая")
     val themeDark get() = t("Dark", "Тёмная")
     val dynamicColor get() = t("Wallpaper colors", "Цвета обоев")
@@ -164,7 +192,7 @@ class Strings(private val ru: Boolean) {
         "Monk puts a moment of friction between you and the apps you open on autopilot. Everything stays on the device; the network is used only to check GitHub for updates.",
         "Monk ставит секунду трения между вами и приложениями, которые открываются на автопилоте. Всё остаётся на телефоне; сеть нужна только для проверки обновлений на GitHub.",
     )
-    val language get() = t("Language follows the system", "Язык берётся из системы")
+    val language get() = t("Two languages: English and Russian. The pause screen, tiles and notifications follow the same choice.", "Два языка: русский и английский. Экран паузы, плитки и уведомления следуют тому же выбору.")
     val dayShort: List<String> = if (ru) listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс") else listOf("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su")
 
     // Stats
@@ -228,6 +256,13 @@ class Strings(private val ru: Boolean) {
 val LocalStrings = staticCompositionLocalOf { Strings(ru = false) }
 
 fun stringsForSystem() = Strings(ru = systemLanguage().lowercase().startsWith("ru"))
+
+/** "system" follows the device; otherwise a language tag. */
+fun stringsFor(language: String): Strings = when (language) {
+    "ru" -> Strings(ru = true)
+    "en" -> Strings(ru = false)
+    else -> stringsForSystem()
+}
 
 val strings: Strings
     @Composable get() = LocalStrings.current

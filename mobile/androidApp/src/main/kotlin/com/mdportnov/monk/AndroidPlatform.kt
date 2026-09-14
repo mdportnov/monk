@@ -80,6 +80,18 @@ class AndroidPlatform(private val app: Context, override val updater: Updater) :
         }
     }
 
+    /**
+     * Android 13+ per-app locale: the accessibility service label, tiles and notifications are
+     * rendered by the system from resources, so they follow only if the OS knows the choice.
+     * Also flips Locale.getDefault() in-process, which stringsForSystem() reads.
+     */
+    override fun applyAppLanguage(language: String) {
+        if (Build.VERSION.SDK_INT < 33) return
+        val lm = app.getSystemService(android.app.LocaleManager::class.java) ?: return
+        val wanted = if (language == "system") android.os.LocaleList.getEmptyLocaleList() else android.os.LocaleList.forLanguageTags(language)
+        if (lm.applicationLocales != wanted) runCatching { lm.applicationLocales = wanted }
+    }
+
     private fun launch(intent: Intent) {
         runCatching { app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }

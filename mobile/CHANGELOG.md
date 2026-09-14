@@ -3,6 +3,14 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.5.0
+
+- Russian: pick the language in Settings (system / English / Русский); on Android 13+ the tiles, notifications and service name follow.
+- Liquid glass: a violet-black top bar that condenses out of the page as you scroll, and a floating glass dock.
+- Settings rebuilt as proper rows with icons, value pills and plain-language hints for every control.
+- "How Monk works" on first run and in Settings; a step-by-step card for turning the accessibility service on.
+- Suggested apps: Instagram, YouTube, TikTok, Threads, Telegram and other known time sinks, only the ones installed, one tap to add.
+
 ## 1.4.0
 
 - Theme choice applies everywhere: window background and status-bar icons follow it from the first frame; Material You option on Android 12+.

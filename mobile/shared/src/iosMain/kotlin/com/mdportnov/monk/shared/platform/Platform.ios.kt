@@ -35,6 +35,7 @@ object IosPlatform : MonkPlatform {
     override fun openAccessibilitySettings() = Unit
     override fun openAppInfo() = Unit
     override fun requestAddTiles() = Unit
+    override fun applyAppLanguage(language: String) = Unit
     override val updater: Updater? = null
 }
 

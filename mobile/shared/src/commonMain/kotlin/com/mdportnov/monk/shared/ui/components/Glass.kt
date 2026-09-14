@@ -558,7 +558,7 @@ fun GlassActionPill(text: String, icon: ImageVector, onClick: () -> Unit, hazeSt
     val h = rememberHaptics()
     Row(
         modifier
-            .height(52.dp)
+            .height(AddAppsPillHeight)
             .shadow(14.dp, shape, spotColor = chromeAccent().copy(alpha = if (dark) 0.35f else 0.18f), ambientColor = Color.Black.copy(alpha = 0.08f))
             .clip(shape)
             .background(MaterialTheme.colorScheme.primary)
@@ -571,6 +571,9 @@ fun GlassActionPill(text: String, icon: ImageVector, onClick: () -> Unit, hazeSt
         Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimary)
     }
 }
+
+/** Height of the floating action pill; a list under one reserves this much room to scroll clear of it. */
+val AddAppsPillHeight = 52.dp
 
 /** Status-bar inset + top bar height: what content must leave free under an always-on GlassTopBar. */
 @Composable

@@ -21,12 +21,15 @@ import com.mdportnov.monk.shared.ui.Motion
 import com.mdportnov.monk.shared.ui.Motion.itemMotion
 import com.mdportnov.monk.shared.ui.components.Counter
 import com.mdportnov.monk.shared.ui.components.GlassActionPill
+import com.mdportnov.monk.shared.ui.components.AddAppsPillHeight
 import com.mdportnov.monk.shared.ui.components.PageHeaderSlot
 import androidx.compose.ui.text.font.FontStyle
 import dev.chrisbanes.haze.HazeState
 import com.mdportnov.monk.shared.ui.components.FitText
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -76,6 +79,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -148,10 +152,22 @@ fun HomeScreen(
     val watchedPackages = remember(config.apps) { config.apps.map { it.packageName }.toSet() }
     val screenTime = rememberScreenTime(platform, days = 7, packages = watchedPackages, granted = permissions.usageAccessGranted, tick = now / 60_000)
 
+    // The "Add apps" pill floats over the list; without room of its own it would sit on the last
+    // row for good, since a short list cannot be scrolled clear of it.
+    val pillShown = apps.isNotEmpty() && platform.supportsBlocking
+    val direction = LocalLayoutDirection.current
+    val listPadding = remember(contentPadding, pillShown, direction) {
+        if (!pillShown) contentPadding else PaddingValues(
+            start = contentPadding.calculateStartPadding(direction),
+            end = contentPadding.calculateEndPadding(direction),
+            top = contentPadding.calculateTopPadding(),
+            bottom = contentPadding.calculateBottomPadding() + AddAppsPillHeight + 12.dp,
+        )
+    }
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
-            contentPadding = contentPadding,
+            contentPadding = listPadding,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item(key = "header") { Header() }
@@ -202,7 +218,7 @@ fun HomeScreen(
             }
         }
         AnimatedVisibility(
-            visible = apps.isNotEmpty() && platform.supportsBlocking,
+            visible = pillShown,
             enter = Motion.appear(),
             exit = Motion.disappear(),
             modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = contentPadding.calculateBottomPadding() - 16.dp, end = 20.dp),
@@ -290,19 +306,13 @@ private fun TodayCard(config: MonkConfig, stats: Stats, now: Long, today: String
         // The counters only add up once every pause has ended; say so while they do not.
         val pending = day.intercepted - day.turnedAway - day.opened
         if (pending > 0) Hint(s.pendingCount(pending))
-        // A pull-quote: a thin gradient rule on the left, the line set a size up, no quote marks.
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(
-                Modifier.width(3.dp).height(40.dp).clip(RoundedCornerShape(2.dp))
-                    .background(Brush.verticalGradient(listOf(MonkColors.Blue, MonkColors.Violet))),
-            )
-            Text(
-                quote,
-                style = MaterialTheme.typography.titleMedium.copy(fontStyle = FontStyle.Italic, fontWeight = FontWeight.Medium, lineHeight = 22.sp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-                modifier = Modifier.weight(1f).align(Alignment.CenterVertically),
-            )
-        }
+        // A pull-quote: set a size up in italics, no rule and no quote marks — the type carries it.
+        Text(
+            quote,
+            style = MaterialTheme.typography.titleMedium.copy(fontStyle = FontStyle.Italic, fontWeight = FontWeight.Medium, lineHeight = 22.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        )
     }
 }
 

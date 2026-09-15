@@ -34,7 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CenterFocusStrong
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Coffee
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
@@ -91,9 +91,14 @@ import com.mdportnov.monk.shared.data.formatClock
 import com.mdportnov.monk.shared.data.localMoment
 import com.mdportnov.monk.shared.data.nextMidnightMillis
 import com.mdportnov.monk.shared.data.nowMillis
+import com.mdportnov.monk.shared.data.clockAfterWallMinutes
 import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.MonkConfig
 import com.mdportnov.monk.shared.model.ProtectionState
+import com.mdportnov.monk.shared.model.Routine
+import com.mdportnov.monk.shared.ui.LocalOpenRoute
+import com.mdportnov.monk.shared.ui.Route
+import com.mdportnov.monk.shared.ui.routines.RoutineStartSheet
 import com.mdportnov.monk.shared.platform.PermissionStatus
 import com.mdportnov.monk.shared.ui.Motion
 import com.mdportnov.monk.shared.ui.rememberFrameClock
@@ -137,8 +142,6 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
     val scheduleActive = config.schedule.isActive(moment.dayIso, moment.minuteOfDay)
     val strict = config.isStrict(now)
     val paused = config.isPaused(now)
-    val focus = config.isFocus(now)
-    var focusCandidate by rememberSaveable { mutableStateOf<Long?>(null) }
     var breakCandidate by rememberSaveable { mutableStateOf<Long?>(null) }
     var confirmOff by rememberSaveable { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -146,6 +149,7 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
     val haptics = rememberHaptics()
     val lockedCount = config.apps.count { it.locked }
 
+    val running = config.activeRun(now) != null
     val look = lookFor(config, now)
     val palette = paletteFor(look.mood)
     val tick = rememberTicker(active = look.until != null)
@@ -168,7 +172,7 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     // The lamp dissolves a little faster than the icon leaves, so the icon lifts out of it.
                     Box(Modifier.graphicsLayer { alpha = 1f - smoothstep(0f, 0.3f, anchor?.progress() ?: 0f) }) {
-                        StateGlyph(look.icon, palette, look.until, look.total, tick, iconModifier = handedOver)
+                        StateGlyph(look.icon, look.emoji, palette, look.until, look.total, tick, iconModifier = handedOver)
                     }
                     Column(Modifier.weight(1f).then(handedOver), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(look.eyebrow.uppercase(), style = MaterialTheme.typography.labelMedium, color = palette.muted)
@@ -187,18 +191,26 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
                     }
                     Box(handedOver) {
                         StateControl(
-                            locked = strict || focus,
+                            locked = strict || running,
                             enabled = config.enabled,
                             palette = palette,
                             onLockedTap = {
                                 haptics.reject()
-                                notice = if (focus) s.focusNoStop(formatClock(config.focusUntil)) else s.strictNoChange(formatClock(config.strictUntil))
+                                val run = config.activeRun(now)
+                                val routine = config.runningRoutine(now)
+                                notice = if (run != null && routine != null) {
+                                    "${s.routineName(routine)} · ${s.routineRunsUntil(formatClock(run.until))} · ${s.cannotStop}"
+                                } else {
+                                    s.strictNoChange(formatClock(config.strictUntil))
+                                }
                             },
                             onToggle = { on ->
                                 haptics.toggle(on)
                                 when {
                                     on -> store.switchOn()
-                                    !scheduleActive -> store.switchOff()
+                                    // The breath is skipped only when there is genuinely nothing
+                                    // to soften: no routine in force, no session, no break.
+                                    config.state(now, moment.dayIso, moment.minuteOfDay) == ProtectionState.SCHEDULED_OFF -> store.switchOff()
                                     else -> confirmOff = true
                                 }
                             },
@@ -208,13 +220,20 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
                 AnimatedContent(targetState = look.detail, transitionSpec = { Motion.fadeThrough() }, label = "detail") { detail ->
                     if (detail != null) Text(detail, style = MaterialTheme.typography.bodyMedium, color = palette.muted)
                 }
-                if (lockedCount > 0 || (strict && look.mood != Mood.Strict)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val routinesArmed = look.mood == Mood.Scheduled && config.routines.any { it.enabled && !it.coversNothing }
+                // A break outside the base hours is not the headline, but it is still running and
+                // the user still has to be able to see it and end it.
+                val breakElsewhere = paused && look.mood != Mood.Break
+                if (lockedCount > 0 || routinesArmed || breakElsewhere || (strict && look.mood != Mood.Strict)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (breakElsewhere) Tag(Icons.Outlined.Coffee, s.pausedUntil(formatClock(config.pausedUntil)), palette)
+                        if (routinesArmed) Tag(Icons.Outlined.AutoAwesome, s.scheduleRoutinesStillWork, palette)
                         if (strict && look.mood != Mood.Strict) Tag(Icons.Outlined.Lock, s.strictShort, palette)
                         if (lockedCount > 0) Tag(Icons.Outlined.Lock, s.lockedCount(lockedCount), palette)
                     }
                 }
                 if (!config.enabled && lockedCount > 0) Text(s.lockedStayOn, style = MaterialTheme.typography.bodySmall, color = palette.muted)
+                if (look.mood == Mood.Scheduled && config.enabled) Text(s.scheduleSwitchWarning, style = MaterialTheme.typography.bodySmall, color = palette.muted)
                 AnimatedVisibility(visible = notice != null, enter = Motion.reveal(), exit = Motion.conceal()) {
                     Row(
                         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).background(palette.content.copy(alpha = 0.10f)).padding(horizontal = 12.dp, vertical = 8.dp),
@@ -225,60 +244,44 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
                         Text(notice.orEmpty(), style = MaterialTheme.typography.bodySmall, color = palette.content)
                     }
                 }
-                // A break only makes sense while the schedule has protection on; a focus session
-                // blocks regardless of the schedule, so it stays on offer.
-                if (showControls && config.enabled && permissions.accessibilityEnabled && !focus) {
-                    if (paused && scheduleActive) {
+                // Only the break lives on the card now. Routines have their own card under this
+                // one: a strip of chips could not say which of them is on, what it covers or when
+                // it ends, and those are the three things anyone looks for.
+                if (showControls && config.enabled && permissions.accessibilityEnabled && !running) {
+                    if (paused) {
                         AuroraChip(s.resume, palette, icon = Icons.Outlined.Shield, modifier = Modifier.fillMaxWidth()) { store.resumeProtection() }
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (!strict && config.canStartBreak(now, moment.dayIso, moment.minuteOfDay)) {
-                                ActionStrip(
-                                    Icons.Outlined.Coffee, s.pauseFor, s.breakWhat, palette,
-                                    listOf(
-                                        s.pause5 to { breakCandidate = nowMillis() + 5 * 60_000L },
-                                        s.pause15 to { breakCandidate = nowMillis() + 15 * 60_000L },
-                                        s.pause60 to { breakCandidate = nowMillis() + 60 * 60_000L },
-                                        s.pauseDay to { breakCandidate = nextMidnightMillis() },
-                                    ),
-                                )
-                            } else if (!strict && scheduleActive && !paused) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Icon(Icons.Outlined.Coffee, null, tint = palette.muted, modifier = Modifier.size(16.dp))
-                                    Text(s.breakCooldown(formatClock(config.nextBreakAt(now))), style = MaterialTheme.typography.bodySmall, color = palette.muted)
-                                }
-                            }
-                            ActionStrip(
-                                Icons.Outlined.CenterFocusStrong, s.focus, s.focusWhat, palette,
-                                listOf(
-                                    s.focus15 to { focusCandidate = nowMillis() + 15 * 60_000L },
-                                    s.focus30 to { focusCandidate = nowMillis() + 30 * 60_000L },
-                                    s.focus45 to { focusCandidate = nowMillis() + 45 * 60_000L },
-                                    s.focus60 to { focusCandidate = nowMillis() + 60 * 60_000L },
-                                ),
-                            )
+                    } else if (!strict && config.canStartBreak(now, moment.dayIso, moment.minuteOfDay)) {
+                        ActionStrip(
+                            Icons.Outlined.Coffee, s.pauseFor, s.breakWhat, palette,
+                            listOf(
+                                ChipAction(s.pause5) { breakCandidate = nowMillis() + 5 * 60_000L },
+                                ChipAction(s.pause15) { breakCandidate = nowMillis() + 15 * 60_000L },
+                                ChipAction(s.pause60) { breakCandidate = nowMillis() + 60 * 60_000L },
+                                ChipAction(s.pauseDay) { breakCandidate = nextMidnightMillis() },
+                            ),
+                        )
+                    } else if (!strict && scheduleActive && !paused) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Outlined.Coffee, null, tint = palette.muted, modifier = Modifier.size(16.dp))
+                            Text(s.breakCooldown(formatClock(config.nextBreakAt(now))), style = MaterialTheme.typography.bodySmall, color = palette.muted)
                         }
                     }
                 }
             }
         }
     }
-    focusCandidate?.let { until ->
-        AlertDialog(
-            onDismissRequest = { focusCandidate = null },
-            title = { Text(s.focusConfirmTitle) },
-            text = { Text(s.focusConfirmBody(formatClock(until))) },
-            confirmButton = { TextButton(onClick = { haptics.confirm(); store.startFocus(until); focusCandidate = null }) { Text(s.start) } },
-            dismissButton = { TextButton(onClick = { focusCandidate = null }) { Text(s.cancel) } },
-        )
-    }
     breakCandidate?.let { until ->
         // A break weakens protection for the whole list, so it costs the same breath as "off".
+        // Routines that hold through one are named before the breath, not discovered after it.
+        val holds = config.routinesThroughBreak(now, moment.dayIso, moment.minuteOfDay)
         CountdownConfirm(
             title = s.breakConfirmTitle,
             body = s.breakConfirmBody(formatClock(until)),
             confirmText = s.startBreak,
-            note = s.lockedStayOn.takeIf { lockedCount > 0 },
+            note = listOfNotNull(
+                s.lockedStayOn.takeIf { lockedCount > 0 },
+                holds.firstOrNull()?.let { s.breakKeepsRoutine(s.routineName(it)) },
+            ).joinToString(" ").ifBlank { null },
             onConfirm = { store.pauseProtection(until); breakCandidate = null },
             onDismiss = { breakCandidate = null },
         )
@@ -297,9 +300,13 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
 
 private const val COUNTDOWN = " countdown"
 
-private enum class Mood { On, Strict, Focus, Break, Off, Scheduled }
+private enum class Mood { On, Strict, Routine, Break, Off, Scheduled }
 
-/** [title] is the big word; null means the time left takes its place. */
+/**
+ * [title] is the big word; null means the time left takes its place. [emoji] stands in for
+ * [icon] when a routine has one, so the thing in force wears its own face on the card, in the
+ * bar and on the pause screen alike.
+ */
 private class Look(
     val mood: Mood,
     val icon: ImageVector,
@@ -308,6 +315,7 @@ private class Look(
     val detail: String?,
     val until: Long? = null,
     val total: Long? = null,
+    val emoji: String = "",
 )
 
 /** One look per [ProtectionState]; the state itself is the model's call, so every surface agrees. */
@@ -317,15 +325,44 @@ private fun lookFor(config: MonkConfig, now: Long): Look {
     val moment = localMoment()
     return when (config.state(now, moment.dayIso, moment.minuteOfDay)) {
         ProtectionState.OFF -> Look(Mood.Off, Icons.Outlined.PowerSettingsNew, s.protection, s.protectionOff, s.offNudge)
-        ProtectionState.FOCUS -> Look(Mood.Focus, Icons.Outlined.CenterFocusStrong, s.focus, null, "${s.until(formatClock(config.focusUntil))} · ${s.cannotStop}", config.focusUntil, config.focusStartedAt.takeIf { it > 0 }?.let { config.focusUntil - it })
+        ProtectionState.ROUTINE -> routineLook(config, now, moment.dayIso, moment.minuteOfDay)
         ProtectionState.BREAK -> Look(Mood.Break, Icons.Outlined.Coffee, s.pauseFor, null, "${s.until(formatClock(config.pausedUntil))} · ${s.comesBackItself}", config.pausedUntil, config.pauseStartedAt.takeIf { it > 0 }?.let { config.pausedUntil - it })
         ProtectionState.SCHEDULED_OFF -> Look(
             Mood.Scheduled, Icons.Outlined.Schedule, s.protection, s.protectionOff,
-            config.schedule.minutesToNextChange(moment.dayIso, moment.minuteOfDay)?.let { s.scheduleBackAt(formatClock(now + it * 60_000L)) } ?: s.scheduleOffNudge,
+            config.schedule.minutesToNextChange(moment.dayIso, moment.minuteOfDay)
+                ?.let { s.scheduleBackAt(formatClock(clockAfterWallMinutes(it))) } ?: s.scheduleOffNudge,
         )
         ProtectionState.STRICT -> Look(Mood.Strict, Icons.Outlined.Lock, s.protection, s.protectionOn, s.strictUntil(formatClock(config.strictUntil)))
         ProtectionState.ON -> Look(Mood.On, Icons.Outlined.Shield, s.protection, s.protectionOn, if (config.apps.isEmpty()) null else s.appsWatched(config.apps.size))
     }
+}
+
+/**
+ * A routine in force. Started by hand it counts down and says it cannot be stopped; open on its
+ * own hours it names the hour it closes, because that is the only promise it made. Either way
+ * the routine's own name is the big word and its emoji is the glyph.
+ */
+@Composable
+private fun routineLook(config: MonkConfig, now: Long, dayIso: Int, minuteOfDay: Int): Look {
+    val s = strings
+    val routine = config.leadingRoutine(now, dayIso, minuteOfDay)
+        ?: return Look(Mood.On, Icons.Outlined.Shield, s.protection, s.protectionOn, null)
+    val run = config.activeRun(now)?.takeIf { it.routineId == routine.id }
+    val name = s.routineName(routine)
+    if (run != null) {
+        return Look(
+            Mood.Routine, Icons.Outlined.AutoAwesome, s.routineEyebrow, null,
+            "$name · ${s.until(formatClock(run.until))} · ${s.cannotStop}",
+            run.until,
+            run.startedAt.takeIf { it > 0 }?.let { run.until - it },
+            routine.emoji,
+        )
+    }
+    // Wall-clock minutes, resolved through the zone, so a window ending after a DST change says
+    // the hour it will actually end at rather than the one arithmetic would suggest.
+    val endsIn = routine.openUntilMinutes(dayIso, minuteOfDay)
+    val detail = if (endsIn == null) s.routineOpenNow else s.routineOpenUntil(formatClock(clockAfterWallMinutes(endsIn)))
+    return Look(Mood.Routine, Icons.Outlined.AutoAwesome, s.routineEyebrow, name, detail, emoji = routine.emoji)
 }
 
 /** The switch, or a locked switch that explains itself when touched instead of a dead icon. */
@@ -369,24 +406,31 @@ internal fun CompactStatus(store: MonkStore, anchor: HeaderAnchor) {
     var now by remember { mutableLongStateOf(nowMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(30_000); now = nowMillis() } }
     val look = lookFor(config, now)
-    val scheduleActive = remember(config.schedule, now) { localMoment().let { config.schedule.isActive(it.dayIso, it.minuteOfDay) } }
+    val state = remember(config, now) { localMoment().let { config.state(now, it.dayIso, it.minuteOfDay) } }
     val palette = paletteFor(look.mood)
     SideEffect { anchor.tint = palette.accent }
     val accent by animateColorAsState(palette.accent, Motion.standard(Motion.Long), label = "accent")
     val tick = rememberTicker(active = look.until != null)
-    val locked = config.isStrict(now) || config.isFocus(now)
+    val locked = config.isStrict(now) || config.activeRun(now) != null
     val haptics = rememberHaptics()
     var confirmOff by remember { mutableStateOf(false) }
     val lockedCount = config.apps.count { it.locked }
     val s = strings
     val timed = look.title == null && look.until != null
     // What the bar says once condensed: a proper title, and a live line under it where useful.
+    val moment = localMoment()
+    val leading = config.leadingRoutine(now, moment.dayIso, moment.minuteOfDay)
     val compactTitle = when (look.mood) {
         Mood.On -> s.compactOn
         Mood.Off -> s.compactOff
         Mood.Scheduled -> s.compactBySchedule
         Mood.Strict -> s.compactUntil(s.strictShort, formatClock(config.strictUntil))
-        Mood.Focus -> s.compactUntil(s.focus, formatClock(config.focusUntil))
+        Mood.Routine -> {
+            val name = leading?.let { s.routineName(it) } ?: s.routineEyebrow
+            val until = config.activeRun(now)?.until
+                ?: leading?.openUntilMinutes(moment.dayIso, moment.minuteOfDay)?.let { clockAfterWallMinutes(it) }
+            if (until == null) name else s.compactUntil(name, formatClock(until))
+        }
         Mood.Break -> s.compactUntil(s.pauseFor, formatClock(config.pausedUntil))
     }
     val compactDetail: String? = when {
@@ -406,8 +450,12 @@ internal fun CompactStatus(store: MonkStore, anchor: HeaderAnchor) {
         titleScale = titleSize / big,
         hasDetail = timed || compactDetail != null,
         icon = {
-            AnimatedContent(targetState = look.icon, transitionSpec = { Motion.fadeThrough() }, label = "icon") { ic ->
-                Icon(ic, null, tint = accent, modifier = Modifier.size(28.dp))
+            AnimatedContent(targetState = look.icon to look.emoji, transitionSpec = { Motion.fadeThrough() }, label = "icon") { (ic, face) ->
+                if (face.isNotEmpty()) {
+                    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) { Text(face, fontSize = 22.sp, maxLines = 1) }
+                } else {
+                    Icon(ic, null, tint = accent, modifier = Modifier.size(28.dp))
+                }
             }
         },
         eyebrow = { Text(look.eyebrow.uppercase(), style = MaterialTheme.typography.labelMedium, color = palette.muted, maxLines = 1) },
@@ -420,7 +468,7 @@ internal fun CompactStatus(store: MonkStore, anchor: HeaderAnchor) {
         },
         compactDetail = {
             val style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum")
-            if (timed && look.until != null) Text(countdown(look.until - tick.value), style = style, color = palette.muted, maxLines = 1)
+            if (timed) Text(countdown(look.until - tick.value), style = style, color = palette.muted, maxLines = 1)
             else if (compactDetail != null) Text(compactDetail, style = style, color = palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
         control = {
@@ -433,7 +481,8 @@ internal fun CompactStatus(store: MonkStore, anchor: HeaderAnchor) {
                     haptics.toggle(on)
                     when {
                         on -> store.switchOn()
-                        !scheduleActive -> store.switchOff()
+                        // Same rule as the card: the breath is skipped only when nothing is in force.
+                        state == ProtectionState.SCHEDULED_OFF -> store.switchOff()
                         else -> confirmOff = true
                     }
                 },
@@ -572,7 +621,7 @@ private fun paletteFor(mood: Mood): Palette {
         when (mood) {
             Mood.On -> Palette(Color(0xFF101B22), MonkColors.Mint.copy(alpha = 0.36f), MonkColors.Blue.copy(alpha = 0.28f), MonkColors.Violet.copy(alpha = 0.20f), MonkColors.Mint, ink, soft)
             Mood.Strict -> Palette(Color(0xFF10162A), MonkColors.Blue.copy(alpha = 0.39f), MonkColors.Violet.copy(alpha = 0.27f), Cyan.copy(alpha = 0.13f), MonkColors.Blue, ink, soft)
-            Mood.Focus -> Palette(Color(0xFF130C2A), MonkColors.Violet.copy(alpha = 0.41f), MonkColors.Blue.copy(alpha = 0.27f), Cyan.copy(alpha = 0.11f), MonkColors.Violet, ink, soft)
+            Mood.Routine -> Palette(Color(0xFF130C2A), MonkColors.Violet.copy(alpha = 0.41f), MonkColors.Blue.copy(alpha = 0.27f), Cyan.copy(alpha = 0.11f), MonkColors.Violet, ink, soft)
             Mood.Break -> Palette(Color(0xFF221410), Amber.copy(alpha = 0.35f), Peach.copy(alpha = 0.25f), MonkColors.Rose.copy(alpha = 0.11f), Amber, ink, soft)
             Mood.Off -> Palette(Color(0xFF15171E), Color(0xFF3A4358).copy(alpha = 0.32f), Color(0xFF2B3244).copy(alpha = 0.28f), MonkColors.Violet.copy(alpha = 0.04f), Color(0xFFA9B1C3), ink, soft)
             Mood.Scheduled -> Palette(Color(0xFF14171F), Color(0xFF3A4358).copy(alpha = 0.32f), MonkColors.Blue.copy(alpha = 0.10f), MonkColors.Violet.copy(alpha = 0.06f), Color(0xFFA9B1C3), ink, soft)
@@ -583,7 +632,7 @@ private fun paletteFor(mood: Mood): Palette {
         when (mood) {
             Mood.On -> Palette(Color(0xFFEAF5EC), MonkColors.Mint.copy(alpha = 0.40f), MonkColors.Blue.copy(alpha = 0.26f), MonkColors.Violet.copy(alpha = 0.18f), Color(0xFF3E7A1F), ink, soft)
             Mood.Strict -> Palette(Color(0xFFE8EEFC), MonkColors.Blue.copy(alpha = 0.40f), MonkColors.Violet.copy(alpha = 0.26f), Cyan.copy(alpha = 0.22f), Color(0xFF3D63C9), ink, soft)
-            Mood.Focus -> Palette(Color(0xFFEDE6FB), MonkColors.Violet.copy(alpha = 0.48f), MonkColors.Blue.copy(alpha = 0.30f), Cyan.copy(alpha = 0.18f), Color(0xFF7455B8), ink, soft)
+            Mood.Routine -> Palette(Color(0xFFEDE6FB), MonkColors.Violet.copy(alpha = 0.48f), MonkColors.Blue.copy(alpha = 0.30f), Cyan.copy(alpha = 0.18f), Color(0xFF7455B8), ink, soft)
             Mood.Break -> Palette(Color(0xFFFCF1E3), Amber.copy(alpha = 0.46f), Peach.copy(alpha = 0.34f), MonkColors.Rose.copy(alpha = 0.14f), Color(0xFFB4691A), ink, soft)
             Mood.Off -> Palette(Color(0xFFEDEFF3), Color(0xFFB9C0D0).copy(alpha = 0.50f), Color(0xFFD6DBE6).copy(alpha = 0.50f), MonkColors.Violet.copy(alpha = 0.06f), scheme.onSurfaceVariant, ink, soft)
             Mood.Scheduled -> Palette(Color(0xFFECEFF5), Color(0xFFB9C0D0).copy(alpha = 0.50f), MonkColors.Blue.copy(alpha = 0.14f), MonkColors.Violet.copy(alpha = 0.08f), scheme.onSurfaceVariant, ink, soft)
@@ -675,7 +724,7 @@ private fun CountdownText(until: Long, tick: State<Long>, color: Color) {
  * icon melting from one state to the next — a lit lamp, not a slide.
  */
 @Composable
-private fun StateGlyph(icon: ImageVector, p: Palette, until: Long?, total: Long?, tick: State<Long>, iconModifier: Modifier = Modifier) {
+private fun StateGlyph(icon: ImageVector, emoji: String, p: Palette, until: Long?, total: Long?, tick: State<Long>, iconModifier: Modifier = Modifier) {
     val accent by animateColorAsState(p.accent, Motion.standard(Motion.Long), label = "accent")
     val ring by animateFloatAsState(if (until != null && total != null && total > 0) 1f else 0f, Motion.standard(Motion.Long), label = "ring")
     val pulse by rememberFrameClock(5_200)
@@ -698,13 +747,23 @@ private fun StateGlyph(icon: ImageVector, p: Palette, until: Long?, total: Long?
             },
         )
         AnimatedContent(
-            targetState = icon,
+            // Keyed on the emoji as well: two routines share one fallback icon, and the glyph
+            // must still melt from one face to the next when the one in force changes.
+            targetState = icon to emoji,
             transitionSpec = {
                 (fadeIn(Motion.enter()) + scaleIn(tween(Motion.Long, easing = EaseOutBack), initialScale = 0.4f)) togetherWith
                     (fadeOut(Motion.exit()) + scaleOut(Motion.exit(), targetScale = 0.6f))
             },
             label = "icon",
-        ) { ic -> Icon(ic, null, tint = accent, modifier = iconModifier.size(28.dp)) }
+        ) { (ic, face) ->
+            if (face.isNotEmpty()) {
+                Box(iconModifier.size(28.dp), contentAlignment = Alignment.Center) {
+                    Text(face, fontSize = 22.sp, maxLines = 1)
+                }
+            } else {
+                Icon(ic, null, tint = accent, modifier = iconModifier.size(28.dp))
+            }
+        }
     }
 }
 
@@ -723,7 +782,7 @@ private fun Tag(icon: ImageVector, text: String, p: Palette) {
 
 /** A tonal chip cut from the aurora: the content colour at low alpha, a hairline, a press that sinks. */
 @Composable
-private fun AuroraChip(text: String, p: Palette, modifier: Modifier = Modifier, icon: ImageVector? = null, onClick: () -> Unit) {
+private fun AuroraChip(text: String, p: Palette, modifier: Modifier = Modifier, icon: ImageVector? = null, emoji: String = "", onClick: () -> Unit) {
     val h = rememberHaptics()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -741,10 +800,14 @@ private fun AuroraChip(text: String, p: Palette, modifier: Modifier = Modifier, 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
     ) {
-        if (icon != null) Icon(icon, null, tint = p.content, modifier = Modifier.size(18.dp))
-        Text(text, style = MaterialTheme.typography.labelLarge, color = p.content, maxLines = 1)
+        if (emoji.isNotEmpty()) Text(emoji, fontSize = 15.sp, maxLines = 1)
+        else if (icon != null) Icon(icon, null, tint = p.content, modifier = Modifier.size(18.dp))
+        Text(text, style = MaterialTheme.typography.labelLarge, color = p.content, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
+
+/** One chip in an action strip: a word, sometimes a face in front of it, and what it does. */
+private class ChipAction(val label: String, val emoji: String = "", val onClick: () -> Unit)
 
 /**
  * "[icon] Break ⓘ  [5 min] [15 min] [1 hour] [Until tomorrow]" — one labelled row of chips.
@@ -752,7 +815,7 @@ private fun AuroraChip(text: String, p: Palette, modifier: Modifier = Modifier, 
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ActionStrip(icon: ImageVector, label: String, explanation: String, p: Palette, actions: List<Pair<String, () -> Unit>>) {
+private fun ActionStrip(icon: ImageVector, label: String, explanation: String, p: Palette, actions: List<ChipAction>) {
     val tooltip = rememberTooltipState(isPersistent = true)
     val scope = rememberCoroutineScope()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -772,7 +835,7 @@ private fun ActionStrip(icon: ImageVector, label: String, explanation: String, p
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            actions.forEach { (text, act) -> AuroraChip(text, p, onClick = act) }
+            actions.forEach { action -> AuroraChip(action.label, p, emoji = action.emoji, onClick = action.onClick) }
         }
     }
 }

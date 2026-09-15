@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mdportnov.monk.shared.data.MonkStore
 import com.mdportnov.monk.shared.data.nowMillis
 import com.mdportnov.monk.shared.i18n.strings
@@ -59,13 +60,32 @@ import com.mdportnov.monk.shared.platform.AppIcon
 import com.mdportnov.monk.shared.platform.MonkPlatform
 
 @Composable
-fun AddAppsScreen(store: MonkStore, platform: MonkPlatform, onClose: () -> Unit, topBar: TopBarState, hazeState: HazeState) {
+fun AddAppsScreen(
+    store: MonkStore,
+    platform: MonkPlatform,
+    routineId: String = "",
+    onClose: () -> Unit,
+    topBar: TopBarState,
+    hazeState: HazeState,
+) {
     val s = strings
     var apps by remember { mutableStateOf<List<InstalledApp>?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
-    val already = remember { store.config.value.apps.map { it.packageName }.toSet() }
-    // Strict mode keeps every app already on the list: the picker must say so instead of a silent no-op on Done.
-    val strict = remember { store.config.value.isStrict(nowMillis()) }
+    // Opened from a routine, this picker only ever adds: what it already covers is ticked and
+    // fixed, and taking something out stays on the routine's own page, where the scope is shown
+    // whole. A picker that could also empty a routine from behind a search box would be a
+    // different, more dangerous screen wearing the same clothes.
+    val routine = routineId.takeIf { it.isNotEmpty() }?.let { store.config.value.routine(it) }
+    val already = remember(routine) {
+        if (routine == null) store.config.value.apps.map { it.packageName }.toSet()
+        else store.appsCovered(routine).toSet()
+    }
+    // Strict mode keeps every app already on the list: the picker must say so instead of a silent
+    // no-op on Done. Read live, not once: strict mode can begin while the picker is open, and the
+    // rows have to lock at that moment rather than at the moment the screen was built.
+    val config by store.config.collectAsStateWithLifecycle()
+    val strict = config.isStrict(nowMillis())
+    val fixed = if (routine != null) already else if (strict) already else emptySet()
     var selected by rememberSaveable(saver = listSaver<MutableState<Set<String>>, String>({ it.value.toList() }, { mutableStateOf(it.toSet()) })) { mutableStateOf(already) }
 
     LaunchedEffect(Unit) { apps = platform.installedApps() }
@@ -82,13 +102,15 @@ fun AddAppsScreen(store: MonkStore, platform: MonkPlatform, onClose: () -> Unit,
     val doneEnabled = selected != already
     val commit = {
         val byPkg = apps.orEmpty().associateBy { it.packageName }
-        store.applyPicker(remove = already - selected, add = added.mapNotNull { pkg -> byPkg[pkg]?.let { it.packageName to it.label } })
+        val picked = added.mapNotNull { pkg -> byPkg[pkg]?.let { it.packageName to it.label } }
+        if (routine != null) store.addAppsToRoutine(routine.id, picked)
+        else store.applyPicker(remove = already - selected, add = picked)
         onClose()
     }
     val titleText = if (added.isEmpty()) s.done else "${s.done} (${added.size})"
     SideEffect {
         topBar.set(
-            title = s.addApps,
+            title = if (routine == null) s.addApps else s.addToRoutine(s.routineName(routine)),
             visible = true,
             level = 10,
             navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, s.back) } },
@@ -125,8 +147,14 @@ fun AddAppsScreen(store: MonkStore, platform: MonkPlatform, onClose: () -> Unit,
                     }
                 }
                 else -> LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-                    if (strict && already.isNotEmpty()) {
-                        item { Text(s.pickerStrictHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+                    val note = when {
+                        routine != null && already.isNotEmpty() -> s.routineAlreadyIn
+                        routine != null -> s.routinePickHint
+                        strict && already.isNotEmpty() -> s.pickerStrictHint
+                        else -> null
+                    }
+                    if (note != null) {
+                        item { Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
                     }
                     if (query.isBlank() && suggested.isNotEmpty()) {
                         item {
@@ -141,7 +169,7 @@ fun AddAppsScreen(store: MonkStore, platform: MonkPlatform, onClose: () -> Unit,
                             }
                         }
                         items(suggested, key = { "s:" + it.packageName }) { app ->
-                            AppPickRow(app, app.packageName in selected, app.packageName in archived, enabled = !(strict && app.packageName in already)) { on -> selected = if (on) selected + app.packageName else selected - app.packageName }
+                            AppPickRow(app, app.packageName in selected, app.packageName in archived, enabled = app.packageName !in fixed) { on -> selected = if (on) selected + app.packageName else selected - app.packageName }
                         }
                         item {
                             Text(
@@ -153,7 +181,7 @@ fun AddAppsScreen(store: MonkStore, platform: MonkPlatform, onClose: () -> Unit,
                     }
                     items(visible, key = { it.packageName }) { app ->
                         Box(itemMotion()) {
-                            AppPickRow(app, app.packageName in selected, app.packageName in archived, enabled = !(strict && app.packageName in already)) { on -> selected = if (on) selected + app.packageName else selected - app.packageName }
+                            AppPickRow(app, app.packageName in selected, app.packageName in archived, enabled = app.packageName !in fixed) { on -> selected = if (on) selected + app.packageName else selected - app.packageName }
                         }
                     }
                 }

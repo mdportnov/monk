@@ -58,11 +58,13 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.outlined.PhoneIphone
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -71,6 +73,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -92,9 +95,11 @@ import com.mdportnov.monk.shared.data.localMoment
 import com.mdportnov.monk.shared.data.nowMillis
 import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.BlockMode
+import com.mdportnov.monk.shared.model.BlockPolicy
 import com.mdportnov.monk.shared.model.BlockedApp
 import com.mdportnov.monk.shared.model.MonkConfig
 import com.mdportnov.monk.shared.model.ProtectionState
+import com.mdportnov.monk.shared.model.Routine
 import com.mdportnov.monk.shared.model.RuleMode
 import com.mdportnov.monk.shared.model.InstalledApp
 import com.mdportnov.monk.shared.model.SuggestedApps
@@ -114,6 +119,9 @@ import com.mdportnov.monk.shared.ui.LocalHeaderAnchor
 import com.mdportnov.monk.shared.ui.Route
 import com.mdportnov.monk.shared.ui.LocalOpenRoute
 import com.mdportnov.monk.shared.ui.LocalHostActions
+import com.mdportnov.monk.shared.ui.routines.RoutineFace
+import com.mdportnov.monk.shared.ui.routines.RoutineStartSheet
+import com.mdportnov.monk.shared.ui.routines.routineStateLine
 import com.mdportnov.monk.shared.ui.theme.MonkColors
 import kotlinx.coroutines.delay
 
@@ -142,13 +150,14 @@ fun HomeScreen(
         }
     }
     // Timers move when the wall clock is set by hand (the service shifts them): re-read the clock too.
-    LaunchedEffect(config.focusUntil, config.strictUntil, config.pausedUntil) { now = nowMillis() }
+    LaunchedEffect(config.run, config.strictUntil, config.pausedUntil) { now = nowMillis() }
     LifecycleResumeEffect(Unit) {
         platform.refreshPermissions()
         now = nowMillis()
         onPauseOrDispose { }
     }
     val apps = remember(config.apps) { config.apps.sortedBy { it.label.lowercase() } }
+    var startingRoutine by rememberSaveable { mutableStateOf<String?>(null) }
     val today = remember(now) { localMoment().dateIso }
     // Screen time of the watched apps for the week card; re-read with the heartbeat so "today" keeps moving.
     val watchedPackages = remember(config.apps) { config.apps.map { it.packageName }.toSet() }
@@ -185,6 +194,11 @@ fun HomeScreen(
                 platform.updater?.let { u -> item(key = "update") { Box(itemMotion()) { UpdateCard(u, compact = true) } } }
                 if (permissions.accessibilityEnabled) {
                     item(key = "status") { Box(itemMotion()) { StatusCard(store, config, permissions, now, showControls = apps.isNotEmpty()) } }
+                    // Second on the page, right under the state it changes: routines are the one
+                    // thing here a person comes back to set, and a row in Settings hid them.
+                    if (apps.isNotEmpty()) {
+                        item(key = "routines") { Box(itemMotion()) { RoutinesCard(store, config, now, onStart = { startingRoutine = it }) } }
+                    }
                     if (permissions.backgroundNeedsAttention) item(key = "keepalive") { Box(itemMotion()) { KeepAliveCard(permissions, platform) } }
                     if (apps.isNotEmpty() && config.notifyWhenOff && !permissions.notificationsGranted && !config.notifyPromptDismissed) {
                         item(key = "notify") { Box(itemMotion()) { NotifyCard(onDismiss = { store.updateConfig { it.copy(notifyPromptDismissed = true) } }) } }
@@ -205,8 +219,9 @@ fun HomeScreen(
             items(apps, key = { it.packageName }) { app ->
                 Box(itemMotion()) {
                 val moment = localMoment()
-                // A Block window open now wins over the allowance in the policy: no "open until" then.
-                val ruleBlocked = app.activeRule(moment.dayIso, moment.minuteOfDay)?.mode == RuleMode.BLOCK
+                // A block in force now wins over the allowance in the policy — a rule's window,
+                // a routine's, or a session — so the row must not promise "open until" against it.
+                val ruleBlocked = BlockPolicy.verdictNow(config, app, now, moment.dayIso, moment.minuteOfDay) == RuleMode.BLOCK
                 AppRow(
                     app = app,
                     config = config,
@@ -232,6 +247,112 @@ fun HomeScreen(
             modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = contentPadding.calculateBottomPadding() - 16.dp, end = 20.dp),
         ) {
             GlassActionPill(text = s.addApps, icon = Icons.Outlined.Add, onClick = onAddApps, hazeState = hazeState)
+        }
+    }
+    startingRoutine?.let { id ->
+        val routine = config.routine(id)
+        if (routine == null) startingRoutine = null
+        else RoutineStartSheet(store, routine, onDismiss = { startingRoutine = null })
+    }
+}
+
+/**
+ * The routines, on the page rather than a level down: which are on, what each one covers, what it
+ * is doing this minute, and the one tap that starts it. The strip of chips this replaces could
+ * answer none of those, and the row in Settings answered them only after two taps.
+ */
+@Composable
+private fun RoutinesCard(store: MonkStore, config: MonkConfig, now: Long, onStart: (String) -> Unit) {
+    val s = strings
+    val open = LocalOpenRoute.current
+    val running = config.activeRun(now)
+    // On, and in the order they are kept; the one running comes first, since it is the answer to
+    // "what is happening right now".
+    val shown = config.routines.filter { it.enabled }.sortedByDescending { it.id == running?.routineId }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionTitle(s.routines, Modifier.padding(top = 8.dp))
+        if (shown.isEmpty()) {
+            Surface(
+                onClick = { open(Route.Routines) },
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(s.routinesNoneOn, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else {
+            shown.take(MaxRoutineRows).forEach { routine ->
+                key(routine.id) { RoutineCardRow(store, config, routine, now, onOpen = { open(Route.RoutineDetail(routine.id)) }, onStart = { onStart(routine.id) }) }
+            }
+            Surface(
+                onClick = { open(Route.Routines) },
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        if (shown.size > MaxRoutineRows) "${s.manageRoutines} · ${s.routinesMore(shown.size - MaxRoutineRows)}" else s.manageRoutines,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
+}
+
+/** How many fit on Home before the list becomes a page of its own. */
+private const val MaxRoutineRows = 4
+
+@Composable
+private fun RoutineCardRow(
+    store: MonkStore,
+    config: MonkConfig,
+    routine: Routine,
+    now: Long,
+    onOpen: () -> Unit,
+    onStart: () -> Unit,
+) {
+    val s = strings
+    val running = config.activeRun(now)?.routineId == routine.id
+    val state = routineStateLine(store, config, routine, now)
+    val covered = store.appsCovered(routine).size
+    Surface(onClick = onOpen, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            RoutineFace(routine, 40.dp, if (running) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary)
+            Column(Modifier.weight(1f)) {
+                Text(s.routineName(routine), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    state ?: s.routineSummary(routine, covered),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (state != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    // Two lines: the Russian summary runs longer than the English one and was
+                    // being cut mid-word next to the start button.
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (!running && covered > 0) {
+                IconButton(onClick = onStart) { Icon(Icons.Outlined.PlayArrow, s.routineStart, tint = MaterialTheme.colorScheme.primary) }
+            }
         }
     }
 }
@@ -289,9 +410,11 @@ private fun TodayCard(config: MonkConfig, stats: Stats, now: Long, today: String
     val day = stats.day(today)
     val quote = remember(today, config.language) { Quotes.of(config.language, localMoment().dayOfYear) }
     val moment = localMoment()
-    val running: Pair<String, Long>? = when (config.state(now, moment.dayIso, moment.minuteOfDay)) {
-        ProtectionState.FOCUS -> s.focus to config.focusUntil
-        ProtectionState.BREAK -> s.pauseFor to config.pausedUntil
+    // Only a countdown belongs here: a routine open on its own hours has no timer to repeat.
+    val run = config.activeRun(now)
+    val running: Pair<String, Long>? = when {
+        run != null -> (config.runningRoutine(now)?.let { s.routineName(it) } ?: s.routineEyebrow) to run.until
+        config.state(now, moment.dayIso, moment.minuteOfDay) == ProtectionState.BREAK -> s.pauseFor to config.pausedUntil
         else -> null
     }
     MonkCard(onClick = onOpenStats) {
@@ -299,9 +422,10 @@ private fun TodayCard(config: MonkConfig, stats: Stats, now: Long, today: String
             Text(s.statsToday, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             if (running != null) {
                 // The hero already counts minutes down; here the end time, so the two never repeat.
+                val isBreak = run == null
                 Pill(
-                    if (running.first == s.focus) s.focusUntil(formatClock(running.second)) else s.pausedUntil(formatClock(running.second)),
-                    if (running.first == s.focus) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (isBreak) s.pausedUntil(formatClock(running.second)) else "${running.first} · ${s.until(formatClock(running.second))}",
+                    if (isBreak) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
                 )
             }
             Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -653,26 +777,56 @@ private fun AppRow(
     }
 }
 
-/** What the app does right now: a rule open at this hour overrides the mode, as it does in the policy. */
+/**
+ * What the app does right now, as the policy would decide it: a rule open at this hour overrides
+ * the mode, and a routine in force overrides both if it is stricter. The row would otherwise
+ * promise a pause while the evening routine has the app shut, which is the one thing a list of
+ * apps must never do.
+ */
 @Composable
 fun ModeChip(app: BlockedApp, config: MonkConfig) {
     val s = strings
     val moment = localMoment()
-    val rule = app.activeRule(moment.dayIso, moment.minuteOfDay)
-    val block = if (rule != null) rule.mode == RuleMode.BLOCK else app.mode == BlockMode.BLOCK
-    val free = rule?.mode == RuleMode.FREE
+    val now = nowMillis()
+    // The gate's own arithmetic, not a second copy of it: this is what would happen if the app
+    // were opened this second, the master switch and a running break included.
+    val layers = BlockPolicy.layersAt(config, app, now, moment.dayIso, moment.minuteOfDay)
+    val verdict = layers.verdict
+    val block = verdict == RuleMode.BLOCK
+    val free = verdict == RuleMode.FREE
+    // Nothing applies at this hour — outside the base hours, with no routine covering it. The row
+    // used to say "10 s pause" here, which is the app's setting rather than what would happen,
+    // and it is exactly the sort of promise that makes the base hours and the routines look like
+    // they contradict each other.
+    val idle = verdict == null
+    // Named where the routine is what tightened things — the same judgement the pause screen makes.
+    val routine = layers.routine
     val content = when {
+        idle -> MaterialTheme.colorScheme.onSurfaceVariant
         block -> MaterialTheme.colorScheme.error
         free -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.primary
     }
     Pill(
         when {
+            idle -> s.chipOffNow
             block -> s.modeBlock
             free -> s.ruleFree
             else -> s.pauseChip(config.delayFor(app))
         },
         content,
-        icon = { Icon(if (block) Icons.Outlined.Block else if (free) Icons.Outlined.Schedule else Icons.Outlined.HourglassEmpty, null, Modifier.size(14.dp), tint = content) },
+        icon = {
+            if (routine != null && routine.emoji.isNotEmpty()) {
+                Text(routine.emoji, fontSize = 11.sp, maxLines = 1)
+            } else {
+                val icon = when {
+                    idle -> Icons.Outlined.Schedule
+                    block -> Icons.Outlined.Block
+                    free -> Icons.Outlined.Schedule
+                    else -> Icons.Outlined.HourglassEmpty
+                }
+                Icon(icon, null, Modifier.size(14.dp), tint = content)
+            }
+        },
     )
 }

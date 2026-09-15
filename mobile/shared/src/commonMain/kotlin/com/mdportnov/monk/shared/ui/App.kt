@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.map
 import com.mdportnov.monk.shared.model.ThemeMode
 import com.mdportnov.monk.shared.ui.apps.AddAppsScreen
 import com.mdportnov.monk.shared.ui.apps.AppDetailScreen
+import com.mdportnov.monk.shared.ui.routines.RoutineDetailScreen
+import com.mdportnov.monk.shared.ui.routines.RoutinesScreen
 import com.mdportnov.monk.shared.ui.stats.ScreenTimeAppScreen
 import com.mdportnov.monk.shared.ui.stats.ScreenTimeScreen
 import com.mdportnov.monk.shared.ui.home.MainScreen
@@ -36,27 +38,35 @@ import com.mdportnov.monk.shared.ui.theme.MonkTheme
 
 sealed interface Route {
     data object Main : Route
-    data object AddApps : Route
+    /** The picker. With a [routineId] it adds what it picks to that routine as well as the list. */
+    data class AddApps(val routineId: String = "") : Route
     data class AppDetail(val packageName: String) : Route
     data object ScreenTime : Route
     data class ScreenTimeApp(val packageName: String) : Route
+    data object Routines : Route
+    data class RoutineDetail(val routineId: String) : Route
 
     /** Saveable-state keys must be primitives; routes carry their identity as a string. */
     val stateKey: String
         get() = when (this) {
+            is AddApps -> if (routineId.isEmpty()) "AddApps" else "AddApps:$routineId"
             is AppDetail -> "detail:$packageName"
             is ScreenTimeApp -> "screen:$packageName"
+            is RoutineDetail -> "routine:$routineId"
             else -> this::class.simpleName.orEmpty()
         }
 
     companion object {
         /** The inverse of [stateKey]; null for a key this build does not know. */
         fun fromStateKey(key: String): Route? = when {
+            key.startsWith("AddApps:") -> AddApps(key.removePrefix("AddApps:"))
             key.startsWith("detail:") -> AppDetail(key.removePrefix("detail:"))
             key.startsWith("screen:") -> ScreenTimeApp(key.removePrefix("screen:"))
+            key.startsWith("routine:") -> RoutineDetail(key.removePrefix("routine:"))
             key == "Main" -> Main
-            key == "AddApps" -> AddApps
+            key == "AddApps" -> AddApps()
             key == "ScreenTime" -> ScreenTime
+            key == "Routines" -> Routines
             else -> null
         }
     }
@@ -142,14 +152,15 @@ fun MonkApp(
                     Route.Main -> MainScreen(
                         store = store,
                         platform = graph.platform,
-                        onAddApps = { nav.push(Route.AddApps) },
+                        onAddApps = { nav.push(Route.AddApps()) },
                         onOpenApp = { nav.push(Route.AppDetail(it)) },
                         topBar = bar,
                         hazeState = hazeState,
                     )
-                    Route.AddApps -> AddAppsScreen(
+                    is Route.AddApps -> AddAppsScreen(
                         store = store,
                         platform = graph.platform,
+                        routineId = route.routineId,
                         onClose = { nav.pop() },
                         topBar = bar,
                         hazeState = hazeState,
@@ -166,6 +177,20 @@ fun MonkApp(
                         platform = graph.platform,
                         onClose = { nav.pop() },
                         onOpenApp = { nav.push(Route.ScreenTimeApp(it)) },
+                        topBar = bar,
+                        hazeState = hazeState,
+                    )
+                    Route.Routines -> RoutinesScreen(
+                        store = store,
+                        onClose = { nav.pop() },
+                        onOpenRoutine = { nav.push(Route.RoutineDetail(it)) },
+                        topBar = bar,
+                        hazeState = hazeState,
+                    )
+                    is Route.RoutineDetail -> RoutineDetailScreen(
+                        store = store,
+                        routineId = route.routineId,
+                        onClose = { nav.pop() },
                         topBar = bar,
                         hazeState = hazeState,
                     )

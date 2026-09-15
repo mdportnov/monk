@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BatteryAlert
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Timer
@@ -84,6 +85,8 @@ import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.ThemeMode
 import com.mdportnov.monk.shared.platform.MonkPlatform
 import com.mdportnov.monk.shared.ui.LocalHostActions
+import com.mdportnov.monk.shared.ui.LocalOpenRoute
+import com.mdportnov.monk.shared.ui.Route
 import com.mdportnov.monk.shared.ui.components.FitText
 import com.mdportnov.monk.shared.ui.components.SectionTitle
 import com.mdportnov.monk.shared.ui.components.SettingBlock
@@ -110,7 +113,6 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
     var strictCandidate by rememberSaveable { mutableStateOf<Long?>(null) }
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     var showHelp by rememberSaveable { mutableStateOf(false) }
-    var timePick by rememberSaveable { mutableStateOf<String?>(null) }
     val haptic = rememberHaptics()
 
     Column(
@@ -185,27 +187,27 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
             }
         }
 
-        SectionTitle(s.protectionHours)
+        SectionTitle(s.routines)
         SettingsGroup {
-            SettingRow(title = s.protectionHours, subtitle = s.protectionHoursHint + " " + s.scheduleHint, icon = Icons.Outlined.CalendarMonth) {
-                HapticSwitch(
-                    checked = config.schedule.enabled,
-                    enabled = !strict,
-                    onCheckedChange = { on -> store.updateConfig { it.copy(schedule = it.schedule.copy(enabled = on)) } },
-                )
-            }
-            if (config.schedule.enabled) {
-                SettingsDivider()
-                SettingBlock {
-                    // At least one day stays selected: an empty set would silently pause protection forever.
-                    DayToggleRow(s.dayShort, config.schedule.days, enabled = !strict, onToggle = { day, on ->
-                        store.updateConfig { it.copy(schedule = it.schedule.copy(days = if (on) it.schedule.days + day else it.schedule.days - day)) }
-                    })
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { timePick = "start" }, enabled = !strict, modifier = Modifier.weight(1f)) { Text("${s.from} ${formatMinute(config.schedule.startMinute)}") }
-                        OutlinedButton(onClick = { timePick = "end" }, enabled = !strict, modifier = Modifier.weight(1f)) { Text("${s.to} ${formatMinute(config.schedule.endMinute)}") }
-                    }
-                    Hint(if (config.schedule.endMinute <= config.schedule.startMinute) s.ruleNextDay else s.ruleSameDay)
+            val open = LocalOpenRoute.current
+            Surface(onClick = { open(Route.Routines) }, color = MaterialTheme.colorScheme.surfaceContainer) {
+                SettingRow(
+                    title = s.routines,
+                    // Just the count: the row is a door, and the paragraph explaining routines
+                    // is on the other side of it rather than truncated on this one.
+                    // Both halves of "when Monk acts" are behind this row now, so the row says both.
+                    // Labelled: an unlabelled time range under the word "Routines" read as the
+                    // routines' own hours, which is the opposite of what it is.
+                    subtitle = listOf(
+                        s.baseHoursLabel(
+                            if (config.schedule.enabled) "${formatMinute(config.schedule.startMinute)}–${formatMinute(config.schedule.endMinute)}"
+                            else s.scheduleAlways.lowercase(),
+                        ),
+                        config.routines.count { it.enabled }.let { if (it == 0) s.routinesNoneOn else s.routinesOn(it) },
+                    ).joinToString(" · "),
+                    icon = Icons.Outlined.AutoAwesome,
+                ) {
+                    Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -405,18 +407,6 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
     }
 
     if (showHelp) HowItWorksSheet(onDismiss = { showHelp = false })
-    timePick?.let { which ->
-        TimePickerDialog(
-            title = if (which == "start") s.from else s.to,
-            minuteOfDay = if (which == "start") config.schedule.startMinute else config.schedule.endMinute,
-            confirmLabel = s.done, cancelLabel = s.cancel,
-            onDismiss = { timePick = null },
-            onConfirm = { m ->
-                store.updateConfig { it.copy(schedule = if (which == "start") it.schedule.copy(startMinute = m) else it.schedule.copy(endMinute = m)) }
-                timePick = null
-            },
-        )
-    }
     strictCandidate?.let { until ->
         AlertDialog(
             onDismissRequest = { strictCandidate = null },

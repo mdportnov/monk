@@ -11,6 +11,7 @@ import com.mdportnov.monk.shared.data.localMoment
 import com.mdportnov.monk.shared.i18n.stringsFor
 import com.mdportnov.monk.shared.model.MonkConfig
 import com.mdportnov.monk.shared.model.ProtectionState
+import com.mdportnov.monk.shared.model.RoutineMode
 
 /**
  * An ongoing notification with the focus / break countdown, opt-in. On Android 16 it asks to be
@@ -25,10 +26,13 @@ object LiveStatus {
         val nm = context.getSystemService(NotificationManager::class.java)
         val now = System.currentTimeMillis()
         val m = localMoment()
-        // The same state the home card shows: a break the schedule has already overtaken is not a break.
-        val (until, isFocus) = when (config.state(now, m.dayIso, m.minuteOfDay)) {
-            ProtectionState.FOCUS -> config.focusUntil to true
-            ProtectionState.BREAK -> config.pausedUntil to false
+        // The same state the home card shows: a break the schedule has already overtaken is not
+        // a break. Only a countdown is worth a Live Update, so a routine open on its own hours —
+        // which ends when the hour does, not on a timer — is deliberately not one of them.
+        val run = config.activeRun(now)
+        val (until, isRoutine) = when {
+            run != null -> run.until to true
+            config.state(now, m.dayIso, m.minuteOfDay) == ProtectionState.BREAK -> config.pausedUntil to false
             else -> null to false
         }
         if (!config.liveStatus || until == null || !MonkNotifications.granted(context)) {
@@ -46,8 +50,19 @@ object LiveStatus {
         )
         val builder = Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_monk_small)
-            .setContentTitle(if (isFocus) s.liveFocusTitle("") else s.liveBreakTitle)
-            .setContentText(if (isFocus) s.liveFocusBody else s.liveBreakBody)
+            .setContentTitle(
+                if (!isRoutine) s.liveBreakTitle
+                else config.runningRoutine(now)?.let { r -> listOf(r.emoji, s.routineName(r)).filter { it.isNotEmpty() }.joinToString(" ") } ?: s.routineEyebrow,
+            )
+            .setContentText(
+                when {
+                    !isRoutine -> s.liveBreakBody
+                    // A pausing routine does not close anything; saying it does would be the
+                    // notification promising more than the gate delivers.
+                    config.runningRoutine(now)?.mode == RoutineMode.PAUSE -> s.liveRoutinePauseBody
+                    else -> s.liveRoutineBody
+                },
+            )
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -56,7 +71,7 @@ object LiveStatus {
             .setWhen(until)
             .setShowWhen(true)
             .setTimeoutAfter((until - now).coerceAtLeast(1_000))
-            .setCategory(if (isFocus) Notification.CATEGORY_PROGRESS else Notification.CATEGORY_STATUS)
+            .setCategory(if (isRoutine) Notification.CATEGORY_PROGRESS else Notification.CATEGORY_STATUS)
         if (Build.VERSION.SDK_INT >= 36) {
             // Android 16 Live Update. The setter is missing from this SDK stub revision, so it is
             // looked up by name; a ROM without it just shows the ongoing notification.

@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.RuleMode
+import com.mdportnov.monk.shared.model.Schedule
+import com.mdportnov.monk.shared.model.everAppliesUnder
 import com.mdportnov.monk.shared.model.TimeRule
 import com.mdportnov.monk.shared.ui.components.DayToggleRow
 import com.mdportnov.monk.shared.ui.components.Segments
@@ -30,6 +32,7 @@ import com.mdportnov.monk.shared.ui.components.formatMinute
 fun RuleEditorDialog(
     initial: TimeRule,
     isNew: Boolean,
+    schedule: Schedule,
     onDismiss: () -> Unit,
     onSave: (TimeRule) -> Unit,
     onDelete: (() -> Unit)?,
@@ -37,6 +40,9 @@ fun RuleEditorDialog(
     val s = strings
     var rule by remember { mutableStateOf(initial) }
     var picking by remember { mutableStateOf<String?>(null) }
+    // Said as the hours are chosen, not discovered later: a rule outside the base hours never
+    // fires, and nothing else on this dialog hints that the base hours exist.
+    val dead = remember(rule, schedule) { !rule.everAppliesUnder(schedule) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -60,6 +66,13 @@ fun RuleEditorDialog(
                     OutlinedButton(onClick = { picking = "end" }, modifier = Modifier.weight(1f)) { Text("${s.to} ${formatMinute(rule.endMinute)}") }
                 }
                 if (rule.crossesMidnight) Hint(s.ruleNextDay) else Hint(s.ruleSameDay)
+                if (dead) {
+                    Text(
+                        s.ruleOutsideBaseHoursLong("${formatMinute(schedule.startMinute)}–${formatMinute(schedule.endMinute)}"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         },
         confirmButton = { TextButton(onClick = { onSave(rule) }) { Text(s.done) } },

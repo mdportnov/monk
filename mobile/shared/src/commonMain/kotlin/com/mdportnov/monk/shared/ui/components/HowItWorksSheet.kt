@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Loop
 import androidx.compose.material.icons.outlined.PauseCircle
 import androidx.compose.material.icons.outlined.Science
@@ -49,6 +50,7 @@ fun HowItWorksSheet(onDismiss: () -> Unit) {
             LoopStrip()
             Chapter(Icons.Outlined.PauseCircle, s.howWhyTitle, s.howWhyBody, MonkColors.Blue)
             Chapter(Icons.Outlined.Science, s.howDataTitle, s.howDataBody, MonkColors.Mint)
+            Chapter(Icons.Outlined.AutoAwesome, s.howRoutinesTitle, s.howRoutinesBody, MonkColors.Mint)
             Chapter(Icons.Outlined.Shield, s.howStatesTitle, s.howStatesBody, MonkColors.Violet)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(s.howUseTitle, style = MaterialTheme.typography.titleMedium)

@@ -98,15 +98,19 @@ fun InterceptScreen(
     val allowMinutes = state.allowMinutes
     val limitReached = state.limitReached
     val dailyLimit = state.dailyLimit
-    val focusUntil = state.focusUntil
+    val routineName = state.routineName
+    val routineEmoji = state.routineEmoji
+    val routineUntil = state.routineUntil
+    val routineManual = state.routineManual
     val timesToday = state.timesToday
     val askIntention = state.askIntention
     val message = state.message
     val ruleBlockedUntil = state.ruleBlockedUntil
     MonkTheme(darkTheme = true, language = state.language) {
         val s = strings
-        val focus = focusUntil != null
-        val blocked = mode == BlockMode.BLOCK || limitReached || focus || ruleBlockedUntil != null
+        // A routine can tighten without blocking (a pause where the hour was free), so it is not
+        // on its own a reason to drop the countdown: the merged verdict already came as [mode].
+        val blocked = mode == BlockMode.BLOCK || limitReached || ruleBlockedUntil != null
         // The pause is timed by a clock that runs only while RESUMED (pulling the shade over
         // the pause must not wait it out) and advances per frame, so the ring fills smoothly
         // while the second label still ticks.
@@ -191,10 +195,11 @@ fun InterceptScreen(
                         },
                     ) {
                     when {
-                        focus -> {
-                            Title(s.interceptFocusTitle(formatClock(focusUntil ?: 0L)))
+                        blocked && routineName != null -> {
+                            val face = if (routineEmoji.isEmpty()) routineName else "$routineEmoji $routineName"
+                            Title(if (routineUntil == null) s.interceptRoutineTitleOpen(face) else s.interceptRoutineTitle(face, formatClock(routineUntil)))
                             Spacer(Modifier.height(12.dp))
-                            Sub(s.interceptFocusHint)
+                            Sub(message.ifBlank { if (routineManual) s.interceptSessionHint else s.interceptRoutineHint })
                         }
                         ruleBlockedUntil != null && !limitReached -> {
                             Title(s.interceptRuleTitle(label, formatClock(ruleBlockedUntil)))
@@ -228,9 +233,19 @@ fun InterceptScreen(
                                     textAlign = TextAlign.Center,
                                 )
                             }
+                            // A pause where this app would otherwise have opened freely: say whose
+                            // hours these are, or the screen looks like Monk changed its mind.
+                            if (routineName != null) {
+                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    if (routineEmoji.isEmpty()) routineName else "$routineEmoji $routineName",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MonkColors.Blue,
+                                )
+                            }
                         }
                     }
-                    if (timesToday > 1 && !focus) {
+                    if (timesToday > 1) {
                         Spacer(Modifier.height(8.dp))
                         Text(s.timesToday(timesToday), style = MaterialTheme.typography.labelMedium, color = MonkColors.Violet)
                     }

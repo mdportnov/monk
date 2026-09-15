@@ -1,6 +1,7 @@
 package com.mdportnov.monk
 
 import com.mdportnov.monk.shared.data.MonkStore
+import com.mdportnov.monk.shared.i18n.stringsFor
 import com.mdportnov.monk.shared.model.BlockMode
 import com.mdportnov.monk.shared.model.BlockedApp
 import com.mdportnov.monk.shared.model.Decision
@@ -47,11 +48,14 @@ class InterceptSession(
             allowMinutes = config.allowFor(app),
             limitReached = decision.limitReached,
             dailyLimit = app.dailyLimit,
-            focusUntil = config.focusUntil.takeIf { decision.focus && config.isFocus(now) },
+            routineName = decision.routine?.let { stringsFor(config.language).routineName(it) },
+            routineEmoji = decision.routine?.emoji.orEmpty(),
+            routineUntil = decision.routine?.let { store.routineEndsAt(it) },
+            routineManual = decision.routine?.let { config.activeRun(now)?.routineId == it.id } ?: false,
             timesToday = store.interceptsToday(packageName),
             askIntention = config.askIntention,
             message = config.pauseMessage,
-            ruleBlockedUntil = if (decision.rule?.mode == RuleMode.BLOCK && !decision.focus) store.blockEndsAt(packageName) else null,
+            ruleBlockedUntil = if (decision.rule?.mode == RuleMode.BLOCK && decision.routine == null) store.blockEndsAt(packageName) else null,
             language = config.language,
         )
     }

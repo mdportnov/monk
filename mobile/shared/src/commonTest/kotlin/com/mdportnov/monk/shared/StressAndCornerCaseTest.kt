@@ -6,6 +6,7 @@ import com.mdportnov.monk.shared.model.AppDayStats
 import com.mdportnov.monk.shared.model.BlockMode
 import com.mdportnov.monk.shared.model.BlockPolicy
 import com.mdportnov.monk.shared.model.BlockedApp
+import com.mdportnov.monk.shared.model.MonkConfig
 import com.mdportnov.monk.shared.model.DayStats
 import com.mdportnov.monk.shared.model.RuleMode
 import com.mdportnov.monk.shared.model.Stats
@@ -74,12 +75,16 @@ class StressAndCornerCaseTest {
         assertEquals(RuleMode.BLOCK, always.activeRule(3, 12 * 60)?.mode)
         // null here means "not within 7 days", the same null the caller gets for "no block rule at
         // all" — InterceptSession.uiFor treats it as the latter and draws a pause countdown.
-        assertNull(BlockPolicy.blockEndsInMinutes(always, 3, 12 * 60))
+        assertNull(blockEnd(always, 3, 12 * 60))
         val sixDays = insta.copy(rules = (1..6).map { d -> TimeRule(d.toLong(), RuleMode.BLOCK, setOf(d), 0, 0) })
-        assertEquals(6 * TimeWindow.DAY - 12 * 60, BlockPolicy.blockEndsInMinutes(sixDays, 1, 12 * 60))
+        assertEquals(6 * TimeWindow.DAY - 12 * 60, blockEnd(sixDays, 1, 12 * 60))
     }
 
     // --- blockEndsInMinutes: cost and a boundary-walk reference ---
+
+    /** The merged walk over an app on its own: no routines, no schedule, so rules alone decide. */
+    private fun blockEnd(app: BlockedApp, dayIso: Int, minuteOfDay: Int): Int? =
+        BlockPolicy.blockEndsInMinutes(MonkConfig(apps = listOf(app)), app, dayIso, minuteOfDay)
 
     /** Block coverage only changes at a rule boundary or at midnight; step boundary to boundary. */
     private fun blockEndsByBoundaries(app: BlockedApp, dayIso: Int, minuteOfDay: Int): Int? {
@@ -118,7 +123,7 @@ class StressAndCornerCaseTest {
                 val day = rnd.nextInt(1, 8)
                 val minute = rnd.nextInt(0, TimeWindow.DAY)
                 assertEquals(
-                    BlockPolicy.blockEndsInMinutes(app, day, minute),
+                    blockEnd(app, day, minute),
                     blockEndsByBoundaries(app, day, minute),
                     "rules=${app.rules} day=$day minute=$minute",
                 )
@@ -138,7 +143,7 @@ class StressAndCornerCaseTest {
         val app = insta.copy(rules = rules)
         val mark = TimeSource.Monotonic.markNow()
         var last: Int? = null
-        repeat(10) { last = BlockPolicy.blockEndsInMinutes(app, 1, 0) }
+        repeat(10) { last = blockEnd(app, 1, 0) }
         val minuteWalk = mark.elapsedNow() / 10
         val mark2 = TimeSource.Monotonic.markNow()
         var last2: Int? = null

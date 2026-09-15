@@ -2,12 +2,17 @@ package com.mdportnov.monk.shared.data
 
 import com.mdportnov.monk.shared.model.AppDayStats
 import com.mdportnov.monk.shared.model.BlockPolicy
+import com.mdportnov.monk.shared.model.BuiltInRoutines
 import com.mdportnov.monk.shared.model.BlockedApp
 import com.mdportnov.monk.shared.model.DayStats
 import com.mdportnov.monk.shared.model.Decision
 import com.mdportnov.monk.shared.model.BlockMode
 import com.mdportnov.monk.shared.model.MonkConfig
+import com.mdportnov.monk.shared.model.Routine
+import com.mdportnov.monk.shared.model.RoutineMode
+import com.mdportnov.monk.shared.model.RoutineRun
 import com.mdportnov.monk.shared.model.RuleMode
+import com.mdportnov.monk.shared.model.Schedule
 import com.mdportnov.monk.shared.model.Stats
 import com.mdportnov.monk.shared.model.TimeRule
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,7 +45,12 @@ class MonkStore(
     var configLoadError: Throwable? = null
         private set
 
-    private val _config = MutableStateFlow(load(KEY_CONFIG, MonkConfig.serializer()) ?: MonkConfig())
+    private val loadedConfig = load(KEY_CONFIG, MonkConfig.serializer()) ?: MonkConfig()
+
+    // Normalised on the way in, once: the built-in routines are seeded or topped up, hand-edited
+    // values are repaired, and a focus session written by a build before routines becomes a run.
+    // Everything downstream may assume the result.
+    private val _config = MutableStateFlow(loadedConfig.normalized(nowMillis()))
     val config: StateFlow<MonkConfig> = _config
 
     private val _stats = MutableStateFlow(loadStats() ?: Stats())
@@ -48,6 +58,12 @@ class MonkStore(
 
     private val _allowances = MutableStateFlow(load(KEY_ALLOW, allowSerializer) ?: emptyMap())
     val allowances: StateFlow<Map<String, Long>> = _allowances
+
+    init {
+        // Written back only when normalising actually changed something — a first run, an update
+        // that adds a built-in, a stale focus session — so an ordinary start touches no disk.
+        if (_config.value != loadedConfig) kv.putString(KEY_CONFIG, json.encodeToString(MonkConfig.serializer(), _config.value))
+    }
 
     fun updateConfig(transform: (MonkConfig) -> MonkConfig) {
         val next = transform(_config.value)
@@ -73,14 +89,21 @@ class MonkStore(
         c.copy(apps = c.apps + restored, archivedApps = c.archivedApps.filter { it.packageName != packageName })
     }
 
-    /** Removes from the list but keeps the settings in the archive. Refused under strict mode. */
-    fun removeApp(packageName: String) = updateConfig { c ->
-        if (c.isStrict(nowMillis())) return@updateConfig c
-        val gone = c.app(packageName) ?: return@updateConfig c
-        c.copy(
-            apps = c.apps.filter { it.packageName != packageName },
-            archivedApps = (c.archivedApps.filter { it.packageName != packageName } + gone).takeLast(MAX_ARCHIVE),
-        )
+    /**
+     * Removes from the list but keeps the settings in the archive. Returns false when strict mode
+     * refused it, so the caller can say so instead of closing the page as though it had worked.
+     */
+    fun removeApp(packageName: String): Boolean {
+        val current = _config.value
+        if (current.isStrict(nowMillis())) return false
+        val gone = current.app(packageName) ?: return false
+        updateConfig { c ->
+            c.copy(
+                apps = c.apps.filter { it.packageName != packageName },
+                archivedApps = (c.archivedApps.filter { it.packageName != packageName } + gone).takeLast(MAX_ARCHIVE),
+            )
+        }
+        return true
     }
 
     /** The package was uninstalled: park it. Returns true if something moved. */
@@ -102,8 +125,17 @@ class MonkStore(
         return true
     }
 
-    /** One write for the whole picker result instead of one per app. */
-    fun applyPicker(remove: Set<String>, add: List<Pair<String, String>>) = updateConfig { c0 ->
+    /**
+     * One write for the whole picker result instead of one per app. Returns false when strict mode
+     * dropped some of the removals, so the screen can say which half of the edit went through.
+     */
+    fun applyPicker(remove: Set<String>, add: List<Pair<String, String>>): Boolean {
+        val refused = _config.value.isStrict(nowMillis()) && remove.any { _config.value.app(it) != null }
+        applyPickerWrite(remove, add)
+        return !refused
+    }
+
+    private fun applyPickerWrite(remove: Set<String>, add: List<Pair<String, String>>) = updateConfig { c0 ->
         var c = c0
         val removable = if (c.isStrict(nowMillis())) emptySet() else remove
         removable.forEach { pkg ->
@@ -135,24 +167,51 @@ class MonkStore(
         c.copy(apps = c.apps.map { a -> if (a.packageName == packageName) a.copy(rules = a.rules.filter { it.id != ruleId }) else a })
     }
 
-    /** Millis until the app's verdict changes by the clock alone (rule or schedule boundary). */
+    /**
+     * Millis until this app's verdict can change on its own: a rule, schedule or routine-window
+     * boundary, the end of a break, or the end of a session started by hand. This is the value
+     * the accessibility service schedules its next judgement on, so anything missing from it is
+     * a moment protection comes back — or lifts — with nobody watching.
+     */
     fun millisToNextChange(packageName: String): Long? {
-        val app = _config.value.app(packageName) ?: return null
+        val config = _config.value
+        val app = config.app(packageName) ?: return null
         val m = localMoment()
-        val minutes = BlockPolicy.minutesToNextChange(_config.value, app, m.dayIso, m.minuteOfDay)
+        val minutes = BlockPolicy.minutesToNextChange(config, app, m.dayIso, m.minuteOfDay)
         // Boundaries are wall-clock minutes; convert through the zone so DST nights land on time.
         val boundary = minutes?.let { wallMinutesToMillis(it) }
         val now = nowMillis()
-        val breakEnd = if (_config.value.isPaused(now)) _config.value.pausedUntil - now else null
-        return listOfNotNull(boundary, breakEnd).minOrNull()
+        val breakEnd = if (config.isPaused(now)) config.pausedUntil - now else null
+        val sessionEnd = config.activeRun(now)?.let { it.until - now }
+        return listOfNotNull(boundary, breakEnd, sessionEnd).minOrNull()
     }
 
-    /** Epoch millis when the active BLOCK rule coverage ends, or null. */
+    /**
+     * Epoch millis when the block on this app lifts, or null when nothing on the clock lifts it.
+     * Two things can hold it: the clock layers (schedule, rules, routine windows) and a session
+     * running by hand. While both hold it, it lifts when the later of them does — the earlier
+     * one letting go changes nothing the user can see.
+     */
     fun blockEndsAt(packageName: String): Long? {
-        val app = _config.value.app(packageName) ?: return null
+        val config = _config.value
+        val app = config.app(packageName) ?: return null
+        val now = nowMillis()
         val m = localMoment()
-        val minutes = BlockPolicy.blockEndsInMinutes(app, m.dayIso, m.minuteOfDay) ?: return null
-        return nowMillis() + wallMinutesToMillis(minutes)
+        val byClock = if (BlockPolicy.verdictAt(config, app, m.dayIso, m.minuteOfDay) != RuleMode.BLOCK) {
+            null
+        } else {
+            // Blocked by the clock with no end inside a week: nothing to promise.
+            val minutes = BlockPolicy.blockEndsInMinutes(config, app, m.dayIso, m.minuteOfDay) ?: return null
+            clockAfterWallMinutes(minutes)
+        }
+        val bySession = config.activeRun(now)
+            ?.takeIf { run -> config.routine(run.routineId)?.let { it.covers(packageName) && it.mode == RoutineMode.BLOCK } == true }
+            ?.until
+        return when {
+            byClock == null -> bySession
+            bySession == null -> byClock
+            else -> maxOf(byClock, bySession)
+        }
     }
 
     /** Whether a break may start right now: on, inside the schedule, nothing stronger running, cooldown over. */
@@ -168,10 +227,10 @@ class MonkStore(
 
     fun resumeProtection() = updateConfig { it.endingBreak(nowMillis()) }
 
-    /** The master switch, off. Strict mode and a focus session keep it on; locked apps ignore it anyway. */
+    /** The master switch, off. Strict mode and a running routine keep it on; locked apps ignore it anyway. */
     fun switchOff(): Boolean {
         val now = nowMillis()
-        if (_config.value.isStrict(now) || _config.value.isFocus(now)) return false
+        if (_config.value.isStrict(now) || _config.value.activeRun(now) != null) return false
         updateConfig { it.endingBreak(now).copy(enabled = false) }
         return true
     }
@@ -188,15 +247,134 @@ class MonkStore(
         kv.putString(KEY_ALLOW, json.encodeToString(allowSerializer, next))
     }
 
+    // --- routines ---
+
     /**
-     * One-way, like strict mode: a focus session cannot be cut short. Live allowances are dropped,
-     * a running break ends (and its cooldown starts), and protection turns on to stay.
+     * Adds or replaces a routine. Under strict mode — and while the routine itself is running,
+     * which is the same promise with a shorter fuse — only a version that protects at least as
+     * much gets through: tighten as much as you like, soften nothing. Returns false when it was
+     * refused, so the caller can say why rather than appear to have saved.
      */
-    fun startFocus(untilMillis: Long) {
+    fun upsertRoutine(routine: Routine): Boolean {
         val now = nowMillis()
-        updateConfig { it.endingBreak(now).copy(focusUntil = untilMillis, focusStartedAt = now, enabled = true) }
-        _allowances.value = emptyMap()
-        kv.putString(KEY_ALLOW, json.encodeToString(allowSerializer, emptyMap()))
+        val current = _config.value
+        val clean = routine.repaired().copy(builtIn = routine.id in BuiltInRoutines.ids)
+        if (clean.id.isBlank()) return false
+        val before = current.routine(clean.id)
+        if (before == null && current.routines.size >= Routine.MAX_ROUTINES) return false
+        val sealed = current.isStrict(now) || current.activeRun(now)?.routineId == clean.id
+        if (sealed && before != null && !clean.isAtLeastAsStrictAs(before)) return false
+        updateConfig { c ->
+            if (c.routine(clean.id) == null) c.copy(routines = c.routines + clean)
+            else c.copy(routines = c.routines.map { if (it.id == clean.id) clean else it })
+        }
+        // A routine that blocks this very minute must not be undercut by an allowance handed out
+        // before it was saved — the same rule a Block window already follows.
+        val m = localMoment()
+        if (clean.mode == RoutineMode.BLOCK && (clean.isOpen(m.dayIso, m.minuteOfDay) || _config.value.activeRun(now)?.routineId == clean.id)) {
+            revokeAllowancesFor(clean)
+        }
+        return true
+    }
+
+    /** Switches one on or off. Off is a softening, so strict mode refuses it. */
+    fun setRoutineEnabled(id: String, on: Boolean): Boolean {
+        val routine = _config.value.routine(id) ?: return false
+        if (routine.enabled == on) return true
+        return upsertRoutine(routine.copy(enabled = on))
+    }
+
+    /**
+     * Deletes a routine the user made. Built-ins are not deletable by design — they are switched
+     * off or put back instead — and neither strict mode nor a running session lets one go.
+     */
+    fun deleteRoutine(id: String): Boolean {
+        val now = nowMillis()
+        val current = _config.value
+        val routine = current.routine(id) ?: return false
+        if (routine.builtIn || current.isStrict(now) || current.activeRun(now)?.routineId == id) return false
+        updateConfig { c -> c.copy(routines = c.routines.filter { it.id != id }) }
+        return true
+    }
+
+    /**
+     * A built-in back to the way it shipped, keeping only whether it is switched on. Refused
+     * while it is the routine running: a session is a promise about a particular set of hours
+     * and apps, and putting it back to factory settings mid-flight would rewrite the promise
+     * under the person who made it — even when the new shape happens to be stricter.
+     */
+    fun resetRoutine(id: String): Boolean {
+        val factory = BuiltInRoutines.factory(id) ?: return false
+        val current = _config.value
+        if (current.activeRun(nowMillis())?.routineId == id) return false
+        val enabled = current.routine(id)?.enabled ?: factory.enabled
+        return upsertRoutine(factory.copy(enabled = enabled))
+    }
+
+    /**
+     * Starts a routine by hand until [untilMillis]. One-way, like strict mode: a session cannot be
+     * cut short, only extended by starting the same one again for longer. A running break ends
+     * (and its cooldown starts), protection turns on, and the allowances of the apps it covers
+     * are dropped, so "blocked from now" means from now.
+     */
+    fun startRoutine(id: String, untilMillis: Long): Boolean {
+        val now = nowMillis()
+        val current = _config.value
+        val routine = current.routine(id) ?: return false
+        if (!routine.enabled || routine.coversNothing || untilMillis <= now) return false
+        val live = current.activeRun(now)
+        if (live != null && (live.routineId != id || untilMillis <= live.until)) return false
+        val run = RoutineRun(id, live?.startedAt ?: now, untilMillis)
+        updateConfig { it.endingBreak(now).copy(run = run, enabled = true) }
+        revokeAllowancesFor(routine)
+        return true
+    }
+
+    /** Epoch millis when the routine in force stops covering things, or null when nothing ends it. */
+    fun routineEndsAt(routine: Routine): Long? {
+        val now = nowMillis()
+        _config.value.activeRun(now)?.let { if (it.routineId == routine.id) return it.until }
+        val m = localMoment()
+        return routine.openUntilMinutes(m.dayIso, m.minuteOfDay)?.let { clockAfterWallMinutes(it) }
+    }
+
+    /**
+     * Puts apps on the watch list and into a routine in one act. This is what the picker opened
+     * from a routine does: being asked to add the app to a general list first, and only then to
+     * the routine, is bookkeeping the person should never have been shown.
+     *
+     * A routine that already covers every app needs no scope change — the apps join it by being
+     * watched at all. Returns false only if the routine is gone or the widening was refused.
+     */
+    fun addAppsToRoutine(routineId: String, apps: List<Pair<String, String>>): Boolean {
+        val routine = _config.value.routine(routineId) ?: return false
+        apps.forEach { (pkg, label) -> addApp(pkg, label) }
+        if (routine.allApps || apps.isEmpty()) return true
+        val current = _config.value.routine(routineId) ?: return false
+        return upsertRoutine(current.copy(packages = current.packages + apps.map { it.first }))
+    }
+
+    /**
+     * Changes the base hours. Under strict mode only a version that covers at least as many
+     * minutes gets through — which includes switching them off entirely, since that means every
+     * minute. Returns false when it was refused.
+     */
+    fun setSchedule(next: Schedule): Boolean {
+        val current = _config.value
+        if (current.isStrict(nowMillis()) && !next.isAtLeastAsStrictAs(current.schedule)) return false
+        updateConfig { it.copy(schedule = next) }
+        return true
+    }
+
+    /** Watched apps a routine actually reaches; the ones it lists but nobody watches do not count. */
+    fun appsCovered(routine: Routine): List<String> =
+        _config.value.apps.map { it.packageName }.filter { routine.covers(it) }
+
+    private fun revokeAllowancesFor(routine: Routine) {
+        val next = _allowances.value.filterKeys { !routine.covers(it) }
+        if (next == _allowances.value) return
+        _allowances.value = next
+        kv.putString(KEY_ALLOW, json.encodeToString(allowSerializer, next))
     }
 
     /** One-way while it lasts: there is deliberately no `disableStrict`. Ends a running break and turns protection on. */

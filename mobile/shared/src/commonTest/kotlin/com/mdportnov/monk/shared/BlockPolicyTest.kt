@@ -7,6 +7,9 @@ import com.mdportnov.monk.shared.model.BlockPolicy
 import com.mdportnov.monk.shared.model.BlockedApp
 import com.mdportnov.monk.shared.model.Decision
 import com.mdportnov.monk.shared.model.MonkConfig
+import com.mdportnov.monk.shared.model.BuiltInRoutines
+import com.mdportnov.monk.shared.model.Routine
+import com.mdportnov.monk.shared.model.RoutineRun
 import com.mdportnov.monk.shared.model.Schedule
 import com.mdportnov.monk.shared.model.Stats
 import com.mdportnov.monk.shared.model.RuleMode
@@ -69,14 +72,21 @@ class BlockPolicyTest {
     }
 
     @Test
-    fun focusBlocksEverythingWatchedEvenWithAllowance() {
-        val focused = config.copy(focusUntil = 5_000_000L)
-        val d = decide(cfg = focused, allow = mapOf(insta.packageName to 9_000_000L))
+    fun aRunningRoutineBlocksEverythingItCoversEvenWithAllowance() {
+        val running = config.withRun(until = 5_000_000L)
+        val d = decide(cfg = running, allow = mapOf(insta.packageName to 9_000_000L))
         assertIs<Decision.Intercept>(d)
-        assertTrue(d.focus)
+        assertEquals(BuiltInRoutines.FOCUS, d.routine?.id)
         assertEquals(BlockMode.BLOCK, d.effectiveMode)
-        assertEquals(Decision.Allow, decide(cfg = focused, pkg = "com.example.other"))
-        assertEquals(Decision.Allow, decide(cfg = focused.copy(focusUntil = 10L), allow = mapOf(insta.packageName to 9_000_000L)))
+        // Only what the routine covers, and only while it lasts.
+        assertEquals(Decision.Allow, decide(cfg = running, pkg = "com.example.other"))
+        assertEquals(Decision.Allow, decide(cfg = config.withRun(until = 10L), allow = mapOf(insta.packageName to 9_000_000L)))
+    }
+
+    /** The built-in focus routine, running until [until]: what a hand-started session looks like. */
+    private fun MonkConfig.withRun(until: Long): MonkConfig {
+        val focus = BuiltInRoutines.factory(BuiltInRoutines.FOCUS)!!
+        return copy(routines = routines.filter { it.id != focus.id } + focus, run = RoutineRun(focus.id, 0L, until))
     }
 
     @Test
@@ -137,7 +147,8 @@ class BlockPolicyTest {
         val store = MonkStore(kv, onLoadFailure = { key, _ -> reported = key })
         assertEquals("config", reported)
         assertEquals("{not json", store.configBackup())
-        assertEquals(MonkConfig(), store.config.value)
+        // Back to defaults, normalised the same way a first run is: the built-in routines are there.
+        assertEquals(MonkConfig().normalized(0L), store.config.value)
     }
 
     @Test
@@ -277,10 +288,12 @@ class TimeRuleTest {
         val block = TimeRule(1, RuleMode.BLOCK, startMinute = 9 * 60, endMinute = 12 * 60)
         val free = TimeRule(2, RuleMode.FREE, startMinute = 10 * 60, endMinute = 11 * 60)
         val app = insta.copy(rules = listOf(block, free))
-        assertEquals(150, BlockPolicy.blockEndsInMinutes(app, 2, 9 * 60 + 30))
+        fun endFor(a: com.mdportnov.monk.shared.model.BlockedApp, minute: Int, cfg: MonkConfig = MonkConfig(apps = listOf(a))) =
+            BlockPolicy.blockEndsInMinutes(cfg, a, 2, minute)
+        assertEquals(150, endFor(app, 9 * 60 + 30))
         val chained = insta.copy(rules = listOf(block, TimeRule(3, RuleMode.BLOCK, startMinute = 12 * 60, endMinute = 13 * 60)))
-        assertEquals(210, BlockPolicy.blockEndsInMinutes(chained, 2, 9 * 60 + 30))
-        assertNull(BlockPolicy.blockEndsInMinutes(app, 2, 14 * 60))
+        assertEquals(210, endFor(chained, 9 * 60 + 30))
+        assertNull(endFor(app, 14 * 60))
     }
 
     @Test

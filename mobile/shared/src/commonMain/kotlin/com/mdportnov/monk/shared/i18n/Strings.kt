@@ -2,7 +2,11 @@ package com.mdportnov.monk.shared.i18n
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.mdportnov.monk.shared.model.BuiltInRoutines
 import com.mdportnov.monk.shared.model.Intention
+import com.mdportnov.monk.shared.model.Routine
+import com.mdportnov.monk.shared.model.RoutineMode
+import com.mdportnov.monk.shared.model.RoutineWindow
 import com.mdportnov.monk.shared.platform.systemLanguage
 
 class Strings(private val ru: Boolean) {
@@ -30,11 +34,6 @@ class Strings(private val ru: Boolean) {
     val pause60 get() = t("1 hour", "1 час")
     val pauseDay get() = t("Until tomorrow", "До завтра")
     val resume get() = t("Resume", "Возобновить")
-    val focus get() = t("Focus", "Фокус")
-    val focus15 get() = t("15 min", "15 мин")
-    val focus30 get() = t("30 min", "30 мин")
-    val focus45 get() = t("45 min", "45 мин")
-    val focus60 get() = t("1 hour", "1 час")
     val pause5 get() = t("5 min", "5 мин")
     val breakWhat get() = t(
         "A break switches protection off for a set time: every app on your list opens freely, then protection comes back by itself. Starting one takes the same ten-second breath as switching off, and the next break waits half an hour after the last one ends. Locked apps stay protected.",
@@ -44,24 +43,17 @@ class Strings(private val ru: Boolean) {
     fun breakConfirmBody(time: String) = t("Protection is off until $time: every app on your list opens freely. Breathe first — the same pause you asked for.", "Защита выключится до $time: все приложения из списка будут открываться свободно. Сначала выдох — та же пауза, о которой вы просили.")
     val startBreak get() = t("Start break", "Начать перерыв")
     fun breakCooldown(time: String) = t("Next break from $time", "Следующий перерыв — с $time")
-    val focusWhat get() = t("A focus session is the opposite: every app on your list is blocked outright until the timer ends, and it cannot be stopped early.", "Фокус — наоборот: все приложения из списка полностью закрыты до конца таймера, и остановить его раньше нельзя.")
     val offConfirmTitle get() = t("Switch protection off?", "Выключить защиту?")
     val offConfirmBody get() = t("No timer, no way back except this switch. Breathe first — the same pause you asked for.", "Без таймера и без обратного пути, кроме этого же переключателя. Сначала выдох — та же пауза, о которой вы просили.")
     fun countdownWait(seconds: Int) = t("Wait ${seconds}s", "Ещё ${seconds} с")
     val switchOff get() = t("Switch off", "Выключить")
     val lockedStayOn get() = t("Locked apps stay protected.", "Запертые приложения остаются под защитой.")
-    fun focusNoStop(time: String) = t("Focus runs until $time and cannot be stopped.", "Фокус идёт до $time, остановить его нельзя.")
     fun strictNoChange(time: String) = t("Strict mode until $time: nothing can be softened.", "Строгий режим до $time: смягчить ничего нельзя.")
     val endsBreakNote get() = t("The running break ends right away.", "Текущий перерыв закончится сразу.")
     val turnsOnNote get() = t("Protection turns on and stays on afterwards.", "Защита включится и останется включённой.")
     val inhale get() = t("inhale", "вдох")
     val exhale get() = t("exhale", "выдох")
-    fun focusUntil(time: String) = t("Focus until $time", "Фокус до $time")
-    fun focusLeft(minutes: Int) = t("Focus · $minutes min left", "Фокус · ещё $minutes мин")
     fun pauseLeft(minutes: Int) = t("Break · $minutes min left", "Перерыв · ещё $minutes мин")
-    val focusHint get() = t("Every app on your list is blocked until the timer ends. No way to stop early.", "Все приложения из списка закрыты до конца таймера. Остановить раньше нельзя.")
-    val focusConfirmTitle get() = t("Start a focus session?", "Начать фокус?")
-    fun focusConfirmBody(time: String) = t("Every app on your list stays blocked until $time. No way to stop early.", "Все приложения из списка будут закрыты до $time. Остановить раньше нельзя.")
     val start get() = t("Start", "Начать")
     val todayForApp get() = t("Today", "Сегодня")
     val noData get() = t("No data for this period.", "За этот период данных нет.")
@@ -74,7 +66,7 @@ class Strings(private val ru: Boolean) {
     fun appsWatched(n: Int) = t(if (n == 1) "1 app on your list gets a pause" else "$n apps on your list get a pause", "$n ${plural(n, "приложение из списка ждёт", "приложения из списка ждут", "приложений из списка ждут")} паузы")
     val offNudge get() = t("Every app on your list opens freely. The switch brings the pause back.", "Все приложения из списка открываются свободно. Переключатель вернёт паузу.")
     val scheduleOffNudge get() = t("Off by schedule; it comes back on its own.", "Выключена по расписанию; включится сама.")
-    fun scheduleBackAt(time: String) = t("Off by schedule · back at $time. The switch turns Monk off for good.", "Выключена по расписанию · вернётся в $time. Переключатель выключит Monk совсем.")
+    fun scheduleBackAt(time: String) = t("Off by schedule · back at $time", "Выключена по расписанию · вернётся в $time")
     val scheduleOffShort get() = t("Off by schedule", "Выключена по расписанию")
     fun lockedCount(n: Int) = t(if (n == 1) "1 locked" else "$n locked", "Заперто: $n")
 
@@ -101,21 +93,26 @@ class Strings(private val ru: Boolean) {
         "A 2023 study in PNAS (Grüning, Riedel, Lorenz-Spreen; 280 people, six weeks) tested exactly this kind of delay screen. People abandoned 36% of the app openings they had started, tried to open those apps 37% less often, and within six weeks the attempts fell by 57%.",
         "Исследование 2023 года в PNAS (Grüning, Riedel, Lorenz-Spreen; 280 человек, шесть недель) проверяло именно такой экран задержки. Люди отказывались от 36% уже начатых открытий, пытались открыть эти приложения на 37% реже, а за шесть недель попыток стало меньше на 57%.",
     )
+    val howRoutinesTitle get() = t("Layers, and which one wins", "Слои и кто из них главный")
+    val howRoutinesBody get() = t(
+        "Two things decide what happens when you open an app, and the stricter of them wins. The app's own setting is the first: a pause, a block, and any rules you gave it by the hour. A routine is the second: named hours that cover a set of apps with one verdict. A routine can only tighten — it turns a pause into a block, or gives a freely opening hour its pause back — so switching one on can never make anything easier to reach. That is why the pause screen always says which of the two shut the door.",
+        "Что произойдёт при открытии приложения, решают два слоя, и побеждает тот, что строже. Первый — настройки самого приложения: пауза, запрет и правила по часам. Второй — ритуал: названные часы с одной строгостью на выбранные приложения. Ритуал умеет только ужесточать — превратить паузу в запрет или вернуть паузу туда, где было свободно, — поэтому включённый ритуал ничего не открывает. Потому экран паузы и говорит прямо, кто из двоих закрыл дверь.",
+    )
     val howUseTitle get() = t("How to use Monk", "Как пользоваться")
     val howStatesTitle get() = t("Protection states", "Состояния защиты")
     val howStatesBody get() = t(
         "On — the apps on your list open only through the pause screen.\n" +
             "Break — protection is off for a set time; starting one takes a ten-second breath, and the next break waits half an hour after the last.\n" +
-            "Focus — every app on your list is blocked outright until the timer ends; it cannot be stopped early, and it works even outside protection hours.\n" +
+            "Routine — a routine is in force: either you started it by hand, and then it cannot be stopped before its time, or its own hours have come round, and then it lasts as long as they do. A routine works outside protection hours too.\n" +
             "Off by schedule — outside protection hours everything opens and no break can start; the switch still turns Monk off for good.\n" +
-            "Strict mode — until the chosen time nothing can be softened: no off, no break, no removing apps; protection hours still apply.\n" +
+            "Strict mode — until the chosen time nothing can be softened: no off, no break, no removing apps, no loosening a routine; protection hours still apply.\n" +
             "Locked app — ignores off and breaks; only removing it from the list frees it.\n" +
             "Off — everything opens; switching off takes the same ten-second breath.",
         "Включена — приложения из списка открываются только через экран паузы.\n" +
             "Перерыв — защита выключена на время; перед стартом десять секунд выдоха, следующий перерыв — через полчаса после прошлого.\n" +
-            "Фокус — все приложения из списка полностью закрыты до конца таймера, остановить его нельзя; работает и вне часов защиты.\n" +
+            "Ритуал — действует один из ритуалов: либо вы запустили его руками, и тогда он не остановится раньше срока, либо подошли его собственные часы, и тогда он длится, сколько они. Ритуал работает и вне часов защиты.\n" +
             "Выключена по расписанию — вне часов защиты всё открывается, перерыв взять нельзя; переключатель по-прежнему выключает Monk совсем.\n" +
-            "Строгий режим — до выбранного времени ничего нельзя смягчить: ни выключить, ни взять перерыв, ни убрать приложение; часы защиты при этом действуют.\n" +
+            "Строгий режим — до выбранного времени ничего нельзя смягчить: ни выключить, ни взять перерыв, ни убрать приложение, ни ослабить ритуал; часы защиты при этом действуют.\n" +
             "Запертое приложение — не замечает ни выключения, ни перерывов; освободить его можно, только удалив из списка.\n" +
             "Выключена — всё открывается; перед выключением те же десять секунд выдоха.",
     )
@@ -124,8 +121,6 @@ class Strings(private val ru: Boolean) {
     val hapticsHint get() = t("A light tick on sliders, toggles and choices.", "Лёгкий отклик на ползунках, переключателях и выборе.")
     val liveStatus get() = t("Timer in the shade", "Таймер в шторке")
     val liveStatusHint get() = t("An ongoing notification with the focus or break countdown.", "Постоянное уведомление с отсчётом фокуса или перерыва.")
-    fun liveFocusTitle(app: String) = t("Focus session", "Фокус")
-    val liveFocusBody get() = t("Every app on your list is blocked", "Все приложения из списка закрыты")
     val liveBreakTitle get() = t("Break", "Перерыв")
     val liveBreakBody get() = t("Protection is off for now", "Защита пока выключена")
     val suggested get() = t("Usual suspects", "Обычные подозреваемые")
@@ -225,6 +220,15 @@ class Strings(private val ru: Boolean) {
     // Rules & lock
     val rulesTitle get() = t("Rules by time", "Правила по времени")
     val rulesHint get() = t("Override the mode on certain days and hours. Overlaps resolve to the strictest.", "Меняют режим в выбранные дни и часы. Если правила пересекаются, действует самое строгое.")
+    fun rulesInsideBaseHours(range: String) = t(
+        "These only apply inside the base hours ($range). A routine is what reaches outside them.",
+        "Они действуют только внутри основных часов ($range). За их пределами работает ритуал.",
+    )
+    val ruleOutsideBaseHours get() = t("outside the base hours — never fires", "вне основных часов — не сработает")
+    fun ruleOutsideBaseHoursLong(range: String) = t(
+        "These hours fall outside the base hours ($range), so this rule will never fire. Widen the base hours, or use a routine.",
+        "Эти часы за пределами основных ($range) — правило не сработает никогда. Расширьте основные часы или заведите ритуал.",
+    )
     val noRules get() = t("No rules yet.", "Правил пока нет.")
     val addRule get() = t("Add rule", "Добавить правило")
     val ruleNew get() = t("New rule", "Новое правило")
@@ -253,8 +257,6 @@ class Strings(private val ru: Boolean) {
     )
     fun interceptRuleTitle(label: String, until: String) = t("$label is closed until $until", "$label закрыт до $until")
     val interceptRuleHint get() = t("Your own rule for this time of day.", "Вы сами так настроили на это время.")
-    val protectionHours get() = t("Protection hours", "Расписание защиты")
-    val protectionHoursHint get() = t("Outside this window nothing is intercepted.", "Вне этих часов Monk ничего не перехватывает.")
     val system get() = t("System", "Система")
 
     // Settings
@@ -471,14 +473,214 @@ class Strings(private val ru: Boolean) {
     val interceptNotNow get() = t("Not now", "Не сейчас")
     val interceptBack get() = t("Back to focus", "К делу")
     fun interceptWait(seconds: Int) = t("Wait ${seconds}s", "Ещё $seconds с")
-    fun interceptFocusTitle(time: String) = t("Focus until $time", "Фокус до $time")
-    val interceptFocusHint get() = t("You started this session. Everything waits.", "Вы сами начали фокус. Всё подождёт.")
     fun timesToday(n: Int) = t("${ordinal(n)} time today", "Сегодня уже $n-й раз")
 
     private fun ordinal(n: Int): String {
         val suffix = if (n % 100 in 11..13) "th" else when (n % 10) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }
         return "$n$suffix"
     }
+
+
+    // Routines — named hours with a verdict of their own, layered over each app's own setting.
+    val routines get() = t("Routines", "Ритуалы")
+    val routinesHint get() = t(
+        "Your own hours, with their own strictness, over whatever each app is already set to. A routine can only tighten: it never opens what you closed.",
+        "Свои часы и своя строгость поверх того, что уже настроено у приложений. Ритуал умеет только ужесточать: открыть закрытое он не может.",
+    )
+    fun routinesOn(n: Int) = t(if (n == 1) "1 on" else "$n on", "Включено: $n")
+    fun baseHoursLabel(range: String) = t("Base hours $range", "Основные часы $range")
+    val routinesNoneOn get() = t("None switched on", "Ни один не включён")
+    val manageRoutines get() = t("All routines", "Все ритуалы")
+    fun routinesMore(n: Int) = t(
+        if (n == 1) "1 more, on the routines page" else "$n more, on the routines page",
+        "Ещё $n — на странице ритуалов",
+    )
+    val routineEyebrow get() = t("Routine", "Ритуал")
+    val newRoutine get() = t("New routine", "Новый ритуал")
+
+    /** A built-in keeps no name of its own until the user gives it one. */
+    fun routineName(id: String, custom: String): String = custom.ifBlank {
+        when (id) {
+            BuiltInRoutines.FOCUS -> t("Focus", "Фокус")
+            BuiltInRoutines.MORNING -> t("Morning", "Утро")
+            BuiltInRoutines.EVENING -> t("Evening wind-down", "Вечерний отбой")
+            BuiltInRoutines.WORK -> t("Work hours", "Рабочие часы")
+            else -> t("Routine", "Ритуал")
+        }
+    }
+
+    fun routineName(r: Routine): String = routineName(r.id, r.name)
+
+    val routineBuiltIn get() = t("Comes with Monk", "Встроенный ритуал")
+    val routineBuiltInHint get() = t(
+        "It cannot be deleted. Switch it off, or put it back the way it came.",
+        "Его нельзя удалить. Можно выключить или вернуть к исходному виду.",
+    )
+    val routineReset get() = t("Put back as it came", "Вернуть как было")
+    fun routineResetBody(name: String) = t(
+        "$name goes back to the hours, strictness and sign it came with. Whether it is switched on stays as it is.",
+        "$name вернётся к исходным часам, строгости и знаку. Включён он или нет — не изменится.",
+    )
+    val routineDelete get() = t("Delete routine", "Удалить ритуал")
+    fun routineDeleteBody(name: String) = t(
+        "$name and its hours are gone for good. The apps keep their own settings.",
+        "$name и его часы исчезнут насовсем. Настройки приложений останутся.",
+    )
+
+    // State of one routine, as a list row or a chip says it.
+    val routinesYours get() = t("Yours", "Свои")
+    /** Not "mode": that word already belongs to an app's own Block / Pause setting. */
+    val routineWhatItDoes get() = t("What it does", "Что делает")
+    fun routineOpenUntil(time: String) = t("Active until $time", "Действует до $time")
+    val routineOpenNow get() = t("Active now", "Действует сейчас")
+    val routineOff get() = t("Switched off", "Выключен")
+    val routineHeldOffBySwitch get() = t("Its hours are on, but Monk is off", "Часы идут, но Monk выключен")
+    val routineHeldOffByBreak get() = t("Its hours are on, but a break has lifted it", "Часы идут, но его снял перерыв")
+    fun routineRunsUntil(time: String) = t("Running until $time", "Идёт до $time")
+    val routineManualOnly get() = t("only when you start it", "только вручную")
+    val routineEveryApp get() = t("every app", "все приложения")
+    fun routineSomeApps(n: Int) = t(if (n == 1) "1 app" else "$n apps", "$n ${plural(n, "приложение", "приложения", "приложений")}")
+    val routineNoApps get() = t("no apps", "без приложений")
+    fun routineMode(mode: RoutineMode) = if (mode == RoutineMode.BLOCK) ruleBlock else rulePause
+    val routineBlockHint get() = t(
+        "While it is on, the apps it covers do not open at all.",
+        "Пока ритуал действует, его приложения не открываются совсем.",
+    )
+    val routinePauseHint get() = t(
+        "While it is on, the apps it covers get the pause screen — even the ones set to open freely.",
+        "Пока ритуал действует, его приложения показывают экран паузы — даже те, что открывались свободно.",
+    )
+
+    // Starting one by hand.
+    val routineStart get() = t("Start now", "Запустить")
+    val routineExtend get() = t("Extend", "Продлить")
+    fun routineStartTitle(name: String) = t("Start $name?", "Запустить «$name»?")
+    fun routineStartBody(name: String, time: String) = t(
+        "$name holds until $time. It cannot be stopped early — that is the whole point of starting it.",
+        "«$name» продержится до $time. Остановить раньше нельзя — ради этого всё и затевается.",
+    )
+    val routineHowLong get() = t("For how long", "На сколько")
+    fun routineAlreadyRunning(name: String) = t(
+        "$name is running. One at a time.",
+        "Сейчас идёт «$name». Одновременно — только один.",
+    )
+    fun routineCoversNothingNote(name: String) = t(
+        "$name covers no app on your list, so there is nothing for it to do.",
+        "«$name» не покрывает ни одного приложения из списка — работать ему не с чем.",
+    )
+    val routineNeedsOn get() = t("Switch it on to start it by hand.", "Чтобы запускать вручную, включите ритуал.")
+
+    // Editing one.
+    val routineSign get() = t("Sign", "Знак")
+    val routineSignHint get() = t("One emoji. It is how you will recognise it everywhere.", "Один эмодзи — по нему вы и будете его узнавать.")
+    val routineNameLabel get() = t("Name", "Название")
+    val routineNamePlaceholder get() = t("e.g. Evening wind-down", "Например: вечерний отбой")
+    val routineAppsTitle get() = t("Apps", "Приложения")
+    val routineAllApps get() = t("Every app on the list", "Все приложения из списка")
+    val routineAllAppsHint get() = t("The ones you add later join it too.", "Те, что добавите позже, тоже войдут.")
+    val routineNeedsApps get() = t(
+        "Nothing is covered. Tick an app above, or put the routine back to every app.",
+        "Ничего не покрыто. Отметьте приложение выше или верните ритуалу все приложения.",
+    )
+    val routineNoAppsYet get() = t("No apps yet.", "Приложений пока нет.")
+    val routineAddApp get() = t("Add app", "Добавить приложение")
+    fun addToRoutine(name: String) = t("Add to $name", "Добавить в «$name»")
+    val routineAlreadyIn get() = t(
+        "Ticked ones are already in this routine. Take one out on the routine's own page.",
+        "Отмеченные уже в ритуале. Убрать — на странице самого ритуала.",
+    )
+    val routinePickHint get() = t(
+        "Anything you pick joins your list and this routine at once.",
+        "Всё, что выберете, попадёт и в список, и в этот ритуал сразу.",
+    )
+    val routineBaseHours get() = t("Base hours", "Основные часы")
+    val scheduleAlways get() = t("Always", "Всегда")
+    val routineBaseHoursHint get() = t(
+        "When each app's own settings apply. Routines keep hours of their own and work outside these as well.",
+        "Когда действуют собственные настройки приложений. У ритуалов часы свои — они работают и за их пределами.",
+    )
+    val scheduleRoutinesStillWork get() = t("Routines still work", "Ритуалы работают")
+    val scheduleSwitchWarning get() = t(
+        "The switch turns Monk off for good; it will not bring the hours back early.",
+        "Переключатель выключит Monk совсем — часы раньше времени он не вернёт.",
+    )
+    val chipOffNow get() = t("Off now", "Не действует")
+    val routineByEveryApp get() = t("covered automatically", "покрывается автоматически")
+    val routineOffHint get() = t(
+        "Switched off: its hours do not apply and it cannot be started. The switch above turns it on.",
+        "Выключен: его часы не действуют и запустить его нельзя. Включается переключателем выше.",
+    )
+    fun routineWindowsCap(n: Int) = t(
+        "One routine holds at most $n sets of hours.",
+        "В одном ритуале не больше $n интервалов.",
+    )
+    fun routineCapReached(n: Int) = t(
+        "$n routines is the most Monk keeps. Delete one to make another.",
+        "Больше $n ритуалов завести нельзя. Чтобы добавить новый, удалите старый.",
+    )
+    val routineHours get() = t("Hours", "Часы")
+    val routineHoursHint get() = t(
+        "When it comes on by itself. With no hours it waits for you to start it.",
+        "Когда ритуал включается сам. Без часов он ждёт, пока вы запустите его вручную.",
+    )
+    val routineNoWindows get() = t("No hours yet.", "Часов пока нет.")
+    val addWindow get() = t("Add hours", "Добавить часы")
+    val windowNew get() = t("New hours", "Новые часы")
+    val windowEdit get() = t("Hours", "Часы")
+    val routineIgnoresBreaks get() = t("Holds through a break", "Перерыв его не снимает")
+    val routineIgnoresBreaksHint get() = t(
+        "A break lifts every other routine for a while. This one stays on.",
+        "Перерыв на время снимает остальные ритуалы. Этот останется.",
+    )
+    val routineStrictRefused get() = t("Strict mode: a routine can only be tightened.", "Строгий режим: ритуал можно только ужесточить.")
+    val routineRunningRefused get() = t("It is running. Nothing about it can be softened until it ends.", "Ритуал идёт. Пока он не кончится, смягчить его нельзя.")
+
+    // Where a routine shows up outside its own screens.
+    val routineCoveredBy get() = t("In routines", "В ритуалах")
+    val routineCoveredHint get() = t(
+        "In their hours, whichever is stricter wins: the routine, or the settings above.",
+        "В свои часы побеждает то, что строже: ритуал или настройки выше.",
+    )
+    val routineNotCovered get() = t("No routine covers this app.", "Ни один ритуал не покрывает это приложение.")
+    fun breakKeepsRoutine(name: String) = t("$name stays on through it.", "«$name» при этом останется.")
+    fun interceptRoutineTitle(name: String, time: String) = t("$name until $time", "$name до $time")
+    fun interceptRoutineTitleOpen(name: String) = t("$name keeps this closed", "$name держит это закрытым")
+    val interceptRoutineHint get() = t("You set these hours yourself.", "Эти часы вы назначили сами.")
+    val interceptSessionHint get() = t("You started this yourself. Everything waits.", "Вы сами это начали. Всё подождёт.")
+    val liveRoutineBody get() = t("The apps it covers are closed", "Приложения ритуала закрыты")
+    val liveRoutinePauseBody get() = t("Its apps ask for a pause first", "Приложения ритуала просят паузу")
+    val tileRoutineNone get() = t("Open Monk to set this up", "Откройте Monk и настройте")
+    val tileNoApps get() = t("Add apps in Monk first", "Сначала добавьте приложения в Monk")
+    fun tileRoutineOff(name: String) = t("Switch $name on in Monk", "Включите «$name» в Monk")
+
+    /** "Every day · 22:00–07:00 (+1 day)" — one window as a list row says it. */
+    fun windowSummary(w: RoutineWindow): String {
+        val days = if (w.days.size == 7) everyDay else w.days.sorted().joinToString(" ") { dayShort[it - 1] }
+        if (w.allDay) return t("All day · $days", "Весь день · $days")
+        val arrow = if (w.crossesMidnight) " $ruleNextDayShort" else ""
+        return "${clock(w.startMinute)}–${clock(w.endMinute)}$arrow · $days"
+    }
+
+    /** "Block · every app · every day" — one routine in a line. */
+    fun routineSummary(r: Routine, appCount: Int): String {
+        // "Every app" over an empty list still covers nothing, and saying otherwise would be
+        // the one lie a summary must not tell.
+        val scope = when {
+            appCount == 0 -> routineNoApps
+            r.allApps -> routineEveryApp
+            else -> routineSomeApps(appCount)
+        }
+        val hours = when {
+            r.windows.isEmpty() -> routineManualOnly
+            r.windows.size == 1 -> windowSummary(r.windows.first())
+            else -> t("${r.windows.size} sets of hours", "${r.windows.size} ${plural(r.windows.size, "интервал", "интервала", "интервалов")}")
+        }
+        return "${routineMode(r.mode)} · $scope · $hours"
+    }
+
+    private fun clock(minute: Int): String = "${((minute / 60) % 24).pad()}:${(minute % 60).pad()}"
+
+    private fun Int.pad() = if (this < 10) "0$this" else toString()
 
     val iosTitle get() = t("iOS is not supported yet", "iOS пока не поддерживается")
     val iosBody get() = t(

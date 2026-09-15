@@ -46,6 +46,24 @@ fun wallMinutesToMillis(minutes: Int): Long {
     return (target.toInstant(tz) - nowInstant).inWholeMilliseconds
 }
 
+/**
+ * Epoch millis of the wall-clock moment [minutes] minutes ahead, landing exactly on the minute.
+ *
+ * Built from the calendar rather than as now-plus-a-duration. `nowMillis() + wallMinutesToMillis(n)`
+ * reads the clock twice, a hair apart, so the sum lands a millisecond or two BEFORE the boundary
+ * and formats as the minute before it: "back at 08:59" for hours that start at 09:00. Anything
+ * that only wants the wall-clock moment must come through here.
+ */
+fun clockAfterWallMinutes(minutes: Int): Long {
+    val tz = TimeZone.currentSystemDefault()
+    val local = Clock.System.now().toLocalDateTime(tz)
+    val total = local.hour * 60 + local.minute + minutes
+    return local.date.plus(total / TimeWindow.DAY, DateTimeUnit.DAY)
+        .atTime(LocalTime((total % TimeWindow.DAY) / 60, total % 60))
+        .toInstant(tz)
+        .toEpochMilliseconds()
+}
+
 /** Epoch millis of the next local midnight. */
 fun nextMidnightMillis(): Long {
     val tz = TimeZone.currentSystemDefault()

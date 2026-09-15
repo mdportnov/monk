@@ -113,6 +113,17 @@ object TimeWindow {
     fun nextDay(dayIso: Int) = if (dayIso == 7) 1 else dayIso + 1
 }
 
+/** Does this weekly window ever overlap [schedule]? A rule that never does can never fire. */
+fun TimeRule.everAppliesUnder(schedule: Schedule): Boolean {
+    if (!schedule.enabled) return true
+    for (day in 1..7) {
+        for (minute in 0 until TimeWindow.DAY) {
+            if (isActive(day, minute) && schedule.isActive(day, minute)) return true
+        }
+    }
+    return false
+}
+
 @Serializable
 data class Schedule(
     val enabled: Boolean = false,
@@ -128,6 +139,29 @@ data class Schedule(
     /** Wall-clock minutes until the schedule flips next, or null when it never does. */
     fun minutesToNextChange(dayIso: Int, minuteOfDay: Int): Int? =
         if (!enabled) null else TimeWindow.minutesToNextChange(days, startMinute, endMinute, dayIso, minuteOfDay)
+
+    /** Every minute of the week this schedule lets the app layer work. Disabled means all of them. */
+    fun weekMask(): BooleanArray {
+        val mask = BooleanArray(7 * TimeWindow.DAY)
+        for (day in 1..7) {
+            val base = (day - 1) * TimeWindow.DAY
+            for (minute in 0 until TimeWindow.DAY) mask[base + minute] = isActive(day, minute)
+        }
+        return mask
+    }
+
+    /**
+     * True when this version protects at least as many minutes as [other]. Switching the base
+     * hours off makes them every minute of the week, so it is a tightening — which is why strict
+     * mode must allow it, though it looks like turning something off.
+     */
+    fun isAtLeastAsStrictAs(other: Schedule): Boolean {
+        if (!enabled) return true
+        if (!other.enabled) return false
+        val mine = weekMask()
+        val theirs = other.weekMask()
+        return theirs.indices.none { theirs[it] && !mine[it] }
+    }
 }
 
 @Serializable
@@ -144,11 +178,23 @@ data class MonkConfig(
      */
     val archivedApps: List<BlockedApp> = emptyList(),
     val schedule: Schedule = Schedule(),
+    /**
+     * Named hours with a verdict of their own, layered over [apps]: the built-ins plus whatever
+     * the user made. Seeded and repaired by [normalized]; empty only before the first one runs.
+     */
+    val routines: List<Routine> = emptyList(),
+    /** The routine started by hand, if any. One at a time, and it cannot be cut short. */
+    val run: RoutineRun? = null,
     /** Epoch millis; protection is off until then. 0 = not paused. */
     val pausedUntil: Long = 0,
     /** Epoch millis; until then nothing that weakens protection can be changed. 0 = off. */
     val strictUntil: Long = 0,
-    /** Epoch millis; until then every watched app is blocked outright. One-way. 0 = off. */
+    /**
+     * Focus as it was before routines: a bare pair of timestamps. Nothing writes these any more —
+     * [normalized] folds a session still running into a [run] of the built-in focus routine — but
+     * they stay in the schema so a config written by an older build still decodes and its session
+     * is not silently dropped.
+     */
     val focusUntil: Long = 0,
     val focusStartedAt: Long = 0,
     val pauseStartedAt: Long = 0,
@@ -186,7 +232,59 @@ data class MonkConfig(
     fun allowFor(app: BlockedApp) = app.allowMinutes ?: defaultAllowMinutes
     fun isPaused(now: Long) = pausedUntil > now
     fun isStrict(now: Long) = strictUntil > now
-    fun isFocus(now: Long) = focusUntil > now
+
+    fun routine(id: String): Routine? = routines.firstOrNull { it.id == id }
+
+    /**
+     * The hand-started run that is still going, or null. A run whose routine has been deleted, or
+     * whose routine covers no app at all, counts as over: it is the one gate the master switch,
+     * breaks and the policy all consult, so a session that does nothing must not be able to hold
+     * the switch down.
+     */
+    fun activeRun(now: Long): RoutineRun? =
+        run?.takeIf { it.until > now && routine(it.routineId)?.coversNothing == false }
+
+    fun runningRoutine(now: Long): Routine? = activeRun(now)?.let { routine(it.routineId) }
+
+    /**
+     * Every routine in force this minute: the one running by hand first, then the ones their own
+     * windows have opened. Scope is not applied here — this is what the status surfaces show.
+     */
+    fun openRoutines(now: Long, dayIso: Int, minuteOfDay: Int): List<Routine> {
+        val running = runningRoutine(now)
+        val open = routines.filter { it.isOpen(dayIso, minuteOfDay) }
+        return if (running == null) open else listOf(running) + open.filter { it.id != running.id }
+    }
+
+    /** [openRoutines] narrowed to the ones that cover [packageName]. */
+    fun activeRoutines(packageName: String, now: Long, dayIso: Int, minuteOfDay: Int): List<Routine> =
+        openRoutines(now, dayIso, minuteOfDay).filter { it.covers(packageName) }
+
+    /**
+     * Whether this routine is actually deciding anything this minute. A session holds through
+     * everything; a scheduled routine is an ordinary layer that the master switch turns off and a
+     * break lifts unless it says otherwise. [sealed] is the caller's "nothing here may be
+     * softened" — strict mode, or a locked app.
+     *
+     * Every screen that says a routine is in force must ask this, and so must the policy. They
+     * used to answer it separately, and the screens said a routine was holding while the policy
+     * was letting the app through — the one direction of error that costs the user something.
+     */
+    fun routineHolds(routine: Routine, now: Long, sealed: Boolean = false): Boolean = when {
+        activeRun(now)?.routineId == routine.id -> true
+        sealed || isStrict(now) -> true
+        !enabled -> false
+        isPaused(now) -> routine.ignoresBreaks
+        else -> true
+    }
+
+    /** The routines that are both open and in force: what the screens may truthfully name. */
+    fun routinesInForce(now: Long, dayIso: Int, minuteOfDay: Int): List<Routine> =
+        openRoutines(now, dayIso, minuteOfDay).filter { !it.coversNothing && routineHolds(it, now) }
+
+    /** The one a surface names when the state is [ProtectionState.ROUTINE]: the run, else the strictest. */
+    fun leadingRoutine(now: Long, dayIso: Int, minuteOfDay: Int): Routine? =
+        runningRoutine(now) ?: routinesInForce(now, dayIso, minuteOfDay).minByOrNull { it.mode.ordinal }
 
     /** When the last break ended, by the clock or by hand; 0 if there was none. */
     fun breakEndedAt(now: Long): Long = maxOf(lastBreakEndedAt, if (pausedUntil in 1..now) pausedUntil else 0L)
@@ -195,27 +293,66 @@ data class MonkConfig(
     fun nextBreakAt(now: Long): Long = breakEndedAt(now).let { if (it == 0L) 0L else it + BREAK_COOLDOWN_MS }
 
     /**
-     * A break is a softening, so strict mode and a focus session forbid it; one at a time; and
+     * A break is a softening, so strict mode and a running routine forbid it; one at a time; and
      * the next one waits out the cooldown so breaks cannot be chained into a permanent "off".
      */
-    fun canStartBreak(now: Long) = enabled && !isStrict(now) && !isFocus(now) && !isPaused(now) && now >= nextBreakAt(now)
+    fun canStartBreak(now: Long) =
+        enabled && !isStrict(now) && activeRun(now) == null && !isPaused(now) && now >= nextBreakAt(now)
+
+    /** Routines a break would not lift: the card says so before the breath, not after. */
+    fun routinesThroughBreak(now: Long, dayIso: Int, minuteOfDay: Int): List<Routine> =
+        openRoutines(now, dayIso, minuteOfDay).filter { it.ignoresBreaks && !it.coversNothing }
 
     /** [canStartBreak], and there is something to soften: outside the schedule a break is void. */
     fun canStartBreak(now: Long, dayIso: Int, minuteOfDay: Int) = canStartBreak(now) && schedule.isActive(dayIso, minuteOfDay)
 
     /**
-     * The one state every surface shows, in order of what actually decides the verdict: a focus
-     * session blocks even outside the schedule and even on a break; the schedule turns
-     * everything below it off, a running break included, so "off by schedule" is what the user
-     * sees until the schedule comes back; strict mode only stops softening.
+     * The one state every surface shows, in order of what actually decides the verdict. A routine
+     * started by hand is a promise with an end time, so it outranks even the master switch. Below
+     * it the master switch, then the schedule — and a routine open on its own hours keeps the
+     * headline there, because outside protection hours it is the only thing still working. A
+     * break lifts the ordinary layers but not a routine that says it holds through one. Strict
+     * mode never decides what happens to an app, only what may be softened, so it comes last.
      */
-    fun state(now: Long, dayIso: Int, minuteOfDay: Int): ProtectionState = when {
-        !enabled -> ProtectionState.OFF
-        isFocus(now) -> ProtectionState.FOCUS
-        !schedule.isActive(dayIso, minuteOfDay) -> ProtectionState.SCHEDULED_OFF
-        isPaused(now) -> ProtectionState.BREAK
-        isStrict(now) -> ProtectionState.STRICT
-        else -> ProtectionState.ON
+    fun state(now: Long, dayIso: Int, minuteOfDay: Int): ProtectionState {
+        if (activeRun(now) != null) return ProtectionState.ROUTINE
+        if (!enabled) return ProtectionState.OFF
+        // In force, not merely open: a break outside the base hours used to leave this saying
+        // ROUTINE while the policy was letting every app through.
+        val held = routinesInForce(now, dayIso, minuteOfDay)
+        return when {
+            !schedule.isActive(dayIso, minuteOfDay) -> if (held.isNotEmpty()) ProtectionState.ROUTINE else ProtectionState.SCHEDULED_OFF
+            isPaused(now) -> if (held.isNotEmpty()) ProtectionState.ROUTINE else ProtectionState.BREAK
+            held.isNotEmpty() -> ProtectionState.ROUTINE
+            isStrict(now) -> ProtectionState.STRICT
+            else -> ProtectionState.ON
+        }
+    }
+
+    /**
+     * Built-ins present and in order, hand-written nonsense repaired, and a focus session left
+     * over from a build before routines folded into a run of the built-in focus routine. Run on
+     * load and after every decode, so the rest of the code can assume all of it.
+     */
+    fun normalized(now: Long): MonkConfig {
+        val stored = routines.filter { it.id.isNotBlank() }.distinctBy { it.id }
+        val known = stored.associateBy { it.id }
+        // A built-in this build ships but the config has never seen (new install, or a version
+        // that added one) comes in at its factory settings; the rest keep whatever the user did.
+        val builtIns = BuiltInRoutines.all.map { factory -> known[factory.id]?.copy(builtIn = true) ?: factory }
+        val custom = stored.filter { it.id !in BuiltInRoutines.ids }.map { it.copy(builtIn = false) }
+        val all = (builtIns + custom).take(Routine.MAX_ROUTINES).map { it.repaired() }
+        val legacyFocus = focusUntil.takeIf { it > now }?.let {
+            RoutineRun(BuiltInRoutines.FOCUS, focusStartedAt.takeIf { s -> s in 1..it } ?: now, it)
+        }
+        val nextRun = (run ?: legacyFocus)?.takeIf { r -> r.until > now && all.any { it.id == r.routineId } }
+        return copy(
+            schemaVersion = CURRENT_SCHEMA,
+            routines = all,
+            run = nextRun,
+            focusUntil = 0,
+            focusStartedAt = 0,
+        )
     }
 
     /** The break is over from now on, by hand: the cooldown counts from this moment. */
@@ -234,16 +371,27 @@ data class MonkConfig(
             focusStartedAt = focusStartedAt.moved(),
             pauseStartedAt = pauseStartedAt.moved(),
             lastBreakEndedAt = lastBreakEndedAt.moved(),
+            run = run?.copy(startedAt = run.startedAt.moved(), until = run.until.moved()),
         )
     }
 
     companion object {
-        const val CURRENT_SCHEMA = 1
+        /** 2 added routines and folded the focus session into one of them. */
+        const val CURRENT_SCHEMA = 2
         const val BREAK_COOLDOWN_MS = 30 * 60_000L
     }
 }
 
-enum class ProtectionState { OFF, FOCUS, SCHEDULED_OFF, BREAK, STRICT, ON }
+enum class ProtectionState {
+    OFF,
+
+    /** A routine is in force: started by hand, or open on its own hours. */
+    ROUTINE,
+    SCHEDULED_OFF,
+    BREAK,
+    STRICT,
+    ON,
+}
 
 @Serializable
 data class AppDayStats(
@@ -322,23 +470,91 @@ data class InstalledApp(val packageName: String, val label: String)
 
 sealed interface Decision {
     data object Allow : Decision
+
+    /**
+     * [verdict] is what the layers came to together — the app's own mode and rules merged with
+     * every routine in force — so no surface has to redo that arithmetic. [rule] and [routine]
+     * are only there to explain the verdict on the pause screen, and only whichever of them
+     * actually made it stricter.
+     */
     data class Intercept(
         val app: BlockedApp,
         val limitReached: Boolean,
-        val focus: Boolean = false,
+        val verdict: RuleMode = RuleMode.PAUSE,
         /** The rule that produced this decision, if any. */
         val rule: TimeRule? = null,
+        /** The routine that made this stricter than the app's own setting, if one did. */
+        val routine: Routine? = null,
     ) : Decision {
-        val effectiveMode
-            get() = when {
-                limitReached || focus -> BlockMode.BLOCK
-                rule != null -> if (rule.mode == RuleMode.BLOCK) BlockMode.BLOCK else BlockMode.DELAY
-                else -> app.mode
-            }
+        val effectiveMode get() = if (limitReached || verdict == RuleMode.BLOCK) BlockMode.BLOCK else BlockMode.DELAY
     }
 }
 
+/**
+ * What the two layers come to for one app at one instant, before allowances and daily limits.
+ * [routine] is named only when the routine layer is what tightened the answer.
+ */
+class Layers(
+    val verdict: RuleMode?,
+    val rule: TimeRule?,
+    val routineMode: RuleMode?,
+    val routine: Routine?,
+)
+
 object BlockPolicy {
+    /** Strictest wins, as everywhere else: BLOCK over PAUSE over FREE. null = this layer is silent. */
+    fun strictest(a: RuleMode?, b: RuleMode?): RuleMode? = when {
+        a == null -> b
+        b == null -> a
+        else -> if (a.ordinal <= b.ordinal) a else b
+    }
+
+    /**
+     * What would happen to this app if it were opened right now — everything the gate weighs
+     * except the allowance it may already hold and its daily limit. A null verdict means nothing
+     * would happen: the switch is off, a break is running, the base hours are closed, or no layer
+     * covers it.
+     *
+     * [decide] adds allowances and daily limits on top, and every screen that shows what an app
+     * is about to do reads this same function, so a row cannot promise what the gate would not do.
+     */
+    fun layersAt(config: MonkConfig, app: BlockedApp, nowMillis: Long, dayIso: Int, minuteOfDay: Int): Layers {
+        val sealed = app.locked || config.isStrict(nowMillis)
+        val off = !config.enabled
+        val onBreak = config.isPaused(nowMillis)
+        val routines = config.activeRoutines(app.packageName, nowMillis, dayIso, minuteOfDay)
+            .filter { config.routineHolds(it, nowMillis, sealed) }
+        // Nothing holds and nothing seals: the master switch or the break has the whole app list.
+        if (routines.isEmpty() && !sealed && (off || onBreak)) return Layers(null, null, null, null)
+
+        // The app's own layer. Outside the base hours it says nothing at all, which is what makes
+        // a routine the only way to be protected out there.
+        val appLive = (sealed || (!off && !onBreak)) && config.schedule.isActive(dayIso, minuteOfDay)
+        val rule = if (appLive) app.activeRule(dayIso, minuteOfDay) else null
+        val appMode: RuleMode? = when {
+            !appLive -> null
+            rule != null -> rule.mode
+            app.mode == BlockMode.BLOCK -> RuleMode.BLOCK
+            else -> RuleMode.PAUSE
+        }
+        val routineMode = routines.minByOrNull { it.mode.ordinal }?.ruleMode
+        // Named only when it is the routine that tightened things: a routine that merely agrees
+        // with the app's own setting has nothing to explain, and saying its name would puzzle.
+        val blame = routines
+            .firstOrNull { it.ruleMode == routineMode }
+            ?.takeIf { appMode == null || routineMode!!.ordinal < appMode.ordinal }
+        return Layers(strictest(appMode, routineMode), rule, routineMode, blame)
+    }
+
+    /**
+     * Two layers decide an app, and the stricter one wins.
+     *
+     * The app's own layer is its mode and its rules, inside protection hours. The routine layer
+     * is every routine in force that covers it. A routine can only tighten: it turns a pause into
+     * a block, or gives a free hour a pause back, and it never opens what the app's own setting
+     * closed. That is the whole contract, and it is why routines can be added to a config without
+     * anybody's apps getting easier to reach.
+     */
     fun decide(
         config: MonkConfig,
         packageName: String,
@@ -352,33 +568,65 @@ object BlockPolicy {
         // A locked app is the user's promise to themselves: neither the master switch nor a
         // break can loosen it. Only removing the app can, and that asks twice. Strict mode is
         // the same promise for the whole list, so a stray "off" or break in the config is void.
-        if (!app.locked && !config.isStrict(nowMillis)) {
-            if (!config.enabled) return Decision.Allow
-            if (config.isPaused(nowMillis)) return Decision.Allow
-        }
-        if (config.isFocus(nowMillis)) return Decision.Intercept(app, limitReached = false, focus = true)
-        if (!config.schedule.isActive(dayIso, minuteOfDay)) return Decision.Allow
-        val rule = app.activeRule(dayIso, minuteOfDay)
-        // A block window wins over an allowance handed out before it opened.
-        if (rule?.mode == RuleMode.BLOCK) return Decision.Intercept(app, limitReached = false, rule = rule)
+        val layers = layersAt(config, app, nowMillis, dayIso, minuteOfDay)
+        val verdict = layers.verdict ?: return Decision.Allow
+        val rule = layers.rule
+        val routineMode = layers.routineMode
+        val blame = layers.routine
+
+        // A window that closed after the allowance was handed out wins over it — a rule's or a
+        // routine's. The app's own mode is not a window: switching it to Block revokes the
+        // allowance in the store, so the policy has no second-guessing to do there, and an
+        // allowance already running is honoured to its end.
+        val windowBlock = rule?.mode == RuleMode.BLOCK || routineMode == RuleMode.BLOCK
+        if (windowBlock) return Decision.Intercept(app, limitReached = false, verdict = RuleMode.BLOCK, rule = rule, routine = blame)
         val until = allowances[packageName] ?: 0L
         if (until > nowMillis) return Decision.Allow
         val limitReached = app.dailyLimit?.let { opensToday >= it } ?: false
-        if (limitReached) return Decision.Intercept(app, limitReached = true, rule = rule)
-        if (rule?.mode == RuleMode.FREE) return Decision.Allow
-        return Decision.Intercept(app, limitReached = false, rule = rule)
+        if (limitReached) return Decision.Intercept(app, limitReached = true, verdict = verdict, rule = rule, routine = blame)
+        if (verdict == RuleMode.FREE) return Decision.Allow
+        return Decision.Intercept(app, limitReached = false, verdict = verdict, rule = rule, routine = blame)
     }
+
+    /**
+     * What the app's two layers come to at some minute of some day **by the clock alone**: the
+     * schedule, the app's rules and any routine window open then. Nothing that depends on the
+     * instant — a session, a break, an allowance — is in here, which is what makes it safe to
+     * walk minute by minute over a future week.
+     */
+    fun verdictAt(config: MonkConfig, app: BlockedApp, dayIso: Int, minuteOfDay: Int): RuleMode? {
+        val appMode: RuleMode? = if (!config.schedule.isActive(dayIso, minuteOfDay)) null
+        else app.activeRule(dayIso, minuteOfDay)?.mode
+            ?: if (app.mode == BlockMode.BLOCK) RuleMode.BLOCK else RuleMode.PAUSE
+        val routineMode = config.routines
+            .filter { it.isOpen(dayIso, minuteOfDay) && it.covers(app.packageName) }
+            .minByOrNull { it.mode.ordinal }?.ruleMode
+        return strictest(appMode, routineMode)
+    }
+
+    /** [layersAt]'s answer alone, for callers that only need to know what would happen. */
+    fun verdictNow(config: MonkConfig, app: BlockedApp, nowMillis: Long, dayIso: Int, minuteOfDay: Int): RuleMode? =
+        layersAt(config, app, nowMillis, dayIso, minuteOfDay).verdict
 
     /**
      * Millis until the app's verdict can change on its own: the nearest rule boundary or
      * the global schedule's; null when nothing is time-bound. The service re-judges the
      * foreground app then, so a block window starting mid-session actually starts.
      */
-    /** Wall-clock minutes until the nearest rule / schedule boundary, or null. */
+    /**
+     * Wall-clock minutes until the nearest rule, schedule or routine-window boundary, or null.
+     * Windows of one routine are taken one by one rather than as their union, so two that touch
+     * ask for one re-judgement too many; the gate simply decides again and finds nothing changed,
+     * which is far cheaper than getting a boundary wrong.
+     */
     fun minutesToNextChange(config: MonkConfig, app: BlockedApp, dayIso: Int, minuteOfDay: Int): Int? = buildList {
         app.rules.forEach { r -> TimeWindow.minutesToNextChange(r.days, r.startMinute, r.endMinute, dayIso, minuteOfDay)?.let { add(it) } }
         if (config.schedule.enabled) {
             TimeWindow.minutesToNextChange(config.schedule.days, config.schedule.startMinute, config.schedule.endMinute, dayIso, minuteOfDay)?.let { add(it) }
+        }
+        config.routines.forEach { routine ->
+            if (!routine.enabled || routine.coversNothing || !routine.covers(app.packageName)) return@forEach
+            routine.windows.forEach { w -> TimeWindow.minutesToNextChange(w.days, w.startMinute, w.endMinute, dayIso, minuteOfDay)?.let { add(it) } }
         }
     }.minOrNull()
 
@@ -391,23 +639,30 @@ object BlockPolicy {
         nowMillis: Long = 0L,
     ): Long? {
         val minutes = minutesToNextChange(config, app, dayIso, minuteOfDay)?.let { it * 60_000L - secondOfMinute * 1000L }
-        // A break ending is a verdict change too: protection comes back on while the app is open.
+        // A break or a hand-started routine ending is a verdict change too: the app is still in
+        // front, and nothing else would tell us the moment protection comes back.
         val breakEnd = if (nowMillis > 0 && config.isPaused(nowMillis)) config.pausedUntil - nowMillis else null
-        return listOfNotNull(minutes, breakEnd).minOrNull()
+        val runEnd = if (nowMillis > 0) config.activeRun(nowMillis)?.let { it.until - nowMillis } else null
+        return listOfNotNull(minutes, breakEnd, runEnd).minOrNull()
     }
 
     /**
-     * Minutes until the app's BLOCK coverage ends (the strictest active rule stops being BLOCK),
-     * walking minute by minute up to a week; null if no BLOCK rule is active now.
+     * Minutes until the block on this app lifts by the clock, walking minute by minute up to a
+     * week; null when nothing within the week lifts it, and null when the clock is not blocking
+     * it now (ask [verdictAt] first to tell those two apart).
+     *
+     * Both layers are walked, not just the rules: a rule window that closes at 18:00 inside a
+     * routine that blocks until 22:00 does not open anything at 18:00, and a screen that
+     * promised 18:00 would be lying to the one person who took it seriously.
      */
-    fun blockEndsInMinutes(app: BlockedApp, dayIso: Int, minuteOfDay: Int): Int? {
-        if (app.activeRule(dayIso, minuteOfDay)?.mode != RuleMode.BLOCK) return null
+    fun blockEndsInMinutes(config: MonkConfig, app: BlockedApp, dayIso: Int, minuteOfDay: Int): Int? {
+        if (verdictAt(config, app, dayIso, minuteOfDay) != RuleMode.BLOCK) return null
         var day = dayIso
         var minute = minuteOfDay
         for (elapsed in 1..7 * TimeWindow.DAY) {
             minute++
             if (minute == TimeWindow.DAY) { minute = 0; day = TimeWindow.nextDay(day) }
-            if (app.activeRule(day, minute)?.mode != RuleMode.BLOCK) return elapsed
+            if (verdictAt(config, app, day, minute) != RuleMode.BLOCK) return elapsed
         }
         return null
     }

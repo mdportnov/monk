@@ -11,8 +11,17 @@ data class InterceptUiState(
     val allowMinutes: Int,
     val limitReached: Boolean,
     val dailyLimit: Int?,
-    /** Epoch millis of the focus session end, when one is running. */
-    val focusUntil: Long?,
+    /**
+     * The routine that shut this app, when one did. Only set where the routine is what made the
+     * verdict stricter than the app's own setting, so the screen never blames a routine for a
+     * block the app was already under.
+     */
+    val routineName: String? = null,
+    val routineEmoji: String = "",
+    /** Epoch millis when that routine lets go, or null when nothing on the clock ends it. */
+    val routineUntil: Long? = null,
+    /** Started by hand rather than opened by its own hours: a promise, not a schedule. */
+    val routineManual: Boolean = false,
     val timesToday: Int,
     val askIntention: Boolean,
     /** The user's own line; empty = built-in copy. */

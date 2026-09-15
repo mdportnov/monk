@@ -9,6 +9,9 @@ import com.mdportnov.monk.shared.model.BlockPolicy
 import com.mdportnov.monk.shared.model.BlockedApp
 import com.mdportnov.monk.shared.model.Decision
 import com.mdportnov.monk.shared.model.MonkConfig
+import com.mdportnov.monk.shared.model.BuiltInRoutines
+import com.mdportnov.monk.shared.model.Routine
+import com.mdportnov.monk.shared.model.RoutineRun
 import com.mdportnov.monk.shared.model.ProtectionState
 import com.mdportnov.monk.shared.model.RuleMode
 import com.mdportnov.monk.shared.model.Schedule
@@ -42,7 +45,7 @@ class StateConsistencyTest {
         assertEquals(ProtectionState.OFF, base.copy(enabled = false).state(now, 3, 12 * 60))
         assertEquals(ProtectionState.STRICT, base.copy(strictUntil = now + min).state(now, 3, 12 * 60))
         assertEquals(ProtectionState.BREAK, base.copy(pausedUntil = now + min).state(now, 3, 12 * 60))
-        assertEquals(ProtectionState.FOCUS, base.copy(focusUntil = now + min).state(now, 3, 12 * 60))
+        assertEquals(ProtectionState.ROUTINE, base.withRun(now + min).state(now, 3, 12 * 60))
         val scheduled = base.copy(schedule = office)
         assertEquals(ProtectionState.ON, scheduled.state(now, 3, 12 * 60))
         assertEquals(ProtectionState.SCHEDULED_OFF, scheduled.state(now, 3, 20 * 60))
@@ -61,14 +64,20 @@ class StateConsistencyTest {
     }
 
     @Test
-    fun focusBlocksOutsideTheScheduleAndTheStateSaysSo() {
-        val c = base.copy(schedule = office, focusUntil = now + 30 * min)
-        assertEquals(ProtectionState.FOCUS, c.state(now, 6, 12 * 60))
+    fun aRunningRoutineBlocksOutsideTheScheduleAndTheStateSaysSo() {
+        val c = base.withRun(now + 30 * min).copy(schedule = office)
+        assertEquals(ProtectionState.ROUTINE, c.state(now, 6, 12 * 60))
         val d = decide(c, day = 6)
         assertIs<Decision.Intercept>(d)
-        assertTrue(d.focus)
-        // A break underneath a focus session is not what the user sees either.
-        assertEquals(ProtectionState.FOCUS, c.copy(pausedUntil = now + min).state(now, 3, 12 * 60))
+        assertEquals(BuiltInRoutines.FOCUS, d.routine?.id)
+        // A break underneath a running session is not what the user sees either.
+        assertEquals(ProtectionState.ROUTINE, c.copy(pausedUntil = now + min).state(now, 3, 12 * 60))
+    }
+
+    /** The built-in focus routine, running until [until]. */
+    private fun MonkConfig.withRun(until: Long): MonkConfig {
+        val focus = BuiltInRoutines.factory(BuiltInRoutines.FOCUS)!!
+        return copy(routines = routines.filter { it.id != focus.id } + focus, run = RoutineRun(focus.id, 0L, until))
     }
 
     @Test
@@ -110,7 +119,7 @@ class StateConsistencyTest {
         val focus = MonkStore(InMemoryStore()).apply { upsertApp(insta) }
         val t0 = nowMillis()
         assertTrue(focus.pauseProtection(t0 + 30 * min))
-        focus.startFocus(t0 + 15 * min)
+        assertTrue(focus.startRoutine(BuiltInRoutines.FOCUS, t0 + 15 * min))
         assertEquals(0L, focus.config.value.pausedUntil)
         assertTrue(focus.config.value.lastBreakEndedAt >= t0)
         assertTrue(focus.config.value.nextBreakAt(t0 + 16 * min) >= t0 + MonkConfig.BREAK_COOLDOWN_MS)
@@ -140,14 +149,14 @@ class StateConsistencyTest {
     }
 
     @Test
-    fun startFocusWhileOffTurnsProtectionOnToStay() {
+    fun startingARoutineWhileOffTurnsProtectionOnToStay() {
         val store = MonkStore(InMemoryStore()).apply { upsertApp(insta); switchOff() }
         val t0 = nowMillis()
-        store.startFocus(t0 + 15 * min)
+        assertTrue(store.startRoutine(BuiltInRoutines.FOCUS, t0 + 15 * min))
         assertTrue(store.config.value.enabled)
         assertIs<Decision.Intercept>(store.decide(insta.packageName))
         // The state after the session is "on", not the "off" it started from; the dialog says so.
-        assertEquals(ProtectionState.ON, store.config.value.copy(focusUntil = 0).state(t0, 3, 12 * 60))
+        assertEquals(ProtectionState.ON, store.config.value.copy(run = null).state(t0, 3, 12 * 60))
     }
 
     @Test
@@ -221,9 +230,9 @@ class StateConsistencyTest {
         val limited = BlockPolicy.decide(c, insta.packageName, now, 3, 12 * 60, emptyMap(), opensToday = 1)
         assertIs<Decision.Intercept>(limited)
         assertTrue(limited.limitReached)
-        val focused = BlockPolicy.decide(c.copy(focusUntil = now + min), insta.packageName, now, 3, 12 * 60, emptyMap(), opensToday = 0)
+        val focused = BlockPolicy.decide(c.withRun(now + min), insta.packageName, now, 3, 12 * 60, emptyMap(), opensToday = 0)
         assertIs<Decision.Intercept>(focused)
-        assertTrue(focused.focus)
+        assertEquals(BuiltInRoutines.FOCUS, focused.routine?.id)
     }
 
     @Test
@@ -257,14 +266,16 @@ class StateConsistencyTest {
 
     @Test
     fun timersThatNeedNoReJudgeAreNotVerdictChanges() {
-        // A focus or strict end never flips Allow → Intercept for an app the user is inside, so
-        // only rule / schedule boundaries and a break end are re-judge moments.
-        val c = base.copy(schedule = office, focusUntil = now + 5 * min, strictUntil = now + 7 * min)
+        // Strict ending never flips Allow → Intercept for an app the user is inside, so only
+        // rule / schedule / routine boundaries, a break end and a session end are re-judge moments.
+        val c = base.copy(schedule = office, strictUntil = now + 7 * min)
         assertEquals(6 * 60 * 60_000L, BlockPolicy.millisToNextChange(c, insta, 3, 12 * 60, 0, nowMillis = now))
-        val onBreak = c.copy(focusUntil = 0, pausedUntil = now + 2 * min)
+        val onBreak = c.copy(pausedUntil = now + 2 * min)
         assertEquals(2 * min, BlockPolicy.millisToNextChange(onBreak, insta, 3, 12 * 60, 0, nowMillis = now))
-        val scheduledOff = c.copy(focusUntil = 0)
-        assertEquals(13 * 60 * 60_000L, BlockPolicy.millisToNextChange(scheduledOff, insta, 3, 20 * 60, 0, nowMillis = now))
+        assertEquals(13 * 60 * 60_000L, BlockPolicy.millisToNextChange(c, insta, 3, 20 * 60, 0, nowMillis = now))
+        // A session does end one: protection comes back the moment it runs out.
+        val session = base.withRun(now + 3 * min).copy(schedule = office)
+        assertEquals(3 * min, BlockPolicy.millisToNextChange(session, insta, 3, 20 * 60, 0, nowMillis = now))
     }
 
     @Test

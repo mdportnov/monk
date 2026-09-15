@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Schedule
@@ -22,12 +23,17 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.mdportnov.monk.shared.model.TimeRule
+import com.mdportnov.monk.shared.ui.LocalOpenRoute
+import com.mdportnov.monk.shared.ui.Route
 import com.mdportnov.monk.shared.ui.TopBarState
+import com.mdportnov.monk.shared.ui.routines.RoutineFace
+import com.mdportnov.monk.shared.ui.routines.routineStateLine
 import androidx.compose.runtime.SideEffect
 import dev.chrisbanes.haze.HazeState
 import com.mdportnov.monk.shared.ui.components.glassTopBarInset
@@ -47,10 +53,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mdportnov.monk.shared.data.MonkStore
+import kotlinx.coroutines.delay
 import com.mdportnov.monk.shared.data.formatClock
 import com.mdportnov.monk.shared.data.nowMillis
 import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.BlockMode
+import com.mdportnov.monk.shared.model.everAppliesUnder
 import com.mdportnov.monk.shared.platform.AppIcon
 import com.mdportnov.monk.shared.ui.components.Counter
 import com.mdportnov.monk.shared.ui.components.FitText
@@ -65,6 +73,7 @@ import com.mdportnov.monk.shared.ui.components.SettingRow
 import com.mdportnov.monk.shared.ui.components.SettingsDivider
 import com.mdportnov.monk.shared.ui.components.SettingsGroup
 import com.mdportnov.monk.shared.ui.components.SliderSetting
+import com.mdportnov.monk.shared.ui.components.formatMinute
 
 @Composable
 fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, topBar: TopBarState, hazeState: HazeState) {
@@ -76,14 +85,20 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
     val last = remember { arrayOfNulls<com.mdportnov.monk.shared.model.BlockedApp>(1) }
     LaunchedEffect(live == null) { if (live == null) onClose() }
     val app = live?.also { last[0] = it } ?: last[0] ?: return
+    // The page outlives a minute: without a clock of its own every routine line below froze at
+    // the instant it was opened.
+    var now by remember { mutableLongStateOf(nowMillis()) }
+    LaunchedEffect(Unit) { while (true) { delay(30_000); now = nowMillis() } }
+    LaunchedEffect(config.run, config.pausedUntil, config.enabled) { now = nowMillis() }
     // Strict mode or a per-app lock: anything that softens the rule is frozen.
-    val strict = config.isStrict(nowMillis()) || app.locked
+    val strict = config.isStrict(now) || app.locked
     var editing by remember { mutableStateOf<TimeRule?>(null) }
     var editingIsNew by remember { mutableStateOf(false) }
     var confirmLock by rememberSaveable { mutableStateOf(false) }
     var confirmRemove by rememberSaveable { mutableStateOf(false) }
 
-    val strictGlobal = config.isStrict(nowMillis())
+    val strictGlobal = config.isStrict(now)
+    val openRoute = LocalOpenRoute.current
     SideEffect {
         topBar.set(
             title = app.label,
@@ -217,12 +232,21 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
             SettingsGroup {
                 SettingBlock(icon = Icons.Outlined.Schedule, subtitle = s.rulesHint) {
                     if (app.rules.isEmpty()) Hint(s.noRules)
+                    // Rules are the app's own layer, and that layer is switched off outside the
+                    // base hours. Without this the page reads as though a 22:00 rule would fire.
+                    if (config.schedule.enabled) {
+                        Hint(s.rulesInsideBaseHours("${formatMinute(config.schedule.startMinute)}–${formatMinute(config.schedule.endMinute)}"))
+                    }
                 }
                 app.rules.sortedBy { it.startMinute }.forEach { rule -> key(rule.id) {
+                    // The answer is a walk over every minute of the week; it changes only when the
+                    // rule or the base hours do, and it must not be recomputed on every frame.
+                    val dead = remember(rule, config.schedule) { !rule.everAppliesUnder(config.schedule) }
                     SettingsDivider()
                     Surface(onClick = { if (!strict) { editing = rule; editingIsNew = false } }, color = MaterialTheme.colorScheme.surfaceContainer, enabled = !strict) {
                         SettingRow(
                             title = ruleSummary(rule),
+                            subtitle = if (dead) s.ruleOutsideBaseHours else null,
                             trailing = if (strict) null else ({ Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }),
                         )
                     }
@@ -245,6 +269,51 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
                 }
             }
 
+            // The routines this app belongs to, read-only: a rule set above can be overruled from
+            // here, and without this the page would quietly lie about what the app does at 23:00.
+            // Shown even when nothing covers this app: otherwise the one page about this app
+            // would be the one place that never mentions the other half of what decides it.
+            val inRoutines = config.routines.filter { it.covers(packageName) && !it.coversNothing }
+            SectionTitle(s.routineCoveredBy)
+            SettingsGroup {
+                SettingBlock(icon = Icons.Outlined.AutoAwesome, subtitle = s.routineCoveredHint) {
+                    if (inRoutines.isEmpty()) {
+                        Hint(s.routineNotCovered)
+                        OutlinedButton(onClick = { openRoute(Route.Routines) }) { Text(s.manageRoutines) }
+                    }
+                }
+                inRoutines.forEach { routine ->
+                    key(routine.id) {
+                        SettingsDivider()
+                        Surface(onClick = { openRoute(Route.RoutineDetail(routine.id)) }, color = MaterialTheme.colorScheme.surfaceContainer) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                RoutineFace(routine, 36.dp)
+                                Column(Modifier.weight(1f)) {
+                                    Text(s.routineName(routine), style = MaterialTheme.typography.bodyLarge)
+                                    // This list has no switch beside it, so a routine that is off
+                                    // has to say so here — otherwise the hint above ("the stricter
+                                    // wins") would be read as a promise it is not keeping.
+                                    val line = if (!routine.enabled) s.routineOff
+                                    else routineStateLine(store, config, routine, now)
+                                        ?: s.routineSummary(routine, store.appsCovered(routine).size)
+                                    Text(
+                                        line,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (routine.enabled) MaterialTheme.colorScheme.onSurfaceVariant
+                                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    )
+                                }
+                                Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+
             SectionTitle(s.lockTitle)
             SettingsGroup {
                 SettingRow(title = s.lockTitle, subtitle = s.lockHint, icon = Icons.Outlined.Lock) {
@@ -260,6 +329,7 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
         RuleEditorDialog(
             initial = rule,
             isNew = editingIsNew,
+            schedule = config.schedule,
             onDismiss = { editing = null },
             onSave = { store.upsertRule(packageName, it); editing = null },
             onDelete = if (editingIsNew) null else ({ store.removeRule(packageName, rule.id); editing = null }),
@@ -280,7 +350,9 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
             title = { Text(s.removeAppTitle) },
             text = { Text(s.removeAppBody(app.rules.size)) },
             confirmButton = {
-                TextButton(onClick = { confirmRemove = false; store.removeApp(packageName); onClose() }) { Text(s.remove, color = MaterialTheme.colorScheme.error) }
+                // Only leave if it actually went: strict mode refuses, and closing the page on a
+                // refusal would read as "removed" while the app is still watched.
+                TextButton(onClick = { confirmRemove = false; if (store.removeApp(packageName)) onClose() }) { Text(s.remove, color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(s.cancel) } },
         )

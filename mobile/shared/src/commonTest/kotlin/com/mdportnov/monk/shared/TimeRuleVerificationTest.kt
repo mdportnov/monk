@@ -7,6 +7,9 @@ import com.mdportnov.monk.shared.model.BlockPolicy
 import com.mdportnov.monk.shared.model.BlockedApp
 import com.mdportnov.monk.shared.model.Decision
 import com.mdportnov.monk.shared.model.MonkConfig
+import com.mdportnov.monk.shared.model.BuiltInRoutines
+import com.mdportnov.monk.shared.model.Routine
+import com.mdportnov.monk.shared.model.RoutineRun
 import com.mdportnov.monk.shared.model.RuleMode
 import com.mdportnov.monk.shared.model.Schedule
 import com.mdportnov.monk.shared.model.TimeRule
@@ -310,18 +313,19 @@ class TimeRuleVerificationTest {
     }
 
     @Test
-    fun scheduleInactiveWinsOverBlockRuleButFocusAndPauseComeFirst() {
+    fun scheduleInactiveWinsOverBlockRuleButARunningRoutineComesFirst() {
         val block = TimeRule(1, RuleMode.BLOCK, all, 0, 0)
         val weekdays = Schedule(enabled = true, days = setOf(1, 2, 3, 4, 5), startMinute = h(9), endMinute = h(18))
         val c = cfg(block, schedule = weekdays)
         assertEquals(BlockMode.BLOCK, mode(decide(c, 3, h(10))))
         assertEquals(Decision.Allow, decide(c, 3, h(20)))
         assertEquals(Decision.Allow, decide(c, 6, h(10)))
-        // Focus is judged before the schedule: blocked on Saturday too.
-        val focused = c.copy(focusUntil = 5_000_000L)
+        // A running routine is judged before the schedule: blocked on Saturday too.
+        val focus = BuiltInRoutines.factory(BuiltInRoutines.FOCUS)!!
+        val focused = c.copy(routines = listOf(focus), run = RoutineRun(focus.id, 0L, 5_000_000L))
         val f = decide(focused, 6, h(10))
         assertIs<Decision.Intercept>(f)
-        assertTrue(f.focus)
+        assertEquals(BuiltInRoutines.FOCUS, f.routine?.id)
         assertNull(f.rule)
         // Paused / disabled protection lets the app through even inside a BLOCK window.
         assertEquals(Decision.Allow, decide(c.copy(pausedUntil = 2_000_000L), 3, h(10)))

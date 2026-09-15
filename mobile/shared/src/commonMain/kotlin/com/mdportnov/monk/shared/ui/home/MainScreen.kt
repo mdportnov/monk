@@ -57,6 +57,13 @@ import com.mdportnov.monk.shared.ui.components.PageTitle
 
 private enum class Tab { Home, Stats, Settings }
 
+/**
+ * Air between the status bar and a page's large title. The bar's morph geometry measures from the
+ * same number, so the heading travels from where it actually rests; changing it in one place
+ * moves both.
+ */
+private val PageTopGap = 24.dp
+
 /** Scroll position of the current tab, given to every tab screen by the shell. */
 class TabScroll(val list: LazyListState, val column: ScrollState)
 
@@ -133,7 +140,7 @@ fun MainScreen(
         val wide = maxWidth >= 840.dp
         val contentPadding = PaddingValues(
             start = 16.dp, end = 16.dp,
-            top = top + 12.dp,
+            top = top + PageTopGap,
             bottom = if (wide) bottom + 24.dp else bottom + 12.dp + 64.dp + 24.dp,
         )
         // Where every tab's header rests: the content column's start, under the status bar and the
@@ -141,14 +148,14 @@ fun MainScreen(
         val railWidth = if (wide) 96.dp else 0.dp
         val column = (maxWidth - railWidth).coerceAtMost(720.dp)
         val startX = railWidth + (maxWidth - railWidth - column) / 2 + 16.dp + 4.dp
-        val startY = top + 12.dp + PageHeaderPad
+        val startY = top + PageTopGap + PageHeaderPad
         val nominalTitleHeight = with(LocalDensity.current) { (MaterialTheme.typography.headlineMedium.fontSize.value * 1.25f).sp.toDp() }
         with(LocalDensity.current) {
             val x = startX.toPx()
             val y = startY.toPx()
             val tail = 12.dp.toPx()
             // Home: the status card's top edge, read off the list each frame, drives the morph.
-            val padTop = (top + 12.dp).toPx()
+            val padTop = (top + PageTopGap).toPx()
             val home = anchors.getValue(Tab.Home)
             val list = scrolls.getValue(Tab.Home).list
             val cardTop: () -> Float? = {

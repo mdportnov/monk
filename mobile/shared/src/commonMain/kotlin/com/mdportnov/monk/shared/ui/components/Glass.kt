@@ -141,40 +141,60 @@ private class Heading(
  * jumping — a page switch while the header is half-condensed stays continuous.
  */
 private class GlassProgress {
-    private var key: Any? = null
-    // Snapshot state: the draw lambdas and the touch shield re-subscribe when the page hands
-    // over a new anchor under the same title (Main recreated after a pushed page, for one).
-    private var target by mutableStateOf<() -> Float>({ 0f })
-    private var from = 0f
-    /** 0 = still showing the value the previous page left, 1 = live. Reset synchronously on a switch. */
-    var blend by mutableFloatStateOf(1f)
-    /** True only while a page-switch blend is running; otherwise the surface is the heading's live value. */
-    var animating by mutableStateOf(false)
-        private set
-    /** Bumped on every switch: keys the blend effect (a key flipping back within one frame still restarts it) and lets a late-ending blend leave a newer one alone. */
-    var generation by mutableIntStateOf(0)
-        private set
+    /**
+     * What the glass follows: the page's own anchor, held directly rather than as a lambda over
+     * it. A lambda here was the same arithmetic and a silent trap — `heading::progress` is a bound
+     * reference whose equality is its receiver's, [Heading] is equal by key alone so that the
+     * bar's transition does not restart on every recomposition, and [mutableStateOf] skips a write
+     * it considers equal. So a page re-created under the same title (Main coming back from a
+     * pushed page, every time) handed over a fresh anchor and the write was dropped: the glass
+     * went on reading the dead anchor of the composition before, frozen at whatever that one had
+     * last seen, deaf to scrolling until some other page changed the title. Anchors have no
+     * equals, so identity decides and the handover always lands.
+     */
+    private var anchor by mutableStateOf<HeaderAnchor?>(null)
+    private var visible by mutableStateOf(false)
+    /** Where the glass stood when the current page took over; only meaningful while blending. */
+    private var from by mutableFloatStateOf(0f)
+    /** 0 = still showing the value the previous page left, 1 = live. */
+    private var blend by mutableFloatStateOf(1f)
+    /** True only while a page-switch blend is running; otherwise the surface is the page's live value. */
+    private var animating by mutableStateOf(false)
+
+    private fun live(): Float {
+        val p = anchor?.progress() ?: (if (visible) 1f else 0f)
+        return if (p.isNaN()) 0f else p
+    }
 
     /** Exactly what the heading reads, from the same anchor — except during the switch blend. */
     fun current(): Float {
-        val live = target().let { if (it.isNaN()) 0f else it }
+        val live = live()
         return if (!animating || blend >= 1f) live else lerp(from, live, blend)
     }
     /** The glass itself lags the heading a little: it forms as the content arrives, not before. */
     fun surface(): Float = smoothstep(0.15f, 1f, current())
 
-    /** Called on every composition of the bar; only a new page starts a blend, before the next draw. */
-    fun update(newKey: Any, newTarget: () -> Float) {
-        if (key != newKey) {
-            from = Snapshot.withoutReadObservation { if (key == null) newTarget() else current() }
-            if (key != null) { blend = 0f; animating = true; generation++ }
-        }
-        key = newKey
-        target = newTarget
+    /** The page in front described itself again; the value follows that description from now on. */
+    fun retarget(anchor: HeaderAnchor?, visible: Boolean) {
+        this.anchor = anchor
+        this.visible = visible
     }
 
-    /** Ends the blend started for [gen]; a blend cancelled by a newer switch leaves the newer one alone. */
-    fun finish(gen: Int) { if (gen == generation) animating = false }
+    /**
+     * A new page took the bar: cross from wherever the glass stands to whatever the new page
+     * asks for. Called from the effect that runs the blend, never from composition — the whole
+     * point is that arming and running the blend cannot come apart.
+     */
+    fun beginBlend() {
+        from = Snapshot.withoutReadObservation { current() }
+        blend = 0f
+        animating = true
+    }
+
+    fun step(value: Float) { blend = value }
+
+    /** Only on a blend that ran to the end; one cancelled by a newer switch hands over mid-cross. */
+    fun endBlend() { animating = false }
 }
 
 internal fun smoothstep(edge0: Float, edge1: Float, x: Float): Float {
@@ -200,15 +220,18 @@ fun GlassTopBar(
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val heading = Heading(bar.title, bar.level, bar.navigationIcon, bar.actions, bar.heading, bar.anchor, bar.visible)
     val glass = remember { GlassProgress() }
-    glass.update(heading.key, heading::progress)
-    LaunchedEffect(glass.generation) {
-        if (!glass.animating) return@LaunchedEffect
-        val gen = glass.generation
-        try {
-            animate(0f, 1f, animationSpec = Motion.standard()) { v, _ -> glass.blend = v }
-        } finally {
-            glass.finish(gen)
-        }
+    glass.retarget(heading.anchor, heading.visible)
+    // Keyed on the page, and armed inside the effect rather than during composition. Arming used
+    // to happen in composition across a plain field and three snapshot values at once: a
+    // composition that was then discarded left the plain half saying "handled" and the snapshot
+    // half rolled back, so the blend never started and never ended, and the glass stayed frozen
+    // at whatever it had — opaque over a page scrolled to the top, or transparent over one that
+    // was not — until some other page switch happened to re-arm it. An effect only ever runs for
+    // a composition that was kept, so the two halves cannot come apart.
+    LaunchedEffect(heading.key) {
+        glass.beginBlend()
+        animate(0f, 1f, animationSpec = Motion.standard()) { v, _ -> glass.step(v) }
+        glass.endBlend()
     }
     // Only a formed bar shields the rows beneath; at rest the header area must still start a scroll.
     val shields by remember(glass) { derivedStateOf { glass.current() >= 0.5f } }
@@ -403,7 +426,7 @@ fun PageHeaderSlot(modifier: Modifier = Modifier, inPage: Boolean = false, conte
 }
 
 /** Vertical breathing room of the header slot; the shell adds it to the resting position. */
-val PageHeaderPad = 4.dp
+val PageHeaderPad = 8.dp
 
 data class DockTab(val icon: ImageVector, val label: String)
 

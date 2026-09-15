@@ -3,6 +3,21 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.8.0
+
+- Routines: named hours with a strictness of their own, over whatever each app is already set to. Four come with Monk — Focus, Morning, Evening wind-down, Work hours — and you can make your own, name it and give it an emoji. A routine can only tighten: it never opens what you closed.
+- Start one by hand and it holds until its time: no stopping it, no break lifting it, no switching Monk off under it. Leave it to its own hours and it behaves like any other layer.
+- Routines keep their own hours and work outside the base hours, which is the only way to be protected out there.
+- Focus is now one of the routines rather than a thing of its own; a session already running carries over.
+- The base hours moved onto the routines page, next to what they interact with. An app outside those hours says "off now" instead of promising a pause it would not give.
+- Apps join a routine in one step: search every app on the phone from inside the routine, and what you pick lands on your list and in the routine at once.
+- Under strict mode a routine — and the base hours — can be tightened but never softened. Switching the base hours off counts as tightening: off means every minute.
+- A break is now visible and can be ended wherever it is running, including outside the base hours, where it used to disappear.
+- Fixed: a break could lift a routine while every screen still said the routine was holding.
+- Fixed: the top bar could freeze after returning from a page — opaque over a page scrolled to the top, or transparent over one that was not.
+- Fixed: "closed until" counted only the rule's own window and promised an hour that opened nothing; "back at" could show the minute before the hours actually return.
+- Fixed: the shade tiles offered breaks they would then refuse, invented a next-break time, and claimed another routine's session as focus.
+
 ## 1.7.5
 
 - A Morrow entry under "About": the other app from the same workshop, one tap to its page, where it is described and downloaded for Android.

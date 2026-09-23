@@ -16,7 +16,7 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /** Why the user opened the app anyway. Stored by name in stats. */
 @Serializable
-enum class Intention { REPLY, LOOKUP, BORED, HABIT }
+enum class Intention { REPLY, LOOKUP, POST, BORED, HABIT }
 
 /** What a time rule does to the app while its window is open. */
 @Serializable
@@ -40,6 +40,9 @@ data class TimeRule(
     fun isActive(dayIso: Int, minuteOfDay: Int) = TimeWindow.isActive(days, startMinute, endMinute, dayIso, minuteOfDay)
 }
 
+/** A growing pause stops growing here: past five minutes it only teaches people to walk off and come back. */
+const val MAX_PAUSE_SECONDS = 300
+
 @Serializable
 data class BlockedApp(
     val packageName: String,
@@ -49,6 +52,8 @@ data class BlockedApp(
     val delaySeconds: Int? = null,
     /** null = use [MonkConfig.defaultAllowMinutes]. */
     val allowMinutes: Int? = null,
+    /** Seconds added to the pause for every time the app was opened today. 0 = the pause stays flat. */
+    val escalateSeconds: Int = 0,
     /** Opens per day after which Pause turns into Block until midnight. null = unlimited. */
     val dailyLimit: Int? = null,
     /** Time rules that override [mode] while their window is open. */
@@ -228,7 +233,9 @@ data class MonkConfig(
 ) {
     fun app(packageName: String): BlockedApp? = apps.firstOrNull { it.packageName == packageName }
     fun archived(packageName: String): BlockedApp? = archivedApps.firstOrNull { it.packageName == packageName }
-    fun delayFor(app: BlockedApp) = app.delaySeconds ?: defaultDelaySeconds
+    /** The pause for [app], grown by its [BlockedApp.escalateSeconds] for each of [opensToday], up to [MAX_PAUSE_SECONDS]. */
+    fun delayFor(app: BlockedApp, opensToday: Int = 0) =
+        minOf((app.delaySeconds ?: defaultDelaySeconds) + app.escalateSeconds * opensToday, MAX_PAUSE_SECONDS)
     fun allowFor(app: BlockedApp) = app.allowMinutes ?: defaultAllowMinutes
     fun isPaused(now: Long) = pausedUntil > now
     fun isStrict(now: Long) = strictUntil > now

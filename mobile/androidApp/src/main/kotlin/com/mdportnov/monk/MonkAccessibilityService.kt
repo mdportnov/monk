@@ -164,6 +164,9 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
         liveJob?.cancel()
         handler.removeCallbacksAndMessages(null)
         overlay.hide()
+        // The launch guard just went with the handler; a gate left pointing at that launch would
+        // keep the app it names from being judged like any other.
+        InterceptGate.clear()
         runCatching { unregisterReceiver(packagesChanged) }
         runCatching { unregisterReceiver(userPresent) }
         runCatching { unregisterReceiver(clockChanged) }
@@ -190,10 +193,6 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
-        // Overlay under the shade / a system dialog: freeze the countdown, like an Activity would.
-        if (overlay.isShowing) {
-            if (pkg == "com.android.systemui") overlay.pause() else if (pkg == packageName) overlay.resume()
-        }
         gate.onWindow(pkg, event.className?.toString())
     }
 
@@ -227,6 +226,10 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
     override fun interceptShowingFor(): String? = overlay.session?.packageName ?: InterceptGate.showingFor
     override fun interceptInFront(): Boolean = overlay.isShowing || InterceptGate.isInFront()
     override fun hideOverlay() = overlay.hide()
+    override fun redrawIntercept(pkg: String, decision: Decision.Intercept) {
+        val session = overlay.session ?: graph.intercepts[InterceptGate.liveToken]
+        if (session?.packageName == pkg) session.redraw(decision)
+    }
 
     override fun schedule(delayMs: Long, action: () -> Unit) {
         cancelScheduled()
@@ -279,7 +282,7 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
     private val launchGuard: Runnable = object : Runnable {
         override fun run() {
             val token = launchGuardToken
-            if (InterceptGate.isResumed(token)) { runtime.noteLaunchOk(); return }
+            if (InterceptGate.wasResumed(token)) { runtime.noteLaunchOk(); return }
             if (InterceptGate.isCreated(token) && guardRetries < LAUNCH_GUARD_RETRIES) {
                 // Created but not yet resumed: a cold start on a slow device, give it more time.
                 guardRetries++
@@ -295,7 +298,10 @@ class MonkAccessibilityService : AccessibilityService(), ForegroundGate.Effects,
                 return
             }
             overlay.show(session)
-            if (!overlay.isShowing) performGlobalAction(GLOBAL_ACTION_HOME)
+            if (!overlay.isShowing) {
+                graph.intercepts.remove(token)
+                performGlobalAction(GLOBAL_ACTION_HOME)
+            }
         }
     }
 

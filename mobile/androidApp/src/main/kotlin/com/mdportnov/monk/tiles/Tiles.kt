@@ -74,11 +74,12 @@ class PauseTileService : MonkTileService(TileRegistry.PAUSE) {
         if (c.state(now, m.dayIso, m.minuteOfDay) == ProtectionState.BREAK) { store.resumeProtection(); return }
         if (!store.canStartBreak(now)) return
         val s = stringsForSystem()
-        val until = now + 15 * 60_000L
+        // Fixed when the breath is over, not at the tap: the dialog may stay up a while.
+        val until = { System.currentTimeMillis() + 15 * 60_000L }
         val dialog = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(s.breakConfirmTitle)
-            .setMessage(s.breakConfirmBody(formatClock(until)))
-            .setPositiveButton(s.startBreak) { _, _ -> store.pauseProtection(until) }
+            .setMessage(s.breakConfirmBody(formatClock(until() + COUNTDOWN_CONFIRM_SECONDS * 1000L)))
+            .setPositiveButton(s.startBreak) { _, _ -> store.pauseProtection(until()) }
             .setNegativeButton(s.cancel, null)
             .create()
         dialog.setOnShowListener {
@@ -186,14 +187,15 @@ class FocusTileService : MonkTileService(TileRegistry.FOCUS) {
             return
         }
         val name = s.routineName(routine)
-        val until = now + routine.manualMinutes.coerceAtLeast(5) * 60_000L
+        val minutes = routine.manualMinutes.coerceAtLeast(5)
+        val until = now + minutes * 60_000L
         // Starting one ends a running break and turns protection on: say so where it applies.
         val notes = listOfNotNull(s.endsBreakNote.takeIf { c.isPaused(now) }, s.turnsOnNote.takeIf { !c.enabled })
         val dialog = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(s.routineStartTitle(name))
             .setMessage((listOf(s.routineStartBody(name, formatClock(until))) + notes).joinToString("\n\n"))
             .setPositiveButton(s.start) { _, _ ->
-                store.startRoutine(routine.id, until)
+                store.startRoutine(routine.id, System.currentTimeMillis() + minutes * 60_000L)
                 // The app under a live pause screen must be judged again right away.
                 MonkAccessibilityService.reevaluateForeground()
             }

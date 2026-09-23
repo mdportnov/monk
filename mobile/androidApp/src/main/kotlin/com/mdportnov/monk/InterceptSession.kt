@@ -41,10 +41,11 @@ class InterceptSession(
         val config = store.config.value
         val now = System.currentTimeMillis()
         return InterceptUiState(
+            token = token,
             packageName = packageName,
             label = app.label,
             mode = decision.effectiveMode,
-            delaySeconds = config.delayFor(app),
+            delaySeconds = config.delayFor(app, store.opensToday(packageName)),
             allowMinutes = config.allowFor(app),
             limitReached = decision.limitReached,
             dailyLimit = app.dailyLimit,
@@ -81,6 +82,11 @@ class InterceptSession(
         // timer; ask the gate to judge it now (Allow) and schedule the next check.
         nav.armForeground()
         return true
+    }
+
+    /** The verdict changed under the screen (a routine started from a tile): show the new one, same clock. */
+    fun redraw(decision: Decision.Intercept) {
+        if (!decided) _ui.value = uiFor(decision)
     }
 
     fun dismiss() {

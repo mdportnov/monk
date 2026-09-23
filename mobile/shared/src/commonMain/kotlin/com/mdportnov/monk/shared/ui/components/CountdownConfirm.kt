@@ -14,6 +14,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import com.mdportnov.monk.shared.i18n.strings
 import kotlinx.coroutines.delay
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 
 /**
  * A confirmation that gives the app its own medicine: the confirm button counts down for
@@ -33,7 +36,11 @@ fun CountdownConfirm(
     val s = strings
     val haptics = rememberHaptics()
     var remaining by remember { mutableIntStateOf(seconds) }
-    LaunchedEffect(Unit) { while (remaining > 0) { delay(1000); remaining-- } }
+    // Counts only while Monk is on screen: switching away must not wait the countdown out.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { while (remaining > 0) { delay(1000); remaining-- } }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },

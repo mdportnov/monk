@@ -46,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +73,9 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.util.lerp
 import com.mdportnov.monk.shared.ui.components.smoothstep
 import com.mdportnov.monk.shared.ui.rememberFrameClock
@@ -111,18 +115,27 @@ fun InterceptScreen(
         // A routine can tighten without blocking (a pause where the hour was free), so it is not
         // on its own a reason to drop the countdown: the merged verdict already came as [mode].
         val blocked = mode == BlockMode.BLOCK || limitReached || ruleBlockedUntil != null
-        // The pause is timed by a clock that runs only while RESUMED (pulling the shade over
-        // the pause must not wait it out) and advances per frame, so the ring fills smoothly
-        // while the second label still ticks.
-        val clock = remember(packageName, delaySeconds) { PauseClock(if (blocked) 0f else delaySeconds * 1000f) }
-        var intention by remember(packageName) { mutableStateOf<Intention?>(null) }
+        // The pause is timed by a clock that runs only while the screen is RESUMED and its window
+        // has focus (the shade or a system dialog over the pause must not wait it out) and
+        // advances per frame, so the ring fills smoothly while the second label still ticks.
+        // One clock per intercept: keyed by the session, never by what the state happens to say.
+        val clock = remember(state.token) { PauseClock(if (blocked) 0f else delaySeconds * 1000f) }
+        var intention by remember(state.token) { mutableStateOf<Intention?>(null) }
         val lifecycle = LocalLifecycleOwner.current.lifecycle
-        LaunchedEffect(clock, lifecycle) {
+        val window = LocalWindowInfo.current
+        LaunchedEffect(clock, lifecycle, window) {
+            // A window that never reports focus (some OEM overlays) must not hold the pause forever.
+            var focusSeen = false
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                var last = withFrameNanos { it }
-                while (clock.elapsed < clock.totalMs) {
+                var last = -1L
+                while (!clock.done) {
+                    if (window.isWindowFocused) focusSeen = true
+                    if (focusSeen && !window.isWindowFocused) {
+                        snapshotFlow { window.isWindowFocused }.first { it }
+                        last = -1L
+                    }
                     withFrameNanos { now ->
-                        clock.elapsed = minOf(clock.totalMs, clock.elapsed + (now - last) / 1_000_000f)
+                        if (last >= 0) clock.advance(now - last)
                         last = now
                     }
                 }
@@ -179,6 +192,7 @@ fun InterceptScreen(
                     ) {
                         BreathingOrb(
                             active = !blocked && remaining > 0,
+                            breath = { clock.elapsed },
                             progress = { clock.fraction },
                             timed = !blocked && delaySeconds > 0,
                             done = countdownDone,
@@ -327,24 +341,43 @@ private fun Sub(text: String) {
 }
 
 /** Elapsed time of the pause, in the screen's own frames. */
-private class PauseClock(val totalMs: Float) {
+internal class PauseClock(val totalMs: Float) {
     var elapsed by mutableFloatStateOf(0f)
+        private set
+    val done: Boolean get() = elapsed >= totalMs
     val fraction: Float get() = if (totalMs <= 0f) 1f else (elapsed / totalMs).coerceIn(0f, 1f)
     val secondsLeft: Int get() = ceil((totalMs - elapsed) / 1000f).toInt().coerceAtLeast(0)
+
+    /**
+     * One frame's worth of time. A gap longer than [MAX_STEP_NANOS] (screen off under an overlay,
+     * a stalled frame after the window came back) counts as one step, not as waited-out time.
+     */
+    fun advance(deltaNanos: Long) {
+        if (deltaNanos <= 0) return
+        elapsed = minOf(totalMs, elapsed + minOf(deltaNanos, MAX_STEP_NANOS) / 1_000_000f)
+    }
+
+    companion object {
+        const val MAX_STEP_NANOS = 100_000_000L
+    }
 }
+
+private const val BREATH_MS = 10_000f
 
 private fun easeInOutSine(x: Float): Float = -(cos(PI.toFloat() * x) - 1f) / 2f
 
 /**
  * The orb. One breath = 4 s in, 6 s out, eased like lungs rather than a metronome; the two
- * light blobs drift on their own slow orbits. Breath and drift are read off the frame clock
- * inside graphics layers, so nothing recomposes per frame and nothing restarts when the state
- * flips. When the pause ends the breath eases out into the resting size, the ring completes
+ * light blobs drift on their own slow orbits. The breath is read off the pause clock ([breath],
+ * elapsed ms), so it starts on an inhale and stops with the countdown; the drift runs off the
+ * frame clock. Both are read inside graphics layers, so nothing recomposes per frame and nothing
+ * restarts when the state flips. When the pause ends the breath eases out into the resting size, the ring completes
  * and dissolves, and the inhale/exhale label fades — no swap.
  */
 @Composable
 private fun BreathingOrb(
     active: Boolean,
+    breath: () -> Float,
     progress: () -> Float,
     timed: Boolean,
     done: Boolean,
@@ -352,7 +385,8 @@ private fun BreathingOrb(
     content: @Composable () -> Unit,
 ) {
     val s = strings
-    val breathT by rememberFrameClock(10_000)
+    val currentBreath by rememberUpdatedState(breath)
+    val breathT by remember { derivedStateOf { (currentBreath() % BREATH_MS) / BREATH_MS } }
     val orbit1 by rememberFrameClock(14_000)
     val orbit2 by rememberFrameClock(23_000)
     // How much of the breath is in the scale: 1 while pausing, easing to 0 (rest) once done.

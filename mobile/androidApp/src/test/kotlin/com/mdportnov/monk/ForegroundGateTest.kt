@@ -41,6 +41,8 @@ class ForegroundGateTest {
         override fun interceptInFront() = inFront
         override fun intercept(pkg: String, decision: Decision.Intercept) { intercepts += pkg; showing = pkg }
         override fun hideOverlay() { hidden++; showing = null }
+        val redrawn = mutableListOf<String>()
+        override fun redrawIntercept(pkg: String, decision: Decision.Intercept) { redrawn += pkg }
         override fun schedule(delayMs: Long, action: () -> Unit) { scheduledDelay = delayMs; scheduledAction = action }
         override fun cancelScheduled() { scheduledDelay = null; scheduledAction = null }
         val remembered = mutableListOf<String?>()
@@ -257,6 +259,42 @@ class ForegroundGateTest {
         g.restore("com.insta")
         fx.keyguard = true
         g.reevaluateForeground()
+        assertEquals(emptyList<String>(), fx.intercepts)
+        fx.keyguard = false
+        g.onUserPresent()
+        assertEquals(listOf("com.insta"), fx.intercepts)
+    }
+
+    @Test
+    fun unlockOverALivePauseScreenNeitherCountsAgainNorRestartsIt() {
+        val fx = Fake(); val g = gate(fx)
+        g.onWindow("com.insta", "com.insta.MainActivity")
+        g.onUserPresent()
+        g.reevaluateForeground()
+        assertEquals(listOf("com.insta"), fx.intercepts)
+        assertEquals(listOf("com.insta", "com.insta"), fx.redrawn)
+    }
+
+    @Test
+    fun anAppOpenedDuringACallIsJudgedOnItsNextWindowAfterIt() {
+        val fx = Fake(); val g = gate(fx)
+        fx.inCall = true
+        g.onWindow("com.insta", "com.insta.MainActivity")
+        assertEquals(emptyList<String>(), fx.intercepts)
+        fx.inCall = false
+        g.onWindow("com.insta", "com.insta.FeedActivity")
+        assertEquals(listOf("com.insta"), fx.intercepts)
+    }
+
+    @Test
+    fun anAllowanceRunningOutUnderTheKeyguardWaitsForTheUnlock() {
+        val fx = Fake(); val g = gate(fx)
+        fx.allowances["com.insta"] = fx.now + 60_000
+        g.onWindow("com.insta", "com.insta.MainActivity")
+        val expire = fx.scheduledAction!!
+        fx.now += 61_000
+        fx.keyguard = true
+        expire()
         assertEquals(emptyList<String>(), fx.intercepts)
         fx.keyguard = false
         g.onUserPresent()

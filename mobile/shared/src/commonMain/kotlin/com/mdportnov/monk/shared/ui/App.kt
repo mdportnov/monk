@@ -81,6 +81,11 @@ class Navigator(initial: List<Route> = listOf(Route.Main)) {
     val canGoBack get() = stack.size > 1
     fun push(route: Route) { forward = true; stack = stack + route }
     fun pop() { if (canGoBack) { forward = false; popped = stack.last(); stack = stack.dropLast(1) } }
+    /**
+     * A page closing itself. No-op once it is no longer on top: a page still drawn during its
+     * exit animation (a deleted routine noticing it is gone) must not pop the page under it too.
+     */
+    fun pop(from: Route) { if (current.stateKey == from.stateKey) pop() }
     /** The route most recently popped; App drops its saved state once the exit animation is over. */
     var popped by mutableStateOf<Route?>(null)
 
@@ -161,28 +166,28 @@ fun MonkApp(
                         store = store,
                         platform = graph.platform,
                         routineId = route.routineId,
-                        onClose = { nav.pop() },
+                        onClose = { nav.pop(route) },
                         topBar = bar,
                         hazeState = hazeState,
                     )
                     is Route.AppDetail -> AppDetailScreen(
                         store = store,
                         packageName = route.packageName,
-                        onClose = { nav.pop() },
+                        onClose = { nav.pop(route) },
                         topBar = bar,
                         hazeState = hazeState,
                     )
                     Route.ScreenTime -> ScreenTimeScreen(
                         store = store,
                         platform = graph.platform,
-                        onClose = { nav.pop() },
+                        onClose = { nav.pop(route) },
                         onOpenApp = { nav.push(Route.ScreenTimeApp(it)) },
                         topBar = bar,
                         hazeState = hazeState,
                     )
                     Route.Routines -> RoutinesScreen(
                         store = store,
-                        onClose = { nav.pop() },
+                        onClose = { nav.pop(route) },
                         onOpenRoutine = { nav.push(Route.RoutineDetail(it)) },
                         topBar = bar,
                         hazeState = hazeState,
@@ -190,7 +195,7 @@ fun MonkApp(
                     is Route.RoutineDetail -> RoutineDetailScreen(
                         store = store,
                         routineId = route.routineId,
-                        onClose = { nav.pop() },
+                        onClose = { nav.pop(route) },
                         topBar = bar,
                         hazeState = hazeState,
                     )
@@ -198,7 +203,7 @@ fun MonkApp(
                         store = store,
                         platform = graph.platform,
                         packageName = route.packageName,
-                        onClose = { nav.pop() },
+                        onClose = { nav.pop(route) },
                         topBar = bar,
                         hazeState = hazeState,
                     )

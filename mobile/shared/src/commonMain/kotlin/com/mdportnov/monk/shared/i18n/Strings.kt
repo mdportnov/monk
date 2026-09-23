@@ -205,6 +205,13 @@ class Strings(private val ru: Boolean) {
     val modeDelay get() = t("Pause", "Пауза")
     val modeDelayHint get() = t("Breathe first, then decide.", "Сначала выдох, потом решение.")
     val delayLength get() = t("Pause length", "Длительность паузы")
+    val escalate get() = t("Grows with each open", "Растёт с каждым открытием")
+    val escalateHint get() = t(
+        "Every time you open the app today adds this much to the next pause, up to 5 minutes. Back to normal at midnight.",
+        "Каждое открытие сегодня добавляет столько к следующей паузе, до 5 минут. В полночь всё сбрасывается.",
+    )
+    val escalateOff get() = t("Off", "Выкл")
+    fun escalateToday(seconds: Int) = t("Next pause today: $seconds s", "Следующая пауза сегодня: $seconds с")
     val allowLength get() = t("Open for", "На сколько открывать")
     val dailyLimit get() = t("Daily limit", "Лимит в день")
     val dailyLimitHint get() = t("After this many opens the app is blocked until midnight.", "Когда открытия закончатся, приложение закрыто до полуночи.")
@@ -457,6 +464,7 @@ class Strings(private val ru: Boolean) {
     fun intention(i: Intention) = when (i) {
         Intention.REPLY -> t("Reply to someone", "Ответить")
         Intention.LOOKUP -> t("Look something up", "Найти нужное")
+        Intention.POST -> t("Post something", "Выложить своё")
         Intention.BORED -> t("Bored", "Скучно")
         Intention.HABIT -> t("Habit", "По привычке")
     }

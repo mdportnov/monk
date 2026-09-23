@@ -29,8 +29,8 @@ import com.mdportnov.monk.shared.ui.intercept.InterceptScreen
  * permission, is not subject to background-activity-start rules, and covers the whole display —
  * split-screen, desktop windows, OEM ROMs that drop activity launches. Compose needs a
  * lifecycle / saved-state / view-model owner on the view tree; a service has none, so this
- * host provides a minimal one. [pause]/[resume] mirror an Activity under the notification shade,
- * so the countdown stops there just like it does for the Activity.
+ * host provides a minimal one. The countdown freezes on its own when the window loses focus
+ * (the shade, a system dialog), the same way it does in the Activity.
  */
 class InterceptOverlay(private val service: AccessibilityService, private val registry: InterceptRegistry) {
     private val wm = service.getSystemService(WindowManager::class.java)
@@ -105,10 +105,6 @@ class InterceptOverlay(private val service: AccessibilityService, private val re
         backCallback = callback
     }
 
-    /** Something (the shade, a system dialog) is over the overlay: freeze the countdown. */
-    fun pause() { owner?.pause() }
-    fun resume() { owner?.resume() }
-
     private fun open(session: InterceptSession, reason: String?) {
         if (!session.open(reason)) return
         hide()
@@ -144,7 +140,6 @@ class InterceptOverlay(private val service: AccessibilityService, private val re
         override val savedStateRegistry: SavedStateRegistry get() = savedState.savedStateRegistry
         override val viewModelStore: ViewModelStore get() = store
         fun resume() { if (registry.currentState != Lifecycle.State.DESTROYED) registry.currentState = Lifecycle.State.RESUMED }
-        fun pause() { if (registry.currentState == Lifecycle.State.RESUMED) registry.currentState = Lifecycle.State.STARTED }
         fun destroy() {
             if (registry.currentState != Lifecycle.State.DESTROYED) registry.currentState = Lifecycle.State.DESTROYED
             store.clear()

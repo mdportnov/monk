@@ -1,5 +1,6 @@
 package com.mdportnov.monk.shared.ui.settings
 
+import com.mdportnov.monk.shared.ui.rememberNow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -108,9 +109,11 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
     val config by store.config.collectAsStateWithLifecycle()
     val permissions by platform.permissions.collectAsStateWithLifecycle()
     val host = LocalHostActions.current
-    val strict = config.isStrict(nowMillis())
-    val paused = config.isPaused(nowMillis())
-    var strictCandidate by rememberSaveable { mutableStateOf<Long?>(null) }
+    val now = rememberNow(listOf(config.strictUntil, config.pausedUntil))
+    val strict = config.isStrict(now)
+    val paused = config.isPaused(now)
+    // Minutes chosen (or [STRICT_UNTIL_MIDNIGHT]), not an end time: the end is fixed on confirm.
+    var strictCandidate by rememberSaveable { mutableStateOf<Int?>(null) }
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     var showHelp by rememberSaveable { mutableStateOf(false) }
     val haptic = rememberHaptics()
@@ -242,15 +245,15 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
                             )
                         }
                     }
-                    val until = when (preset) {
-                        StrictPreset.Midnight -> nextMidnightMillis()
-                        StrictPreset.Hour -> nowMillis() + 60 * 60_000L
-                        StrictPreset.Custom -> nowMillis() + customMinutes * 60_000L
+                    val minutes = when (preset) {
+                        StrictPreset.Midnight -> STRICT_UNTIL_MIDNIGHT
+                        StrictPreset.Hour -> 60
+                        StrictPreset.Custom -> customMinutes
                     }
-                    Button(onClick = { h.select(); strictCandidate = until }, modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { h.select(); strictCandidate = minutes }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Outlined.Lock, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text(s.strictStart(formatClock(until)))
+                        Text(s.strictStart(formatClock(strictUntil(minutes, now))))
                     }
                 }
             }
@@ -407,7 +410,8 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
     }
 
     if (showHelp) HowItWorksSheet(onDismiss = { showHelp = false })
-    strictCandidate?.let { until ->
+    strictCandidate?.let { minutes ->
+        val until = strictUntil(minutes, now)
         AlertDialog(
             onDismissRequest = { strictCandidate = null },
             title = { Text(s.strictConfirmTitle) },
@@ -418,7 +422,7 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
                     if (!config.enabled) Hint(s.turnsOnNote)
                 }
             },
-            confirmButton = { TextButton(onClick = { haptic.confirm(); store.enableStrict(until); strictCandidate = null }) { Text(s.confirm) } },
+            confirmButton = { TextButton(onClick = { haptic.confirm(); store.enableStrict(strictUntil(minutes, nowMillis())); strictCandidate = null }) { Text(s.confirm) } },
             dismissButton = { TextButton(onClick = { strictCandidate = null }) { Text(s.cancel) } },
         )
     }
@@ -437,3 +441,7 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
 }
 
 private enum class StrictPreset { Midnight, Hour, Custom }
+
+private const val STRICT_UNTIL_MIDNIGHT = -1
+
+private fun strictUntil(minutes: Int, now: Long) = if (minutes == STRICT_UNTIL_MIDNIGHT) nextMidnightMillis() else now + minutes * 60_000L

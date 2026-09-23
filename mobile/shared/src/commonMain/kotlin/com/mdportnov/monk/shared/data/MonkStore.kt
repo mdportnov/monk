@@ -1,5 +1,6 @@
 package com.mdportnov.monk.shared.data
 
+import kotlin.time.Clock
 import com.mdportnov.monk.shared.model.AppDayStats
 import com.mdportnov.monk.shared.model.BlockPolicy
 import com.mdportnov.monk.shared.model.BuiltInRoutines
@@ -62,7 +63,8 @@ class MonkStore(
     init {
         // Written back only when normalising actually changed something — a first run, an update
         // that adds a built-in, a stale focus session — so an ordinary start touches no disk.
-        if (_config.value != loadedConfig) kv.putString(KEY_CONFIG, json.encodeToString(MonkConfig.serializer(), _config.value))
+        // Never over a blob that failed to decode: an update that can read it again finds it intact.
+        if (configLoadError == null && _config.value != loadedConfig) kv.putString(KEY_CONFIG, json.encodeToString(MonkConfig.serializer(), _config.value))
     }
 
     fun updateConfig(transform: (MonkConfig) -> MonkConfig) {
@@ -176,11 +178,14 @@ class MonkStore(
     fun millisToNextChange(packageName: String): Long? {
         val config = _config.value
         val app = config.app(packageName) ?: return null
-        val m = localMoment()
+        // One reading of the clock for both halves: read twice across a minute boundary, "one
+        // minute to the 10:00 block" would be counted from 10:00 and land at 10:01.
+        val at = Clock.System.now()
+        val m = localMoment(at)
         val minutes = BlockPolicy.minutesToNextChange(config, app, m.dayIso, m.minuteOfDay)
         // Boundaries are wall-clock minutes; convert through the zone so DST nights land on time.
-        val boundary = minutes?.let { wallMinutesToMillis(it) }
-        val now = nowMillis()
+        val boundary = minutes?.let { wallMinutesToMillis(it, at) }
+        val now = at.toEpochMilliseconds()
         val breakEnd = if (config.isPaused(now)) config.pausedUntil - now else null
         val sessionEnd = config.activeRun(now)?.let { it.until - now }
         return listOfNotNull(boundary, breakEnd, sessionEnd).minOrNull()
@@ -220,7 +225,7 @@ class MonkStore(
     /** Starts a break if [canStartBreak] allows one right now. Returns whether it did. */
     fun pauseProtection(untilMillis: Long): Boolean {
         val now = nowMillis()
-        if (!canStartBreak(now)) return false
+        if (untilMillis <= now || !canStartBreak(now)) return false
         updateConfig { it.copy(pausedUntil = untilMillis, pauseStartedAt = now) }
         return true
     }
@@ -380,6 +385,8 @@ class MonkStore(
     /** One-way while it lasts: there is deliberately no `disableStrict`. Ends a running break and turns protection on. */
     fun enableStrict(untilMillis: Long) {
         val now = nowMillis()
+        // Already over: nothing to hold, and ending the user's break for it would be all it did.
+        if (untilMillis <= now) return
         updateConfig { it.endingBreak(now).copy(strictUntil = untilMillis, enabled = true) }
     }
 

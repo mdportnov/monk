@@ -1,5 +1,6 @@
 package com.mdportnov.monk.shared.ui.home
 
+import com.mdportnov.monk.shared.ui.rememberNow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.BorderStroke
@@ -75,7 +76,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
@@ -123,7 +123,6 @@ import com.mdportnov.monk.shared.ui.routines.RoutineFace
 import com.mdportnov.monk.shared.ui.routines.RoutineStartSheet
 import com.mdportnov.monk.shared.ui.routines.routineStateLine
 import com.mdportnov.monk.shared.ui.theme.MonkColors
-import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
@@ -141,19 +140,11 @@ fun HomeScreen(
     val stats by store.stats.collectAsStateWithLifecycle()
     val allowances by store.allowances.collectAsStateWithLifecycle()
     val permissions by platform.permissions.collectAsStateWithLifecycle()
-    // A 30 s heartbeat: pause / strict / allowance countdowns and the schedule flip on their own.
-    var now by remember { mutableLongStateOf(nowMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(30_000)
-            now = nowMillis()
-        }
-    }
-    // Timers move when the wall clock is set by hand (the service shifts them): re-read the clock too.
-    LaunchedEffect(config.run, config.strictUntil, config.pausedUntil) { now = nowMillis() }
+    // Pause / strict / allowance countdowns and the schedule flip on their own; timers also move
+    // when the wall clock is set by hand (the service shifts them), so those re-read the clock.
+    val now = rememberNow(listOf(config.run?.until, config.strictUntil, config.pausedUntil) + allowances.values)
     LifecycleResumeEffect(Unit) {
         platform.refreshPermissions()
-        now = nowMillis()
         onPauseOrDispose { }
     }
     val apps = remember(config.apps) { config.apps.sortedBy { it.label.lowercase() } }

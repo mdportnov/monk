@@ -21,8 +21,8 @@ data class LocalMoment(val dateIso: String, val dayIso: Int, val minuteOfDay: In
 
 fun nowMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
-fun localMoment(): LocalMoment {
-    val local = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+fun localMoment(at: Instant = Clock.System.now()): LocalMoment {
+    val local = at.toLocalDateTime(TimeZone.currentSystemDefault())
     val d = local.date
     return LocalMoment(d.toString(), d.dayOfWeek.isoDayNumber, local.hour * 60 + local.minute, local.hour, local.second, d.dayOfYear)
 }
@@ -37,9 +37,8 @@ fun formatClock(epochMillis: Long): String {
  * Millis from now until the wall-clock moment [minutes] minutes ahead, resolved through the
  * zone: across a DST change 06:00 stays 06:00 on the clock, which plain multiplication would miss.
  */
-fun wallMinutesToMillis(minutes: Int): Long {
+fun wallMinutesToMillis(minutes: Int, nowInstant: Instant = Clock.System.now()): Long {
     val tz = TimeZone.currentSystemDefault()
-    val nowInstant = Clock.System.now()
     val local = nowInstant.toLocalDateTime(tz)
     val total = local.hour * 60 + local.minute + minutes
     val target = local.date.plus(total / TimeWindow.DAY, DateTimeUnit.DAY).atTime(LocalTime((total % TimeWindow.DAY) / 60, total % 60))

@@ -4,6 +4,8 @@ import com.mdportnov.monk.shared.model.BlockMode
 
 /** Everything the pause screen needs, computed once by whoever decided to intercept. */
 data class InterceptUiState(
+    /** The intercept this state belongs to; the pause clock lives and dies with it. */
+    val token: Long = 0L,
     val packageName: String,
     val label: String,
     val mode: BlockMode,

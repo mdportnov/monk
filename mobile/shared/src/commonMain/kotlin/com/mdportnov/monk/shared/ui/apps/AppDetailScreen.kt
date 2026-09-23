@@ -1,5 +1,6 @@
 package com.mdportnov.monk.shared.ui.apps
 
+import com.mdportnov.monk.shared.ui.rememberNow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +24,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -53,7 +53,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mdportnov.monk.shared.data.MonkStore
-import kotlinx.coroutines.delay
 import com.mdportnov.monk.shared.data.formatClock
 import com.mdportnov.monk.shared.data.nowMillis
 import com.mdportnov.monk.shared.i18n.strings
@@ -87,9 +86,7 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
     val app = live?.also { last[0] = it } ?: last[0] ?: return
     // The page outlives a minute: without a clock of its own every routine line below froze at
     // the instant it was opened.
-    var now by remember { mutableLongStateOf(nowMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(30_000); now = nowMillis() } }
-    LaunchedEffect(config.run, config.pausedUntil, config.enabled) { now = nowMillis() }
+    val now = rememberNow(listOf(config.run?.until, config.pausedUntil, config.strictUntil))
     // Strict mode or a per-app lock: anything that softens the rule is frozen.
     val strict = config.isStrict(now) || app.locked
     var editing by remember { mutableStateOf<TimeRule?>(null) }
@@ -183,6 +180,19 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
                             onChange = { store.upsertApp(app.copy(delaySeconds = it)) },
                         )
                     }
+                    SettingsDivider()
+                    SliderSetting(
+                        title = s.escalate,
+                        hint = if (app.escalateSeconds > 0) {
+                            s.escalateHint + "\n" + s.escalateToday(config.delayFor(app, store.opensToday(app.packageName)))
+                        } else {
+                            s.escalateHint
+                        },
+                        value = app.escalateSeconds, unit = s.seconds, range = 0..30, step = 5,
+                        enabled = !strict,
+                        format = { if (it == 0) s.escalateOff else "+$it ${s.seconds}" },
+                        onChange = { store.upsertApp(app.copy(escalateSeconds = it)) },
+                    )
                 }
 
                 SectionTitle(s.allowLength)

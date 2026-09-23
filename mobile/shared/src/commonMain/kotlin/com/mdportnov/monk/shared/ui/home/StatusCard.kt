@@ -1,5 +1,6 @@
 package com.mdportnov.monk.shared.ui.home
 
+import com.mdportnov.monk.shared.ui.rememberNow
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -142,7 +143,9 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
     val scheduleActive = config.schedule.isActive(moment.dayIso, moment.minuteOfDay)
     val strict = config.isStrict(now)
     val paused = config.isPaused(now)
-    var breakCandidate by rememberSaveable { mutableStateOf<Long?>(null) }
+    // The chosen length, not an end time: the end is worked out when the breath is over, so a
+    // dialog left open (or restored after the app was away) never starts a shorter break.
+    var breakCandidate by rememberSaveable { mutableStateOf<Int?>(null) }
     var confirmOff by rememberSaveable { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(notice) { if (notice != null) { delay(2600); notice = null } }
@@ -254,10 +257,10 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
                         ActionStrip(
                             Icons.Outlined.Coffee, s.pauseFor, s.breakWhat, palette,
                             listOf(
-                                ChipAction(s.pause5) { breakCandidate = nowMillis() + 5 * 60_000L },
-                                ChipAction(s.pause15) { breakCandidate = nowMillis() + 15 * 60_000L },
-                                ChipAction(s.pause60) { breakCandidate = nowMillis() + 60 * 60_000L },
-                                ChipAction(s.pauseDay) { breakCandidate = nextMidnightMillis() },
+                                ChipAction(s.pause5) { breakCandidate = 5 },
+                                ChipAction(s.pause15) { breakCandidate = 15 },
+                                ChipAction(s.pause60) { breakCandidate = 60 },
+                                ChipAction(s.pauseDay) { breakCandidate = BREAK_UNTIL_MIDNIGHT },
                             ),
                         )
                     } else if (!strict && scheduleActive && !paused) {
@@ -270,19 +273,23 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
             }
         }
     }
-    breakCandidate?.let { until ->
+    breakCandidate?.let { minutes ->
+        fun until() = if (minutes == BREAK_UNTIL_MIDNIGHT) nextMidnightMillis() else nowMillis() + minutes * 60_000L
+        // A routine started from a tile, or the cooldown, can take the break away mid-breath.
+        val canBreak = config.canStartBreak(now, moment.dayIso, moment.minuteOfDay)
+        LaunchedEffect(canBreak) { if (!canBreak) breakCandidate = null }
         // A break weakens protection for the whole list, so it costs the same breath as "off".
         // Routines that hold through one are named before the breath, not discovered after it.
         val holds = config.routinesThroughBreak(now, moment.dayIso, moment.minuteOfDay)
         CountdownConfirm(
             title = s.breakConfirmTitle,
-            body = s.breakConfirmBody(formatClock(until)),
+            body = s.breakConfirmBody(formatClock(until())),
             confirmText = s.startBreak,
             note = listOfNotNull(
                 s.lockedStayOn.takeIf { lockedCount > 0 },
                 holds.firstOrNull()?.let { s.breakKeepsRoutine(s.routineName(it)) },
             ).joinToString(" ").ifBlank { null },
-            onConfirm = { store.pauseProtection(until); breakCandidate = null },
+            onConfirm = { store.pauseProtection(until()); breakCandidate = null },
             onDismiss = { breakCandidate = null },
         )
     }
@@ -299,6 +306,8 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
 }
 
 private const val COUNTDOWN = " countdown"
+
+private const val BREAK_UNTIL_MIDNIGHT = -1
 
 private enum class Mood { On, Strict, Routine, Break, Off, Scheduled }
 
@@ -403,8 +412,7 @@ internal fun CompactStatus(store: MonkStore, anchor: HeaderAnchor) {
         return
     }
     val config by store.config.collectAsStateWithLifecycle()
-    var now by remember { mutableLongStateOf(nowMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(30_000); now = nowMillis() } }
+    val now = rememberNow(listOf(config.run?.until, config.strictUntil, config.pausedUntil))
     val look = lookFor(config, now)
     val state = remember(config, now) { localMoment().let { config.state(now, it.dayIso, it.minuteOfDay) } }
     val palette = paletteFor(look.mood)

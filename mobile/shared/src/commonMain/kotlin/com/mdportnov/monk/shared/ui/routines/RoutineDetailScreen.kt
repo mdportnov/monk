@@ -1,5 +1,6 @@
 package com.mdportnov.monk.shared.ui.routines
 
+import com.mdportnov.monk.shared.ui.rememberNow
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,7 +44,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -104,9 +104,7 @@ fun RoutineDetailScreen(
     LaunchedEffect(live == null) { if (live == null) onClose() }
     val routine = live?.also { last[0] = it } ?: last[0] ?: return
 
-    var now by remember { mutableLongStateOf(nowMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(30_000); now = nowMillis() } }
-    LaunchedEffect(config.run) { now = nowMillis() }
+    val now = rememberNow(listOf(config.run?.until, config.pausedUntil))
     var notice by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(notice) { if (notice != null) { delay(3000); notice = null } }
     var editingWindow by remember { mutableStateOf<RoutineWindow?>(null) }

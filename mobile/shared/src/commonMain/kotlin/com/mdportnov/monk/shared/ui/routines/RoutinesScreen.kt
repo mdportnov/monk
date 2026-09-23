@@ -1,5 +1,6 @@
 package com.mdportnov.monk.shared.ui.routines
 
+import com.mdportnov.monk.shared.ui.rememberNow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,7 +31,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -77,9 +77,7 @@ fun RoutinesScreen(
 ) {
     val s = strings
     val config by store.config.collectAsStateWithLifecycle()
-    var now by remember { mutableLongStateOf(nowMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(30_000); now = nowMillis() } }
-    LaunchedEffect(config.run, config.pausedUntil) { now = nowMillis() }
+    val now = rememberNow(listOf(config.run?.until, config.pausedUntil))
     var notice by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(notice) { if (notice != null) { delay(2600); notice = null } }
     var starting by remember { mutableStateOf<String?>(null) }

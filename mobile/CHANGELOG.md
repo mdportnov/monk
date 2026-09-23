@@ -3,6 +3,20 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.9.0
+
+- A pause that grows: in an app's settings, each time you open it today can add a few seconds to the next pause, up to five minutes. Back to normal at midnight.
+- A new answer to "why?": Post something.
+- The pause countdown runs only while the pause screen is actually in front: the shade, a system dialog or a locked screen no longer wait it out, and a long gap never finishes it at once. The breath starts on an inhale and stops with the countdown.
+- Fixed: the countdown on the overlay could freeze for good after the shade was pulled down.
+- Fixed: unlocking the phone (or midnight, or a change in settings) under a pause screen restarted the countdown and counted the app twice.
+- Fixed: on phones that start the pause screen late, "Not now" could reveal the app instead of leaving it.
+- Fixed: an allowance running out on a locked screen, or an app opened during a call, now gets its pause once you are back.
+- Breaks and strict mode last the full length you chose, however long the confirm stayed open; the same from the tiles.
+- Screens show a break, a session or an allowance ending the moment it ends, and a 10:00 rule at 10:00.
+- Settings that fail to load are kept for a later version to read instead of being replaced.
+- Deleting a routine goes back to the routines, not past them.
+
 ## 1.8.0
 
 - Routines: named hours with a strictness of their own, over whatever each app is already set to. Four come with Monk — Focus, Morning, Evening wind-down, Work hours — and you can make your own, name it and give it an emoji. A routine can only tighten: it never opens what you closed.

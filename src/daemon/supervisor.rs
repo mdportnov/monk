@@ -57,26 +57,38 @@ type FiredWindow = (String, chrono::DateTime<chrono::Utc>);
 impl Supervisor {
     pub fn new(config: Config) -> Result<Self> {
         blocker::cleanup_all_backends();
-        let audit = Arc::new(AuditLog::new()?);
+        let audit = AuditLog::new()?;
         if let Err(e) = audit.prune(90) {
             tracing::warn!(?e, "audit prune failed");
         }
-        let selected = blocker::select_site_blocker();
-        Ok(Self {
+        Ok(Self::assemble(config, audit, LockStore::new()?, blocker::select_site_blocker()))
+    }
+
+    /// Everything [`Supervisor::new`] wires up, minus the parts that touch
+    /// the machine: tests hand in a tempdir store and audit log and a mock
+    /// blocker, so they never read, prune or write the installed daemon's
+    /// state — and never race each other for its database.
+    fn assemble(
+        config: Config,
+        audit: AuditLog,
+        store: LockStore,
+        selected: blocker::SelectedBlocker,
+    ) -> Self {
+        Self {
             config: Arc::new(RwLock::new(config)),
             config_write: Arc::new(Mutex::new(())),
             hosts: Arc::new(Mutex::new(selected.blocker)),
             blocker_fallback_reason: Arc::new(RwLock::new(selected.fallback_reason)),
             procs: Arc::new(Mutex::new(ProcessGuard::new())),
-            store: Arc::new(LockStore::new()?),
-            audit,
+            store: Arc::new(store),
+            audit: Arc::new(audit),
             last_tick_ms: Arc::new(AtomicU64::new(clock::monotonic_ms() as u64)),
             active_profile: Arc::new(RwLock::new(None)),
             last_tamper_mac: Arc::new(Mutex::new(None)),
             last_fired_window: Arc::new(Mutex::new(None)),
             session_gate: Arc::new(Mutex::new(())),
             consecutive_hosts_failures: Arc::new(AtomicU32::new(0)),
-        })
+        }
     }
 
     fn with_write<F>(&self, mutate: F) -> Result<()>
@@ -973,16 +985,24 @@ mod tests {
     }
 
     fn isolated_with(config: crate::config::Config) -> (Supervisor, tempfile::TempDir) {
-        let mut supervisor = Supervisor::new(config).unwrap();
+        isolated_blocking(config, false)
+    }
+
+    fn isolated_blocking(
+        config: crate::config::Config,
+        blocker_fails: bool,
+    ) -> (Supervisor, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
-        supervisor.store = std::sync::Arc::new(crate::session::LockStore::with_paths(
+        let store = crate::session::LockStore::with_paths(
             dir.path().join("session.lock"),
             vec![dir.path().join("a/session.lock"), dir.path().join("b/session.lock")],
-        ));
-        supervisor.audit =
-            std::sync::Arc::new(AuditLog::with_path(dir.path().join("audit.sqlite3")));
-        *supervisor.hosts.lock() = Box::new(MockBlocker::new(false));
-        (supervisor, dir)
+        );
+        let audit = AuditLog::with_path(dir.path().join("audit.sqlite3"));
+        let selected = crate::blocker::SelectedBlocker {
+            blocker: Box::new(MockBlocker::new(blocker_fails)),
+            fallback_reason: None,
+        };
+        (Supervisor::assemble(config, audit, store, selected), dir)
     }
 
     fn start_test_session(sup: &Supervisor, duration: Duration) {
@@ -1090,17 +1110,7 @@ mod tests {
     fn test_start_fails_when_hosts_apply_fails() {
         let mut config = crate::config::Config::default();
         config.profiles.insert("test".into(), crate::config::Profile::default());
-        let mut supervisor = Supervisor::new(config).unwrap();
-
-        // Isolate the lock store under a tempdir so we don't observe
-        // production session.lock from a system-installed daemon.
-        let dir = tempfile::tempdir().unwrap();
-        supervisor.store = std::sync::Arc::new(crate::session::LockStore::with_paths(
-            dir.path().join("session.lock"),
-            vec![dir.path().join("a/session.lock"), dir.path().join("b/session.lock")],
-        ));
-
-        *supervisor.hosts.lock() = Box::new(MockBlocker::new(true));
+        let (supervisor, _dir) = isolated_blocking(config, true);
 
         let result = supervisor.start(
             "test".to_string(),

@@ -23,6 +23,11 @@ ignore = [
     # proc-macro-error2 unmaintained — transitive build-time proc-macro via
     # lnk -> getset (Windows .lnk parsing). No runtime impact; no replacement yet.
     "RUSTSEC-2026-0173",
+    # unsafe-libyaml unmaintained — via rust-i18n -> serde_yaml. YAML is only
+    # parsed by the i18n! macro at build time, and only our own locales/*.yml;
+    # the binary never reads YAML at runtime. Drop when rust-i18n leaves
+    # serde_yaml.
+    "RUSTSEC-2024-0449",
     # GTK3 bindings (and proc-macro-error via gtk3-macros) unmaintained —
     # phantom path: tray-icon/tao are macOS-only deps of monk, and their GTK
     # branch is Linux-only, so this code is never built on any shipped

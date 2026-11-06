@@ -44,7 +44,7 @@ fn codec() -> LengthDelimitedCodec {
 /// copy under `/usr/local/libexec`, so a CLI upgrade alone leaves it behind.
 pub fn explain_rejection(message: String) -> String {
     if message.contains("unknown request kind") {
-        crate::i18n::t!("ipc.daemon_outdated").to_string()
+        crate::i18n::t!("ipc.daemon_outdated", cmd = crate::daemon::install_hint()).to_string()
     } else {
         message
     }

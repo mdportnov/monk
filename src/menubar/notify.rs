@@ -132,7 +132,7 @@ impl Notifier {
     pub fn post(&self, title: &str, body: &str, kind: Kind) {
         let Some(center) = self.center.as_ref().filter(|_| self.authorized.load(Ordering::SeqCst))
         else {
-            crate::platform::notify(title, body);
+            scripted(title, body);
             return;
         };
         let content = UNMutableNotificationContent::new();
@@ -147,6 +147,12 @@ impl Notifier {
             UNNotificationRequest::requestWithIdentifier_content_trigger(&id, &content, None);
         center.addNotificationRequest_withCompletionHandler(&request, None);
     }
+}
+
+/// The scripted fallback wears Script Editor's icon, so its title has to say
+/// whose notification it is; a bundled one already carries monk's name.
+pub fn scripted(title: &str, body: &str) {
+    crate::platform::notify(&format!("monk: {title}"), body);
 }
 
 /// Whether macOS resolved an enclosing bundle for this process, and it is

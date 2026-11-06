@@ -152,55 +152,62 @@ impl PickerState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorField {
     Name,
+    Blocklist,
+    Firmness,
+    Schedule,
     Color,
+    Advanced,
     Max,
     Min,
     Cooldown,
-    DailyCap,
     PanicDelay,
-    Schedule,
-    Sites,
     HookBefore,
     HookAfter,
-    Apps,
-    Groups,
-    Brands,
 }
 
 impl EditorField {
-    pub const ORDER: [EditorField; 14] = [
+    pub const ORDER: [EditorField; 12] = [
         EditorField::Name,
+        EditorField::Blocklist,
+        EditorField::Firmness,
+        EditorField::Schedule,
         EditorField::Color,
+        EditorField::Advanced,
         EditorField::Max,
         EditorField::Min,
         EditorField::Cooldown,
-        EditorField::DailyCap,
         EditorField::PanicDelay,
-        EditorField::Schedule,
-        EditorField::Sites,
         EditorField::HookBefore,
         EditorField::HookAfter,
-        EditorField::Apps,
-        EditorField::Groups,
-        EditorField::Brands,
     ];
+
+    /// Raw limits and hooks: shown only once "advanced" is expanded.
+    pub fn is_advanced(self) -> bool {
+        matches!(
+            self,
+            EditorField::Max
+                | EditorField::Min
+                | EditorField::Cooldown
+                | EditorField::PanicDelay
+                | EditorField::HookBefore
+                | EditorField::HookAfter
+        )
+    }
 
     pub fn label(self) -> String {
         let key = match self {
             EditorField::Name => "tui.editor_field.name",
+            EditorField::Blocklist => "tui.editor_field.blocklist",
+            EditorField::Firmness => "tui.editor_field.firmness",
+            EditorField::Schedule => "tui.editor_field.schedule",
             EditorField::Color => "tui.editor_field.color",
+            EditorField::Advanced => "tui.editor_field.advanced",
             EditorField::Max => "tui.editor_field.max_duration",
             EditorField::Min => "tui.editor_field.min_duration",
             EditorField::Cooldown => "tui.editor_field.cooldown",
-            EditorField::DailyCap => "tui.editor_field.daily_cap",
             EditorField::PanicDelay => "tui.editor_field.panic_delay",
-            EditorField::Schedule => "tui.editor_field.schedule",
-            EditorField::Sites => "tui.editor_field.custom_sites",
             EditorField::HookBefore => "tui.editor_field.hook_before",
             EditorField::HookAfter => "tui.editor_field.hook_after",
-            EditorField::Apps => "tui.editor_field.blocked_apps",
-            EditorField::Groups => "tui.editor_field.site_groups",
-            EditorField::Brands => "tui.editor_field.brand_presets",
         };
         crate::i18n::t!(key).to_string()
     }
@@ -208,19 +215,17 @@ impl EditorField {
     pub fn help(self) -> String {
         let key = match self {
             EditorField::Name => "tui.editor_field_help.name",
+            EditorField::Blocklist => "tui.editor_field_help.blocklist",
+            EditorField::Firmness => "tui.editor_field_help.firmness",
+            EditorField::Schedule => "tui.editor_field_help.schedule",
             EditorField::Color => "tui.editor_field_help.color",
+            EditorField::Advanced => "tui.editor_field_help.advanced",
             EditorField::Max => "tui.editor_field_help.max_duration",
             EditorField::Min => "tui.editor_field_help.min_duration",
             EditorField::Cooldown => "tui.editor_field_help.cooldown",
-            EditorField::DailyCap => "tui.editor_field_help.daily_cap",
             EditorField::PanicDelay => "tui.editor_field_help.panic_delay",
-            EditorField::Schedule => "tui.editor_field_help.schedule",
-            EditorField::Sites => "tui.editor_field_help.sites",
             EditorField::HookBefore => "tui.editor_field_help.hook_before",
             EditorField::HookAfter => "tui.editor_field_help.hook_after",
-            EditorField::Apps => "tui.editor_field_help.apps",
-            EditorField::Groups => "tui.editor_field_help.groups",
-            EditorField::Brands => "tui.editor_field_help.brands",
         };
         crate::i18n::t!(key).to_string()
     }
@@ -305,6 +310,9 @@ pub struct Globals {
     pub active_mode: Option<ModeSummary>,
     pub active_profile_detail: Option<Profile>,
     pub help_open: bool,
+    /// Set from `MONK_TUI_START=panic`: open the emergency-exit screen as
+    /// soon as the first status arrives, if a no-exit session is running.
+    pub start_on_panic: bool,
     pub cached_modes: Vec<ModeSummary>,
     pub next_scheduled: Option<(String, chrono::DateTime<chrono::Utc>)>,
     /// Set when a newer release is known (value = latest version).
@@ -314,6 +322,8 @@ pub struct Globals {
 /// Live snapshot of daemon-side state, updated by the refresh worker.
 #[derive(Default, Clone, Debug)]
 pub struct Snapshot {
+    /// True once the worker has finished at least one round, reached or not.
+    pub fetched: bool,
     pub daemon_running: bool,
     pub active: Option<Session>,
     pub hard_mode: Option<HardModeInfo>,
@@ -424,6 +434,7 @@ impl App {
     /// rwlock-read + clones.
     pub fn pull_snapshot(&mut self) {
         let s = self.snapshot.read().clone();
+        let fetched = s.fetched;
         self.globals.daemon_running = s.daemon_running;
         self.globals.active = s.active;
         self.globals.hard_mode = s.hard_mode;
@@ -444,6 +455,22 @@ impl App {
         self.globals.cached_modes = s.cached_modes;
         self.globals.next_scheduled = s.next_scheduled;
         self.pull_update_state();
+        if fetched && std::mem::take(&mut self.globals.start_on_panic) {
+            self.open_panic_on_start();
+        }
+    }
+
+    fn open_panic_on_start(&mut self) {
+        match self.globals.hard_mode.clone() {
+            Some(hard) => {
+                let st = screens::panic::PanicState::new(hard.panic_phrase.clone());
+                self.set_screen(Screen::Panic(Box::new(st)));
+            }
+            None => self.globals.set_flash(
+                crate::i18n::t!("tui.flash.no_hard_session").to_string(),
+                FlashLevel::Info,
+            ),
+        }
     }
 
     fn pull_update_state(&mut self) {
@@ -571,6 +598,18 @@ impl App {
 
     pub fn open_schedules(&mut self) {
         self.set_screen(Screen::Schedules(screens::schedules::SchedulesState::load()));
+    }
+
+    /// Straight into the schedule form of one routine — the editor's way in.
+    pub fn open_schedule_form(&mut self, name: &str) {
+        let mut state = screens::schedules::SchedulesState::load();
+        if let Some(i) = state.rows.iter().position(|r| r.name == name) {
+            state.selected = i;
+            let row = &state.rows[i];
+            state.form =
+                Some(screens::schedules::ScheduleForm::from_profile(&row.name, &row.profile));
+        }
+        self.set_screen(Screen::Schedules(state));
     }
 
     pub async fn instantiate_preset(&mut self) {
@@ -847,11 +886,7 @@ impl App {
             self.set_screen(Screen::Home(HomeState::default()));
             return;
         }
-        let Screen::ModeConfirm(confirm) = &mut self.screen else { return };
-        if let Some(reason) = confirm.blocked_reason() {
-            confirm.error = Some(reason);
-            return;
-        }
+        let Screen::ModeConfirm(confirm) = &self.screen else { return };
         let req = Request::Start {
             profile: confirm.mode.name.clone(),
             duration: confirm.duration,
@@ -1021,7 +1056,7 @@ impl App {
             Ok(c) => c,
             Err(e) => {
                 self.globals.set_flash(
-                    crate::i18n::t!("tui.flash.config_error", message = e).to_string(),
+                    crate::i18n::t!("tui.flash.config_unreadable", message = e).to_string(),
                     FlashLevel::Error,
                 );
                 return;
@@ -1199,10 +1234,10 @@ async fn ensure_daemon() {
                 // Shutting it down here just makes launchd respawn the same
                 // old binary (dropping the block for a moment) — keep talking
                 // to it and tell the user how to actually update.
-                eprintln!(
-                    "monk: system daemon is v{version}, cli is v{expected} — \
-                     update it with `sudo monk service install`"
-                );
+                let (daemon, cli) = (version, expected);
+                let msg =
+                    crate::i18n::t!("tui.startup.service_outdated", daemon = daemon, cli = cli);
+                eprintln!("{msg}");
                 return;
             }
             let _ = ipc::send(&Request::Shutdown).await;
@@ -1220,10 +1255,7 @@ async fn ensure_daemon() {
                 return;
             }
         }
-        eprintln!(
-            "monk: daemon unreachable. \
-             restart it with `sudo launchctl kickstart -k system/dev.monk.monkd`"
-        );
+        eprintln!("{}", crate::i18n::t!("tui.startup.service_unreachable"));
         return;
     }
 
@@ -1236,10 +1268,7 @@ async fn ensure_daemon() {
         }
     }
     if !hosts_writable() && !is_root() {
-        eprintln!(
-            "monk: daemon running as user — /etc/hosts not writable, blocking will be unavailable. \
-             install the system daemon: `sudo monk service install`"
-        );
+        eprintln!("{}", crate::i18n::t!("tui.startup.service_user_only"));
     }
 }
 
@@ -1269,6 +1298,7 @@ pub async fn run() -> Result<()> {
 
 async fn main_loop<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<()> {
     let mut app = App::new();
+    app.globals.start_on_panic = std::env::var("MONK_TUI_START").is_ok_and(|v| v == "panic");
     let start = std::time::Instant::now();
 
     let shutdown = std::sync::Arc::new(tokio::sync::Notify::new());
@@ -1335,7 +1365,7 @@ fn spawn_refresh_worker(
 }
 
 async fn refresh_once() -> Snapshot {
-    let mut snap = Snapshot::default();
+    let mut snap = Snapshot { fetched: true, ..Snapshot::default() };
     match ipc::send(&Request::Status).await {
         Ok(Response::Status { active, hard_mode, .. }) => {
             snap.daemon_running = true;
@@ -1363,38 +1393,4 @@ async fn refresh_once() -> Snapshot {
         }
     }
     snap
-}
-
-#[cfg(test)]
-mod schedule_spec_tests {
-    use crate::tui::screens::editor::{format_schedule_spec, parse_schedule_spec};
-
-    #[test]
-    fn round_trip() {
-        for spec in [
-            "mon,tue,wed,thu,fri 09:00-17:00",
-            "sat,sun 10:00-12:00 UTC",
-            "fri 22:00-02:00",
-            "off mon,tue 09:00-10:00",
-        ] {
-            let parsed = parse_schedule_spec(spec).unwrap().unwrap();
-            let again = format_schedule_spec(Some(&parsed));
-            let reparsed = parse_schedule_spec(&again).unwrap().unwrap();
-            assert_eq!(parsed, reparsed, "round-trip drift on `{spec}` -> `{again}`");
-        }
-    }
-
-    #[test]
-    fn empty_is_none() {
-        assert!(parse_schedule_spec("").unwrap().is_none());
-        assert!(parse_schedule_spec("   ").unwrap().is_none());
-    }
-
-    #[test]
-    fn shorthands_expand() {
-        let s = parse_schedule_spec("weekdays 09:00-17:00").unwrap().unwrap();
-        assert_eq!(s.days.len(), 5);
-        let s = parse_schedule_spec("daily 06:00-07:00").unwrap().unwrap();
-        assert_eq!(s.days.len(), 7);
-    }
 }

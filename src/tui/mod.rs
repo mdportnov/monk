@@ -1,4 +1,5 @@
 mod app;
+mod firmness;
 mod screens;
 mod theme;
 mod view;

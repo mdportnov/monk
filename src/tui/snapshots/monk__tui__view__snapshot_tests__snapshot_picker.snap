@@ -5,29 +5,29 @@ expression: "render(&app, 100, 30)"
                                   monk  silence · discipline · flow                                 
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-╭ modes ──────────────────────────────────────────────╮╭ details ──────────────────────────────────╮
+╭ routines ───────────────────────────────────────────╮╭ details ──────────────────────────────────╮
 │▶ 1 ● deepwork  ★                         ready      ││deepwork                                   │
 │  2 ● reading  ★                          ready      ││                                           │
 │                                                     ││apps       1                               │
 │                                                     ││sites      1                               │
-│                                                     ││groups     1                               │
+│                                                     ││categories 1                               │
 │                                                     ││                                           │
-│                                                     ││limits                                     │
-│                                                     ││max        2h                              │
-│                                                     ││  ceiling — even you can't override        │
-│                                                     ││min        15m                             │
-│                                                     ││  shorter doesn't count as a session       │
-│                                                     ││cooldown   30m                             │
-│                                                     ││  protects against compulsive restart      │
-│                                                     ││daily cap  4h                              │
-│                                                     ││  daily focus budget                       │
+│                                                     ││firmness  delayed exit                     │
+│                                                     ││  You can stop early, but only once per    │
+│                                                     ││30m; the next early stop waits.            │
+│                                                     ││longest    2h                              │
+│                                                     ││  a longer session is shortened to this    │
+│                                                     ││shortest   15m                             │
+│                                                     ││  a shorter session is lengthened to this  │
 │                                                     ││                                           │
 │                                                     ││today                                      │
-│                                                     ││used       45m                             │
-│                                                     ││left       3h15                            │
+│                                                     ││focused    45m                             │
+│                                                     ││                                           │
+│                                                     ││                                           │
+│                                                     ││                                           │
 │                                                     ││                                           │
 │                                                     ││                                           │
 │                                                     ││                                           │
 ╰─────────────────────────────────────────────────────╯╰───────────────────────────────────────────╯
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-↑/↓ · ⏎ start · type filter · 1..9 quick · n new · a preset · e edit · c copy · d del · r refresh ·
+                      ⏎ start   e edit   n new   a template   esc back   ? keys

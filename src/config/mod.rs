@@ -370,7 +370,7 @@ impl Config {
             if cleared > 0 {
                 tracing::warn!(
                     cleared,
-                    "config v3 migration: dropped legacy `apps` entries — re-select via `monk profile edit`"
+                    "config v3 migration: dropped legacy `apps` entries — re-select via `monk routine edit`"
                 );
             }
             self.schema_version = 3;

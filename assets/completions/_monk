@@ -34,14 +34,14 @@ _arguments "${_arguments_options[@]}" : \
 '--locale=[]:LOCALE:(en ru)' \
 '*--preset=[]:PRESET:_default' \
 '--duration=[]:DURATION:_default' \
-'--hard=[]:HARD:(true false)' \
-'--autostart=[]:AUTOSTART:(true false)' \
+'--hard=[Make every session no-exit by default]:HARD:(true false)' \
+'--autostart=[Install the background service (needed for blocking)]:AUTOSTART:(true false)' \
 '--non-interactive[]' \
 '-y[]' \
 '--yes[]' \
 '--reset[]' \
 '--quick[Three-question quick path with sensible defaults]' \
-'--no-daemon[Skip daemon service installation]' \
+'--no-daemon[Skip background service installation]' \
 '--no-completions[Skip shell completions installation]' \
 '--no-doctor[Skip health checks]' \
 '--no-menubar[Skip menu bar app setup (macOS)]' \
@@ -54,6 +54,7 @@ _arguments "${_arguments_options[@]}" : \
 (tui)
 _arguments "${_arguments_options[@]}" : \
 '--locale=[]:LOCALE:(en ru)' \
+'--panic[Open straight on the emergency-exit screen]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-V[Print version]' \
@@ -75,7 +76,7 @@ _arguments "${_arguments_options[@]}" : \
 '--duration=[]:DURATION:_default' \
 '--reason=[]:REASON:_default' \
 '--locale=[]:LOCALE:(en ru)' \
-'--hard[]' \
+'--hard[No-exit session\: cannot be stopped, only left through \`monk panic\`]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-V[Print version]' \
@@ -122,7 +123,7 @@ _arguments "${_arguments_options[@]}" : \
 '--version[Print version]' \
 && ret=0
 ;;
-(profiles)
+(routines)
 _arguments "${_arguments_options[@]}" : \
 '--locale=[]:LOCALE:(en ru)' \
 '-h[Print help]' \
@@ -131,22 +132,22 @@ _arguments "${_arguments_options[@]}" : \
 '--version[Print version]' \
 && ret=0
 ;;
-(profile)
+(routine)
 _arguments "${_arguments_options[@]}" : \
 '--locale=[]:LOCALE:(en ru)' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-V[Print version]' \
 '--version[Print version]' \
-":: :_monk__profile_commands" \
-"*::: :->profile" \
+":: :_monk__routine_commands" \
+"*::: :->routine" \
 && ret=0
 
     case $state in
-    (profile)
+    (routine)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:monk-profile-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:monk-routine-command-$line[1]:"
         case $line[1] in
             (show)
 _arguments "${_arguments_options[@]}" : \
@@ -173,7 +174,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (create)
 _arguments "${_arguments_options[@]}" : \
-'--preset=[Seed from a built-in preset (deepwork, study, detox, sleep, sober, lockdown, no-social, no-video, no-news, no-games, no-chat, no-shopping, no-adult, no-gambling, no-dating, no-ai)]:PRESET:_default' \
+'--preset=[Seed from a built-in template (deepwork, morning, study, detox, sleep, sober, lockdown, no-social, no-video, no-news, no-games, no-chat, no-shopping, no-adult, no-gambling, no-dating, no-ai)]:TEMPLATE:_default' \
 '--locale=[]:LOCALE:(en ru)' \
 '-h[Print help]' \
 '--help[Print help]' \
@@ -205,9 +206,9 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (limits)
 _arguments "${_arguments_options[@]}" : \
-'--max=[]:MAX:_default' \
-'--min=[]:MIN:_default' \
-'--cooldown=[]:COOLDOWN:_default' \
+'--max=[Longest session; longer requests are shortened]:MAX:_default' \
+'--min=[Shortest session it will start]:MIN:_default' \
+'--cooldown=[One early stop per this window]:COOLDOWN:_default' \
 '--daily-cap=[]:DAILY_CAP:_default' \
 '--locale=[]:LOCALE:(en ru)' \
 '--clear[]' \
@@ -220,7 +221,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (help)
 _arguments "${_arguments_options[@]}" : \
-":: :_monk__profile__help_commands" \
+":: :_monk__routine__help_commands" \
 "*::: :->help" \
 && ret=0
 
@@ -228,7 +229,7 @@ _arguments "${_arguments_options[@]}" : \
     (help)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:monk-profile-help-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:monk-routine-help-command-$line[1]:"
         case $line[1] in
             (show)
 _arguments "${_arguments_options[@]}" : \
@@ -435,22 +436,22 @@ esac
     ;;
 esac
 ;;
-(daemon)
+(service)
 _arguments "${_arguments_options[@]}" : \
 '--locale=[]:LOCALE:(en ru)' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-V[Print version]' \
 '--version[Print version]' \
-":: :_monk__daemon_commands" \
-"*::: :->daemon" \
+":: :_monk__service_commands" \
+"*::: :->service" \
 && ret=0
 
     case $state in
-    (daemon)
+    (service)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:monk-daemon-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:monk-service-command-$line[1]:"
         case $line[1] in
             (start)
 _arguments "${_arguments_options[@]}" : \
@@ -510,7 +511,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (help)
 _arguments "${_arguments_options[@]}" : \
-":: :_monk__daemon__help_commands" \
+":: :_monk__service__help_commands" \
 "*::: :->help" \
 && ret=0
 
@@ -518,7 +519,7 @@ _arguments "${_arguments_options[@]}" : \
     (help)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:monk-daemon-help-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:monk-service-help-command-$line[1]:"
         case $line[1] in
             (start)
 _arguments "${_arguments_options[@]}" : \
@@ -687,21 +688,21 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(profiles)
+(routines)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(profile)
+(routine)
 _arguments "${_arguments_options[@]}" : \
-":: :_monk__help__profile_commands" \
-"*::: :->profile" \
+":: :_monk__help__routine_commands" \
+"*::: :->routine" \
 && ret=0
 
     case $state in
-    (profile)
+    (routine)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:monk-help-profile-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:monk-help-routine-command-$line[1]:"
         case $line[1] in
             (show)
 _arguments "${_arguments_options[@]}" : \
@@ -791,17 +792,17 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
-(daemon)
+(service)
 _arguments "${_arguments_options[@]}" : \
-":: :_monk__help__daemon_commands" \
-"*::: :->daemon" \
+":: :_monk__help__service_commands" \
+"*::: :->service" \
 && ret=0
 
     case $state in
-    (daemon)
+    (service)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:monk-help-daemon-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:monk-help-service-command-$line[1]:"
         case $line[1] in
             (start)
 _arguments "${_arguments_options[@]}" : \
@@ -882,18 +883,18 @@ _monk_commands() {
 'init:Run the interactive onboarding wizard' \
 'tui:Open the interactive TUI' \
 'lang:Set the interface language' \
-'start:Start a focus session' \
-'stop:Stop the active session' \
+'start:Start a focus session of a routine (the default one if omitted)' \
+'stop:Stop the active session early (not a no-exit one)' \
 'extend:Add time to the active session' \
-'panic:Request an escape from hard mode' \
-'status:Show daemon and session status' \
-'profiles:List profiles' \
-'profile:Manage profiles' \
+'panic:Ask for a delayed emergency exit from a no-exit session' \
+'status:Show background service and session status' \
+'routines:List routines' \
+'routine:Manage routines (what to block, when, how firmly)' \
 'apps:Manage installed applications cache' \
 'stats:Show session statistics' \
-'doctor:Check environment, permissions, and daemon health' \
+'doctor:Check the setup and the background service; --fix repairs what it can' \
 'config:Manage configuration' \
-'daemon:Manage the background daemon' \
+'service:Manage the background service' \
 'menubar:Run the menu bar companion app (macOS only)' \
 'completions:Generate shell completions' \
 'update:Check GitHub releases for a new version and self-update' \
@@ -1004,97 +1005,6 @@ _monk__config__path_commands() {
     local commands; commands=()
     _describe -t commands 'monk config path commands' commands "$@"
 }
-(( $+functions[_monk__daemon_commands] )) ||
-_monk__daemon_commands() {
-    local commands; commands=(
-'start:Start the background daemon (user mode)' \
-'stop:Stop the running daemon' \
-'status:Show daemon status (running / not running, pid)' \
-'run:Run the daemon in the foreground (used by launchd / systemd; not normally invoked manually)' \
-'install:Install the daemon as a system service (asks for admin rights when needed)' \
-'uninstall:Remove the system service, asking for admin rights when needed (add --purge to also wipe data)' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'monk daemon commands' commands "$@"
-}
-(( $+functions[_monk__daemon__help_commands] )) ||
-_monk__daemon__help_commands() {
-    local commands; commands=(
-'start:Start the background daemon (user mode)' \
-'stop:Stop the running daemon' \
-'status:Show daemon status (running / not running, pid)' \
-'run:Run the daemon in the foreground (used by launchd / systemd; not normally invoked manually)' \
-'install:Install the daemon as a system service (asks for admin rights when needed)' \
-'uninstall:Remove the system service, asking for admin rights when needed (add --purge to also wipe data)' \
-'help:Print this message or the help of the given subcommand(s)' \
-    )
-    _describe -t commands 'monk daemon help commands' commands "$@"
-}
-(( $+functions[_monk__daemon__help__help_commands] )) ||
-_monk__daemon__help__help_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon help help commands' commands "$@"
-}
-(( $+functions[_monk__daemon__help__install_commands] )) ||
-_monk__daemon__help__install_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon help install commands' commands "$@"
-}
-(( $+functions[_monk__daemon__help__run_commands] )) ||
-_monk__daemon__help__run_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon help run commands' commands "$@"
-}
-(( $+functions[_monk__daemon__help__start_commands] )) ||
-_monk__daemon__help__start_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon help start commands' commands "$@"
-}
-(( $+functions[_monk__daemon__help__status_commands] )) ||
-_monk__daemon__help__status_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon help status commands' commands "$@"
-}
-(( $+functions[_monk__daemon__help__stop_commands] )) ||
-_monk__daemon__help__stop_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon help stop commands' commands "$@"
-}
-(( $+functions[_monk__daemon__help__uninstall_commands] )) ||
-_monk__daemon__help__uninstall_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon help uninstall commands' commands "$@"
-}
-(( $+functions[_monk__daemon__install_commands] )) ||
-_monk__daemon__install_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon install commands' commands "$@"
-}
-(( $+functions[_monk__daemon__run_commands] )) ||
-_monk__daemon__run_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon run commands' commands "$@"
-}
-(( $+functions[_monk__daemon__start_commands] )) ||
-_monk__daemon__start_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon start commands' commands "$@"
-}
-(( $+functions[_monk__daemon__status_commands] )) ||
-_monk__daemon__status_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon status commands' commands "$@"
-}
-(( $+functions[_monk__daemon__stop_commands] )) ||
-_monk__daemon__stop_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon stop commands' commands "$@"
-}
-(( $+functions[_monk__daemon__uninstall_commands] )) ||
-_monk__daemon__uninstall_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk daemon uninstall commands' commands "$@"
-}
 (( $+functions[_monk__doctor_commands] )) ||
 _monk__doctor_commands() {
     local commands; commands=()
@@ -1111,18 +1021,18 @@ _monk__help_commands() {
 'init:Run the interactive onboarding wizard' \
 'tui:Open the interactive TUI' \
 'lang:Set the interface language' \
-'start:Start a focus session' \
-'stop:Stop the active session' \
+'start:Start a focus session of a routine (the default one if omitted)' \
+'stop:Stop the active session early (not a no-exit one)' \
 'extend:Add time to the active session' \
-'panic:Request an escape from hard mode' \
-'status:Show daemon and session status' \
-'profiles:List profiles' \
-'profile:Manage profiles' \
+'panic:Ask for a delayed emergency exit from a no-exit session' \
+'status:Show background service and session status' \
+'routines:List routines' \
+'routine:Manage routines (what to block, when, how firmly)' \
 'apps:Manage installed applications cache' \
 'stats:Show session statistics' \
-'doctor:Check environment, permissions, and daemon health' \
+'doctor:Check the setup and the background service; --fix repairs what it can' \
 'config:Manage configuration' \
-'daemon:Manage the background daemon' \
+'service:Manage the background service' \
 'menubar:Run the menu bar companion app (macOS only)' \
 'completions:Generate shell completions' \
 'update:Check GitHub releases for a new version and self-update' \
@@ -1177,48 +1087,6 @@ _monk__help__config__path_commands() {
     local commands; commands=()
     _describe -t commands 'monk help config path commands' commands "$@"
 }
-(( $+functions[_monk__help__daemon_commands] )) ||
-_monk__help__daemon_commands() {
-    local commands; commands=(
-'start:Start the background daemon (user mode)' \
-'stop:Stop the running daemon' \
-'status:Show daemon status (running / not running, pid)' \
-'run:Run the daemon in the foreground (used by launchd / systemd; not normally invoked manually)' \
-'install:Install the daemon as a system service (asks for admin rights when needed)' \
-'uninstall:Remove the system service, asking for admin rights when needed (add --purge to also wipe data)' \
-    )
-    _describe -t commands 'monk help daemon commands' commands "$@"
-}
-(( $+functions[_monk__help__daemon__install_commands] )) ||
-_monk__help__daemon__install_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk help daemon install commands' commands "$@"
-}
-(( $+functions[_monk__help__daemon__run_commands] )) ||
-_monk__help__daemon__run_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk help daemon run commands' commands "$@"
-}
-(( $+functions[_monk__help__daemon__start_commands] )) ||
-_monk__help__daemon__start_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk help daemon start commands' commands "$@"
-}
-(( $+functions[_monk__help__daemon__status_commands] )) ||
-_monk__help__daemon__status_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk help daemon status commands' commands "$@"
-}
-(( $+functions[_monk__help__daemon__stop_commands] )) ||
-_monk__help__daemon__stop_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk help daemon stop commands' commands "$@"
-}
-(( $+functions[_monk__help__daemon__uninstall_commands] )) ||
-_monk__help__daemon__uninstall_commands() {
-    local commands; commands=()
-    _describe -t commands 'monk help daemon uninstall commands' commands "$@"
-}
 (( $+functions[_monk__help__doctor_commands] )) ||
 _monk__help__doctor_commands() {
     local commands; commands=()
@@ -1267,52 +1135,94 @@ _monk__help__panic_commands() {
     local commands; commands=()
     _describe -t commands 'monk help panic commands' commands "$@"
 }
-(( $+functions[_monk__help__profile_commands] )) ||
-_monk__help__profile_commands() {
+(( $+functions[_monk__help__routine_commands] )) ||
+_monk__help__routine_commands() {
     local commands; commands=(
-'show:Show a profile'\''s full configuration' \
-'edit:Edit a profile (--add/--remove app id, or no flags for TTY editor)' \
-'create:Create an empty profile or copy from a preset (\`--preset deepwork\`)' \
-'duplicate:Duplicate an existing profile under a new name' \
-'delete:Delete a profile' \
-'limits:Set time limits for a profile (omit value to clear)' \
+'show:Show a routine'\''s full configuration' \
+'edit:Edit a routine (--add/--remove app id, or no flags for TTY editor)' \
+'create:Create an empty routine or one from a template (\`--preset deepwork\`)' \
+'duplicate:Duplicate an existing routine under a new name' \
+'delete:Delete a routine' \
+'limits:Set time limits for a routine' \
     )
-    _describe -t commands 'monk help profile commands' commands "$@"
+    _describe -t commands 'monk help routine commands' commands "$@"
 }
-(( $+functions[_monk__help__profile__create_commands] )) ||
-_monk__help__profile__create_commands() {
+(( $+functions[_monk__help__routine__create_commands] )) ||
+_monk__help__routine__create_commands() {
     local commands; commands=()
-    _describe -t commands 'monk help profile create commands' commands "$@"
+    _describe -t commands 'monk help routine create commands' commands "$@"
 }
-(( $+functions[_monk__help__profile__delete_commands] )) ||
-_monk__help__profile__delete_commands() {
+(( $+functions[_monk__help__routine__delete_commands] )) ||
+_monk__help__routine__delete_commands() {
     local commands; commands=()
-    _describe -t commands 'monk help profile delete commands' commands "$@"
+    _describe -t commands 'monk help routine delete commands' commands "$@"
 }
-(( $+functions[_monk__help__profile__duplicate_commands] )) ||
-_monk__help__profile__duplicate_commands() {
+(( $+functions[_monk__help__routine__duplicate_commands] )) ||
+_monk__help__routine__duplicate_commands() {
     local commands; commands=()
-    _describe -t commands 'monk help profile duplicate commands' commands "$@"
+    _describe -t commands 'monk help routine duplicate commands' commands "$@"
 }
-(( $+functions[_monk__help__profile__edit_commands] )) ||
-_monk__help__profile__edit_commands() {
+(( $+functions[_monk__help__routine__edit_commands] )) ||
+_monk__help__routine__edit_commands() {
     local commands; commands=()
-    _describe -t commands 'monk help profile edit commands' commands "$@"
+    _describe -t commands 'monk help routine edit commands' commands "$@"
 }
-(( $+functions[_monk__help__profile__limits_commands] )) ||
-_monk__help__profile__limits_commands() {
+(( $+functions[_monk__help__routine__limits_commands] )) ||
+_monk__help__routine__limits_commands() {
     local commands; commands=()
-    _describe -t commands 'monk help profile limits commands' commands "$@"
+    _describe -t commands 'monk help routine limits commands' commands "$@"
 }
-(( $+functions[_monk__help__profile__show_commands] )) ||
-_monk__help__profile__show_commands() {
+(( $+functions[_monk__help__routine__show_commands] )) ||
+_monk__help__routine__show_commands() {
     local commands; commands=()
-    _describe -t commands 'monk help profile show commands' commands "$@"
+    _describe -t commands 'monk help routine show commands' commands "$@"
 }
-(( $+functions[_monk__help__profiles_commands] )) ||
-_monk__help__profiles_commands() {
+(( $+functions[_monk__help__routines_commands] )) ||
+_monk__help__routines_commands() {
     local commands; commands=()
-    _describe -t commands 'monk help profiles commands' commands "$@"
+    _describe -t commands 'monk help routines commands' commands "$@"
+}
+(( $+functions[_monk__help__service_commands] )) ||
+_monk__help__service_commands() {
+    local commands; commands=(
+'start:Start the background service in user mode' \
+'stop:Stop the running background service' \
+'status:Show background service status (running / not running, pid)' \
+'run:Run the background service in the foreground (used by launchd / systemd; not normally invoked manually)' \
+'install:Install the background service (asks for admin rights when needed)' \
+'uninstall:Remove the system service, asking for admin rights when needed (add --purge to also wipe data)' \
+    )
+    _describe -t commands 'monk help service commands' commands "$@"
+}
+(( $+functions[_monk__help__service__install_commands] )) ||
+_monk__help__service__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk help service install commands' commands "$@"
+}
+(( $+functions[_monk__help__service__run_commands] )) ||
+_monk__help__service__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk help service run commands' commands "$@"
+}
+(( $+functions[_monk__help__service__start_commands] )) ||
+_monk__help__service__start_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk help service start commands' commands "$@"
+}
+(( $+functions[_monk__help__service__status_commands] )) ||
+_monk__help__service__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk help service status commands' commands "$@"
+}
+(( $+functions[_monk__help__service__stop_commands] )) ||
+_monk__help__service__stop_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk help service stop commands' commands "$@"
+}
+(( $+functions[_monk__help__service__uninstall_commands] )) ||
+_monk__help__service__uninstall_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk help service uninstall commands' commands "$@"
 }
 (( $+functions[_monk__help__start_commands] )) ||
 _monk__help__start_commands() {
@@ -1402,101 +1312,192 @@ _monk__panic_commands() {
     local commands; commands=()
     _describe -t commands 'monk panic commands' commands "$@"
 }
-(( $+functions[_monk__profile_commands] )) ||
-_monk__profile_commands() {
+(( $+functions[_monk__routine_commands] )) ||
+_monk__routine_commands() {
     local commands; commands=(
-'show:Show a profile'\''s full configuration' \
-'edit:Edit a profile (--add/--remove app id, or no flags for TTY editor)' \
-'create:Create an empty profile or copy from a preset (\`--preset deepwork\`)' \
-'duplicate:Duplicate an existing profile under a new name' \
-'delete:Delete a profile' \
-'limits:Set time limits for a profile (omit value to clear)' \
+'show:Show a routine'\''s full configuration' \
+'edit:Edit a routine (--add/--remove app id, or no flags for TTY editor)' \
+'create:Create an empty routine or one from a template (\`--preset deepwork\`)' \
+'duplicate:Duplicate an existing routine under a new name' \
+'delete:Delete a routine' \
+'limits:Set time limits for a routine' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
-    _describe -t commands 'monk profile commands' commands "$@"
+    _describe -t commands 'monk routine commands' commands "$@"
 }
-(( $+functions[_monk__profile__create_commands] )) ||
-_monk__profile__create_commands() {
+(( $+functions[_monk__routine__create_commands] )) ||
+_monk__routine__create_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile create commands' commands "$@"
+    _describe -t commands 'monk routine create commands' commands "$@"
 }
-(( $+functions[_monk__profile__delete_commands] )) ||
-_monk__profile__delete_commands() {
+(( $+functions[_monk__routine__delete_commands] )) ||
+_monk__routine__delete_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile delete commands' commands "$@"
+    _describe -t commands 'monk routine delete commands' commands "$@"
 }
-(( $+functions[_monk__profile__duplicate_commands] )) ||
-_monk__profile__duplicate_commands() {
+(( $+functions[_monk__routine__duplicate_commands] )) ||
+_monk__routine__duplicate_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile duplicate commands' commands "$@"
+    _describe -t commands 'monk routine duplicate commands' commands "$@"
 }
-(( $+functions[_monk__profile__edit_commands] )) ||
-_monk__profile__edit_commands() {
+(( $+functions[_monk__routine__edit_commands] )) ||
+_monk__routine__edit_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile edit commands' commands "$@"
+    _describe -t commands 'monk routine edit commands' commands "$@"
 }
-(( $+functions[_monk__profile__help_commands] )) ||
-_monk__profile__help_commands() {
+(( $+functions[_monk__routine__help_commands] )) ||
+_monk__routine__help_commands() {
     local commands; commands=(
-'show:Show a profile'\''s full configuration' \
-'edit:Edit a profile (--add/--remove app id, or no flags for TTY editor)' \
-'create:Create an empty profile or copy from a preset (\`--preset deepwork\`)' \
-'duplicate:Duplicate an existing profile under a new name' \
-'delete:Delete a profile' \
-'limits:Set time limits for a profile (omit value to clear)' \
+'show:Show a routine'\''s full configuration' \
+'edit:Edit a routine (--add/--remove app id, or no flags for TTY editor)' \
+'create:Create an empty routine or one from a template (\`--preset deepwork\`)' \
+'duplicate:Duplicate an existing routine under a new name' \
+'delete:Delete a routine' \
+'limits:Set time limits for a routine' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
-    _describe -t commands 'monk profile help commands' commands "$@"
+    _describe -t commands 'monk routine help commands' commands "$@"
 }
-(( $+functions[_monk__profile__help__create_commands] )) ||
-_monk__profile__help__create_commands() {
+(( $+functions[_monk__routine__help__create_commands] )) ||
+_monk__routine__help__create_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile help create commands' commands "$@"
+    _describe -t commands 'monk routine help create commands' commands "$@"
 }
-(( $+functions[_monk__profile__help__delete_commands] )) ||
-_monk__profile__help__delete_commands() {
+(( $+functions[_monk__routine__help__delete_commands] )) ||
+_monk__routine__help__delete_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile help delete commands' commands "$@"
+    _describe -t commands 'monk routine help delete commands' commands "$@"
 }
-(( $+functions[_monk__profile__help__duplicate_commands] )) ||
-_monk__profile__help__duplicate_commands() {
+(( $+functions[_monk__routine__help__duplicate_commands] )) ||
+_monk__routine__help__duplicate_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile help duplicate commands' commands "$@"
+    _describe -t commands 'monk routine help duplicate commands' commands "$@"
 }
-(( $+functions[_monk__profile__help__edit_commands] )) ||
-_monk__profile__help__edit_commands() {
+(( $+functions[_monk__routine__help__edit_commands] )) ||
+_monk__routine__help__edit_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile help edit commands' commands "$@"
+    _describe -t commands 'monk routine help edit commands' commands "$@"
 }
-(( $+functions[_monk__profile__help__help_commands] )) ||
-_monk__profile__help__help_commands() {
+(( $+functions[_monk__routine__help__help_commands] )) ||
+_monk__routine__help__help_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile help help commands' commands "$@"
+    _describe -t commands 'monk routine help help commands' commands "$@"
 }
-(( $+functions[_monk__profile__help__limits_commands] )) ||
-_monk__profile__help__limits_commands() {
+(( $+functions[_monk__routine__help__limits_commands] )) ||
+_monk__routine__help__limits_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile help limits commands' commands "$@"
+    _describe -t commands 'monk routine help limits commands' commands "$@"
 }
-(( $+functions[_monk__profile__help__show_commands] )) ||
-_monk__profile__help__show_commands() {
+(( $+functions[_monk__routine__help__show_commands] )) ||
+_monk__routine__help__show_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile help show commands' commands "$@"
+    _describe -t commands 'monk routine help show commands' commands "$@"
 }
-(( $+functions[_monk__profile__limits_commands] )) ||
-_monk__profile__limits_commands() {
+(( $+functions[_monk__routine__limits_commands] )) ||
+_monk__routine__limits_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile limits commands' commands "$@"
+    _describe -t commands 'monk routine limits commands' commands "$@"
 }
-(( $+functions[_monk__profile__show_commands] )) ||
-_monk__profile__show_commands() {
+(( $+functions[_monk__routine__show_commands] )) ||
+_monk__routine__show_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profile show commands' commands "$@"
+    _describe -t commands 'monk routine show commands' commands "$@"
 }
-(( $+functions[_monk__profiles_commands] )) ||
-_monk__profiles_commands() {
+(( $+functions[_monk__routines_commands] )) ||
+_monk__routines_commands() {
     local commands; commands=()
-    _describe -t commands 'monk profiles commands' commands "$@"
+    _describe -t commands 'monk routines commands' commands "$@"
+}
+(( $+functions[_monk__service_commands] )) ||
+_monk__service_commands() {
+    local commands; commands=(
+'start:Start the background service in user mode' \
+'stop:Stop the running background service' \
+'status:Show background service status (running / not running, pid)' \
+'run:Run the background service in the foreground (used by launchd / systemd; not normally invoked manually)' \
+'install:Install the background service (asks for admin rights when needed)' \
+'uninstall:Remove the system service, asking for admin rights when needed (add --purge to also wipe data)' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'monk service commands' commands "$@"
+}
+(( $+functions[_monk__service__help_commands] )) ||
+_monk__service__help_commands() {
+    local commands; commands=(
+'start:Start the background service in user mode' \
+'stop:Stop the running background service' \
+'status:Show background service status (running / not running, pid)' \
+'run:Run the background service in the foreground (used by launchd / systemd; not normally invoked manually)' \
+'install:Install the background service (asks for admin rights when needed)' \
+'uninstall:Remove the system service, asking for admin rights when needed (add --purge to also wipe data)' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'monk service help commands' commands "$@"
+}
+(( $+functions[_monk__service__help__help_commands] )) ||
+_monk__service__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service help help commands' commands "$@"
+}
+(( $+functions[_monk__service__help__install_commands] )) ||
+_monk__service__help__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service help install commands' commands "$@"
+}
+(( $+functions[_monk__service__help__run_commands] )) ||
+_monk__service__help__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service help run commands' commands "$@"
+}
+(( $+functions[_monk__service__help__start_commands] )) ||
+_monk__service__help__start_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service help start commands' commands "$@"
+}
+(( $+functions[_monk__service__help__status_commands] )) ||
+_monk__service__help__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service help status commands' commands "$@"
+}
+(( $+functions[_monk__service__help__stop_commands] )) ||
+_monk__service__help__stop_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service help stop commands' commands "$@"
+}
+(( $+functions[_monk__service__help__uninstall_commands] )) ||
+_monk__service__help__uninstall_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service help uninstall commands' commands "$@"
+}
+(( $+functions[_monk__service__install_commands] )) ||
+_monk__service__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service install commands' commands "$@"
+}
+(( $+functions[_monk__service__run_commands] )) ||
+_monk__service__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service run commands' commands "$@"
+}
+(( $+functions[_monk__service__start_commands] )) ||
+_monk__service__start_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service start commands' commands "$@"
+}
+(( $+functions[_monk__service__status_commands] )) ||
+_monk__service__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service status commands' commands "$@"
+}
+(( $+functions[_monk__service__stop_commands] )) ||
+_monk__service__stop_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service stop commands' commands "$@"
+}
+(( $+functions[_monk__service__uninstall_commands] )) ||
+_monk__service__uninstall_commands() {
+    local commands; commands=()
+    _describe -t commands 'monk service uninstall commands' commands "$@"
 }
 (( $+functions[_monk__start_commands] )) ||
 _monk__start_commands() {

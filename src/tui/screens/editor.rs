@@ -12,11 +12,27 @@ use crate::{
     config::{Hooks, Limits, Profile},
     tui::{
         app::{App, EditorField, Screen},
+        firmness::{scale_spans, Firmness, DEFAULT_COOLDOWN},
         theme::*,
-        view::{draw_header, picker_block},
+        view::{draw_header, fmt_schedule, picker_block},
         widgets::{MultiSelectItem, MultiSelectList, TextInput},
     },
 };
+
+/// Prefixes that tell the four kinds of blocklist entries apart inside the
+/// single list. They never reach the config: `build_profile` strips them
+/// back into `brands`, `site_groups`, `sites` and `apps`.
+const BRAND: &str = "brand:";
+const GROUP: &str = "group:";
+const SITE: &str = "site:";
+const APP: &str = "app:";
+
+/// What the "+ add" modal is adding. Tab switches between the two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CustomKind {
+    Site,
+    App,
+}
 
 #[derive(Debug)]
 pub struct EditorState {
@@ -26,25 +42,21 @@ pub struct EditorState {
     pub max: TextInput,
     pub min: TextInput,
     pub cooldown: TextInput,
-    pub daily_cap: TextInput,
     pub panic_delay: TextInput,
-    pub schedule: TextInput,
-    pub sites: TextInput,
     pub hook_before: TextInput,
     pub hook_after: TextInput,
-    pub apps: MultiSelectList,
-    pub groups: MultiSelectList,
-    pub brands: MultiSelectList,
+    pub blocklist: MultiSelectList,
     pub focus: EditorField,
+    pub advanced_open: bool,
     pub snapshot: Profile,
     pub error: Option<String>,
     /// The field that triggered `error`, if any. Used to draw a red label.
     pub error_field: Option<EditorField>,
     pub confirm_cancel: bool,
-    /// When Some, the inline "add custom app" modal is open with this input.
-    /// Enter commits, Esc discards.
-    pub add_custom_app: Option<TextInput>,
-    /// Inline error from the add-custom-app modal (e.g. invalid bundle id).
+    /// When Some, the inline "add your own site or app" modal is open.
+    /// Enter commits, Esc discards, Tab switches between site and app.
+    pub add_custom: Option<(CustomKind, TextInput)>,
+    /// Inline error from the add-custom modal (e.g. invalid hostname).
     pub add_custom_error: Option<String>,
 }
 
@@ -74,61 +86,39 @@ pub fn palette_value(idx: usize) -> Option<String> {
 
 impl EditorState {
     pub fn new_mode() -> Self {
-        let (apps, groups, brands) = load_picklists(&Profile::default());
-        let mut s = Self {
-            original_name: None,
-            name: TextInput::new(""),
-            color_idx: 0,
-            max: TextInput::new(""),
-            min: TextInput::new(""),
-            cooldown: TextInput::new(""),
-            daily_cap: TextInput::new(""),
-            panic_delay: TextInput::new(""),
-            schedule: TextInput::new(""),
-            sites: TextInput::new(""),
-            hook_before: TextInput::new(""),
-            hook_after: TextInput::new(""),
-            apps,
-            groups,
-            brands,
-            focus: EditorField::Name,
-            snapshot: Profile::default(),
-            error: None,
-            error_field: None,
-            confirm_cancel: false,
-            add_custom_app: None,
-            add_custom_error: None,
-        };
-        s.sync_focus();
-        s
+        Self::build(None, Profile::default())
     }
 
     pub fn edit(name: String, profile: Profile) -> Self {
-        let (apps, groups, brands) = load_picklists(&profile);
+        Self::build(Some(name), profile)
+    }
+
+    fn build(name: Option<String>, profile: Profile) -> Self {
         let limits = profile.limits.clone();
-        let color_idx = palette_index(&profile.color);
         let mut s = Self {
-            original_name: Some(name.clone()),
-            name: TextInput::new(name),
-            color_idx,
+            name: TextInput::new(name.clone().unwrap_or_default()),
+            original_name: name,
+            color_idx: palette_index(&profile.color),
             max: TextInput::new(fmt_opt_humantime(limits.max_duration)),
             min: TextInput::new(fmt_opt_humantime(limits.min_duration)),
             cooldown: TextInput::new(fmt_opt_humantime(limits.cooldown)),
-            daily_cap: TextInput::new(fmt_opt_humantime(limits.daily_cap)),
             panic_delay: TextInput::new(fmt_opt_humantime(limits.panic_delay)),
-            schedule: TextInput::new(format_schedule_spec(profile.schedule.as_ref())),
-            sites: TextInput::new(profile.sites.join(", ")),
             hook_before: TextInput::new(profile.hooks.before.join(" && ")),
             hook_after: TextInput::new(profile.hooks.after.join(" && ")),
-            apps,
-            groups,
-            brands,
+            blocklist: load_blocklist(&profile),
             focus: EditorField::Name,
+            // A routine that already uses a raw limit or a hook opens with
+            // them visible, so nothing it does is hidden from its owner.
+            advanced_open: limits.max_duration.is_some()
+                || limits.min_duration.is_some()
+                || limits.panic_delay.is_some()
+                || !profile.hooks.before.is_empty()
+                || !profile.hooks.after.is_empty(),
             snapshot: profile,
             error: None,
             error_field: None,
             confirm_cancel: false,
-            add_custom_app: None,
+            add_custom: None,
             add_custom_error: None,
         };
         s.sync_focus();
@@ -141,35 +131,74 @@ impl EditorState {
             EditorField::Max => Some(&mut self.max),
             EditorField::Min => Some(&mut self.min),
             EditorField::Cooldown => Some(&mut self.cooldown),
-            EditorField::DailyCap => Some(&mut self.daily_cap),
             EditorField::PanicDelay => Some(&mut self.panic_delay),
-            EditorField::Schedule => Some(&mut self.schedule),
-            EditorField::Sites => Some(&mut self.sites),
             EditorField::HookBefore => Some(&mut self.hook_before),
             EditorField::HookAfter => Some(&mut self.hook_after),
             _ => None,
         }
     }
 
+    fn input(&self, f: EditorField) -> Option<&TextInput> {
+        match f {
+            EditorField::Name => Some(&self.name),
+            EditorField::Max => Some(&self.max),
+            EditorField::Min => Some(&self.min),
+            EditorField::Cooldown => Some(&self.cooldown),
+            EditorField::PanicDelay => Some(&self.panic_delay),
+            EditorField::HookBefore => Some(&self.hook_before),
+            EditorField::HookAfter => Some(&self.hook_after),
+            _ => None,
+        }
+    }
+
+    pub fn visible_fields(&self) -> Vec<EditorField> {
+        EditorField::ORDER.into_iter().filter(|f| self.advanced_open || !f.is_advanced()).collect()
+    }
+
     pub fn next_field(&mut self) {
-        self.clear_picker_filters();
-        let idx = EditorField::ORDER.iter().position(|f| *f == self.focus).unwrap_or(0);
-        self.focus = EditorField::ORDER[(idx + 1) % EditorField::ORDER.len()];
+        self.blocklist.filter_clear();
+        let fields = self.visible_fields();
+        let idx = fields.iter().position(|f| *f == self.focus).unwrap_or(0);
+        self.focus = fields[(idx + 1) % fields.len()];
         self.sync_focus();
     }
 
     pub fn prev_field(&mut self) {
-        self.clear_picker_filters();
-        let idx = EditorField::ORDER.iter().position(|f| *f == self.focus).unwrap_or(0);
-        self.focus =
-            EditorField::ORDER[(idx + EditorField::ORDER.len() - 1) % EditorField::ORDER.len()];
+        self.blocklist.filter_clear();
+        let fields = self.visible_fields();
+        let idx = fields.iter().position(|f| *f == self.focus).unwrap_or(0);
+        self.focus = fields[(idx + fields.len() - 1) % fields.len()];
         self.sync_focus();
     }
 
-    fn clear_picker_filters(&mut self) {
-        self.apps.filter_clear();
-        self.groups.filter_clear();
-        self.brands.filter_clear();
+    pub fn toggle_advanced(&mut self) {
+        self.advanced_open = !self.advanced_open;
+        if !self.advanced_open && self.focus.is_advanced() {
+            self.focus = EditorField::Advanced;
+        }
+        self.sync_focus();
+    }
+
+    /// The firmness the editor can store. "No-exit" is a property of one
+    /// session, picked on the start screen, so it is never stored here.
+    pub fn firmness(&self) -> Firmness {
+        if self.cooldown.value.trim().is_empty() {
+            Firmness::Soft
+        } else {
+            Firmness::DelayedExit
+        }
+    }
+
+    pub fn set_firmness(&mut self, level: Firmness) {
+        match level {
+            Firmness::Soft => self.cooldown.set(""),
+            Firmness::DelayedExit | Firmness::NoExit => {
+                if self.cooldown.value.trim().is_empty() {
+                    let fallback = self.snapshot.limits.cooldown.unwrap_or(DEFAULT_COOLDOWN);
+                    self.cooldown.set(humantime::format_duration(fallback).to_string());
+                }
+            }
+        }
     }
 
     fn sync_focus(&mut self) {
@@ -187,10 +216,16 @@ impl EditorState {
     ) -> std::result::Result<(String, Profile), (Option<EditorField>, String)> {
         let name = self.name.value.trim().to_string();
         if name.is_empty() {
-            return Err((Some(EditorField::Name), "name is required".into()));
+            return Err((
+                Some(EditorField::Name),
+                crate::i18n::t!("tui.editor.name_required").to_string(),
+            ));
         }
         if name.chars().count() > 30 {
-            return Err((Some(EditorField::Name), "name must be ≤ 30 chars".into()));
+            return Err((
+                Some(EditorField::Name),
+                crate::i18n::t!("tui.editor.name_too_long").to_string(),
+            ));
         }
         let max_duration =
             parse_opt_humantime(&self.max).map_err(|e| (Some(EditorField::Max), e))?;
@@ -198,39 +233,54 @@ impl EditorState {
             parse_opt_humantime(&self.min).map_err(|e| (Some(EditorField::Min), e))?;
         let cooldown =
             parse_opt_humantime(&self.cooldown).map_err(|e| (Some(EditorField::Cooldown), e))?;
-        let daily_cap =
-            parse_opt_humantime(&self.daily_cap).map_err(|e| (Some(EditorField::DailyCap), e))?;
         let panic_delay = parse_opt_humantime(&self.panic_delay)
             .map_err(|e| (Some(EditorField::PanicDelay), e))?;
-        let limits = Limits { max_duration, min_duration, cooldown, daily_cap, panic_delay };
+        let limits = Limits {
+            max_duration,
+            min_duration,
+            cooldown,
+            // Not enforced any more and not shown; kept so saving the routine
+            // does not silently rewrite a value its owner put in the file.
+            daily_cap: self.snapshot.limits.daily_cap,
+            panic_delay,
+        };
         if let (Some(mn), Some(mx)) = (limits.min_duration, limits.max_duration) {
             if mn > mx {
-                return Err((Some(EditorField::Min), "min must be ≤ max".into()));
+                return Err((
+                    Some(EditorField::Min),
+                    crate::i18n::t!("tui.editor.min_above_max").to_string(),
+                ));
             }
         }
-        let sites: Vec<String> = self
-            .sites
-            .value
-            .split(',')
-            .map(|s| s.trim().to_lowercase())
-            .filter(|s| !s.is_empty())
-            .collect();
         let hooks = Hooks {
             before: split_cmds(&self.hook_before.value),
             after: split_cmds(&self.hook_after.value),
         };
-        let schedule = parse_schedule_spec(&self.schedule.value)
-            .map_err(|e| (Some(EditorField::Schedule), e.to_string()))?;
+        let mut brands = Vec::new();
+        let mut site_groups = Vec::new();
+        let mut sites = Vec::new();
+        let mut apps = Vec::new();
+        for id in self.blocklist.selected_ids() {
+            if let Some(v) = id.strip_prefix(BRAND) {
+                brands.push(v.to_string());
+            } else if let Some(v) = id.strip_prefix(GROUP) {
+                site_groups.push(v.to_string());
+            } else if let Some(v) = id.strip_prefix(SITE) {
+                sites.push(v.to_string());
+            } else if let Some(v) = id.strip_prefix(APP) {
+                apps.push(v.to_string());
+            }
+        }
         let profile = Profile {
             sites,
-            site_groups: self.groups.selected_ids(),
-            brands: self.brands.selected_ids(),
-            apps: self.apps.selected_ids(),
+            site_groups,
+            brands,
+            apps,
             allow: self.snapshot.allow.clone(),
             hooks,
             limits,
             color: palette_value(self.color_idx),
-            schedule,
+            schedule: self.snapshot.schedule.clone(),
         };
         Ok((name, profile))
     }
@@ -238,12 +288,10 @@ impl EditorState {
     pub fn is_dirty(&self) -> bool {
         match self.build_profile() {
             Ok((name, p)) => {
-                if self.original_name.as_deref() != Some(name.as_str())
-                    && self.original_name.is_some()
-                {
+                if self.original_name.is_none() {
                     return true;
                 }
-                if self.original_name.is_none() {
+                if self.original_name.as_deref() != Some(name.as_str()) {
                     return true;
                 }
                 !profile_eq(&p, &self.snapshot)
@@ -251,66 +299,56 @@ impl EditorState {
             Err(_) => true,
         }
     }
+
+    fn add_custom_commit(&mut self) {
+        let Some((kind, input)) = &self.add_custom else { return };
+        let raw = input.value.trim().to_string();
+        match kind {
+            CustomKind::App => {
+                if raw.is_empty() {
+                    self.add_custom_error =
+                        Some(crate::i18n::t!("tui.editor.bundle_id_required").to_string());
+                } else if !looks_like_bundle_id(&raw) {
+                    self.add_custom_error =
+                        Some(crate::i18n::t!("tui.editor.bundle_id_format").to_string());
+                } else {
+                    self.blocklist.add_item_selected(app_item(&raw, None));
+                    self.add_custom = None;
+                    self.add_custom_error = None;
+                }
+            }
+            CustomKind::Site => match crate::sites::sanitize_host(&raw) {
+                Some(host) => {
+                    self.blocklist.add_item_selected(site_item(&host));
+                    self.add_custom = None;
+                    self.add_custom_error = None;
+                }
+                None => {
+                    self.add_custom_error =
+                        Some(crate::i18n::t!("tui.editor.hostname_format").to_string());
+                }
+            },
+        }
+    }
 }
 
 pub async fn handle_editor_key(app: &mut App, key: KeyEvent) {
     let Screen::ModeEditor(ed) = &mut app.screen else { return };
 
-    // Add-custom modal: while open, all keys go to it. The kind of thing
-    // being added depends on which field the modal was triggered from
-    // (Apps → bundle id, Sites → hostname).
-    if ed.add_custom_app.is_some() {
-        let key_code = key.code;
-        let focus = ed.focus;
-        // Borrow the input mutably only for handle/clone.
-        let input = ed.add_custom_app.as_mut().unwrap();
-        match key_code {
+    if let Some((kind, input)) = &mut ed.add_custom {
+        match key.code {
             KeyCode::Esc => {
-                ed.add_custom_app = None;
+                ed.add_custom = None;
                 ed.add_custom_error = None;
             }
-            KeyCode::Enter => {
-                let raw = input.value.trim().to_string();
-                match focus {
-                    EditorField::Apps => {
-                        if raw.is_empty() {
-                            ed.add_custom_error =
-                                Some(crate::i18n::t!("tui.editor.bundle_id_required").to_string());
-                        } else if !looks_like_bundle_id(&raw) {
-                            ed.add_custom_error =
-                                Some(crate::i18n::t!("tui.editor.bundle_id_format").to_string());
-                        } else {
-                            ed.apps.add_item_selected(MultiSelectItem::new(
-                                raw.clone(),
-                                format!("(custom) [{raw}]"),
-                            ));
-                            ed.add_custom_app = None;
-                            ed.add_custom_error = None;
-                        }
-                    }
-                    EditorField::Sites => match crate::sites::sanitize_host(&raw) {
-                        Some(host) => {
-                            let current = ed.sites.value.trim();
-                            if current.is_empty() {
-                                ed.sites.value = host;
-                            } else {
-                                ed.sites.value = format!("{current}, {host}");
-                            }
-                            ed.sites.cursor = ed.sites.value.chars().count();
-                            ed.add_custom_app = None;
-                            ed.add_custom_error = None;
-                        }
-                        None => {
-                            ed.add_custom_error =
-                                Some(crate::i18n::t!("tui.editor.hostname_format").to_string());
-                        }
-                    },
-                    _ => {
-                        ed.add_custom_app = None;
-                        ed.add_custom_error = None;
-                    }
-                }
+            KeyCode::Tab | KeyCode::BackTab => {
+                *kind = match kind {
+                    CustomKind::Site => CustomKind::App,
+                    CustomKind::App => CustomKind::Site,
+                };
+                ed.add_custom_error = None;
             }
+            KeyCode::Enter => ed.add_custom_commit(),
             _ => {
                 input.handle(key);
                 ed.add_custom_error = None;
@@ -332,15 +370,12 @@ pub async fn handle_editor_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
-    // `+` on Apps or Sites field opens an inline "add custom" modal.
-    // `+` is not a valid character in either bundle ids or hostnames, so
-    // intercepting it before TextInput / MultiSelectList sees it is safe.
-    if matches!(key.code, KeyCode::Char('+'))
-        && matches!(ed.focus, EditorField::Apps | EditorField::Sites)
-    {
+    // `+` is not part of any hostname or bundle id, so taking it before the
+    // list's type-to-filter sees it is safe.
+    if matches!(key.code, KeyCode::Char('+')) && ed.focus == EditorField::Blocklist {
         let mut input = TextInput::new("");
         input.focused = true;
-        ed.add_custom_app = Some(input);
+        ed.add_custom = Some((CustomKind::Site, input));
         ed.add_custom_error = None;
         return;
     }
@@ -357,12 +392,10 @@ pub async fn handle_editor_key(app: &mut App, key: KeyEvent) {
             _ => {}
         }
     }
-    // ↑/↓ move between fields for everything that isn't a multi-select
-    // (Apps/Groups/Brands swallow vertical arrows for their own list nav).
+    // ↑/↓ move between fields everywhere except the blocklist, which uses
+    // them for its own rows.
     let focus = ed.focus;
-    let is_multiselect =
-        matches!(focus, EditorField::Apps | EditorField::Groups | EditorField::Brands);
-    if !is_multiselect {
+    if focus != EditorField::Blocklist {
         match key.code {
             KeyCode::Up => {
                 ed.prev_field();
@@ -377,12 +410,7 @@ pub async fn handle_editor_key(app: &mut App, key: KeyEvent) {
     }
     match key.code {
         KeyCode::Esc => {
-            let consumed = match ed.focus {
-                EditorField::Apps => ed.apps.handle(key),
-                EditorField::Groups => ed.groups.handle(key),
-                EditorField::Brands => ed.brands.handle(key),
-                _ => false,
-            };
+            let consumed = focus == EditorField::Blocklist && ed.blocklist.handle(key);
             if !consumed {
                 if ed.is_dirty() {
                     ed.confirm_cancel = true;
@@ -394,16 +422,9 @@ pub async fn handle_editor_key(app: &mut App, key: KeyEvent) {
         KeyCode::Tab => ed.next_field(),
         KeyCode::BackTab => ed.prev_field(),
         _ => {
-            let focus = ed.focus;
             match focus {
-                EditorField::Apps => {
-                    ed.apps.handle(key);
-                }
-                EditorField::Groups => {
-                    ed.groups.handle(key);
-                }
-                EditorField::Brands => {
-                    ed.brands.handle(key);
+                EditorField::Blocklist => {
+                    ed.blocklist.handle(key);
                 }
                 EditorField::Color => {
                     let n = COLOR_PALETTE.len();
@@ -417,16 +438,59 @@ pub async fn handle_editor_key(app: &mut App, key: KeyEvent) {
                         _ => {}
                     }
                 }
+                EditorField::Firmness => match key.code {
+                    KeyCode::Left | KeyCode::Char('h') => ed.set_firmness(Firmness::Soft),
+                    KeyCode::Right | KeyCode::Char('l') => ed.set_firmness(Firmness::DelayedExit),
+                    KeyCode::Char(' ') => {
+                        let next = match ed.firmness() {
+                            Firmness::Soft => Firmness::DelayedExit,
+                            _ => Firmness::Soft,
+                        };
+                        ed.set_firmness(next);
+                    }
+                    _ => {}
+                },
+                EditorField::Advanced => {
+                    if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
+                        ed.toggle_advanced();
+                    }
+                }
+                EditorField::Schedule => {
+                    if matches!(key.code, KeyCode::Enter) {
+                        open_schedule(app);
+                        return;
+                    }
+                }
                 _ => {
                     if let Some(input) = ed.input_mut(focus) {
                         input.handle(key);
                     }
                 }
             }
-            ed.error = None;
-            ed.error_field = None;
+            if let Screen::ModeEditor(ed) = &mut app.screen {
+                ed.error = None;
+                ed.error_field = None;
+            }
         }
     }
+}
+
+/// The schedule has one editor: the form on the Schedules screen. Jumping
+/// there with unsaved edits would let the form save a profile that a later
+/// ctrl+s here overwrites, so the jump waits for a save.
+fn open_schedule(app: &mut App) {
+    let Screen::ModeEditor(ed) = &mut app.screen else { return };
+    let Some(name) = ed.original_name.clone() else {
+        ed.error = Some(crate::i18n::t!("tui.editor.schedule_save_first_new").to_string());
+        ed.error_field = Some(EditorField::Schedule);
+        return;
+    };
+    if ed.is_dirty() {
+        ed.error = Some(crate::i18n::t!("tui.editor.schedule_save_first").to_string());
+        ed.error_field = Some(EditorField::Schedule);
+        return;
+    }
+    app.open_schedule_form(&name);
 }
 
 pub fn draw_editor(f: &mut Frame, app: &App, editor: &EditorState) {
@@ -463,9 +527,9 @@ pub fn draw_editor(f: &mut Frame, app: &App, editor: &EditorState) {
         .split(outer[2]);
 
     draw_editor_fields(f, body[0], editor);
-    draw_editor_aux(f, body[1], editor);
+    draw_blocklist(f, body[1], editor);
 
-    let help = "↑/↓ · tab fields   ctrl+s save   ctrl+⏎ save & start   esc cancel";
+    let help = crate::i18n::t!("tui.editor.footer").to_string();
     let footer = Paragraph::new(Span::styled(help, Style::default().fg(DIM)))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::TOP).border_style(Style::default().fg(DIM)));
@@ -494,30 +558,14 @@ pub fn draw_editor(f: &mut Frame, app: &App, editor: &EditorState) {
         );
     }
 
-    if let Some(input) = &editor.add_custom_app {
-        let (title, hint) = match editor.focus {
-            EditorField::Sites => (
-                crate::i18n::t!("tui.editor.add_site_title"),
-                crate::i18n::t!("tui.editor.add_site_hint"),
-            ),
-            _ => (
-                crate::i18n::t!("tui.editor.add_app_title"),
-                crate::i18n::t!("tui.editor.add_app_hint"),
-            ),
-        };
-        draw_add_custom_modal(f, &title, &hint, input, editor.add_custom_error.as_deref());
+    if let Some((kind, input)) = &editor.add_custom {
+        draw_add_custom_modal(f, *kind, input, editor.add_custom_error.as_deref());
     }
 }
 
-fn draw_add_custom_modal(
-    f: &mut Frame,
-    title: &str,
-    hint: &str,
-    input: &TextInput,
-    error: Option<&str>,
-) {
+fn draw_add_custom_modal(f: &mut Frame, kind: CustomKind, input: &TextInput, error: Option<&str>) {
     let area = f.area();
-    let width = 56.min(area.width.saturating_sub(4));
+    let width = 60.min(area.width.saturating_sub(4));
     let height = 11u16.min(area.height.saturating_sub(4));
     let x = area.x + (area.width.saturating_sub(width)) / 2;
     let y = area.y + (area.height.saturating_sub(height)) / 2;
@@ -530,7 +578,7 @@ fn draw_add_custom_modal(
         .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(ACCENT))
         .title(Span::styled(
-            title.to_string(),
+            crate::i18n::t!("tui.editor.add_title").to_string(),
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ));
     let inner = block.inner(rect);
@@ -539,6 +587,7 @@ fn draw_add_custom_modal(
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
+            Constraint::Length(1),
             Constraint::Length(2),
             Constraint::Length(1),
             Constraint::Length(1),
@@ -547,16 +596,35 @@ fn draw_add_custom_modal(
         ])
         .split(inner);
 
+    let chip = |on: bool, label: String| {
+        let style = if on {
+            Style::default().fg(Color::Black).bg(ACCENT).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(DIM)
+        };
+        Span::styled(format!(" {label} "), style)
+    };
+    let kinds = Line::from(vec![
+        chip(kind == CustomKind::Site, crate::i18n::t!("tui.editor.kind_site").to_string()),
+        Span::raw("  "),
+        chip(kind == CustomKind::App, crate::i18n::t!("tui.editor.kind_app").to_string()),
+    ]);
+    f.render_widget(Paragraph::new(kinds).alignment(Alignment::Center), layout[0]);
+
+    let hint = match kind {
+        CustomKind::Site => crate::i18n::t!("tui.editor.add_site_hint"),
+        CustomKind::App => crate::i18n::t!("tui.editor.add_app_hint"),
+    };
     let hint_para = Paragraph::new(Span::styled(hint.to_string(), Style::default().fg(DIM)))
         .alignment(Alignment::Center);
-    f.render_widget(hint_para, layout[0]);
+    f.render_widget(hint_para, layout[1]);
 
-    input.render(layout[1], f.buffer_mut(), Style::default().fg(TEXT));
+    input.render(layout[2], f.buffer_mut(), Style::default().fg(TEXT));
 
     if let Some(err) = error {
         let err_line = Paragraph::new(Span::styled(err.to_string(), Style::default().fg(ALERT)))
             .alignment(Alignment::Center);
-        f.render_widget(err_line, layout[3]);
+        f.render_widget(err_line, layout[4]);
     }
 
     let actions = Paragraph::new(Span::styled(
@@ -564,38 +632,26 @@ fn draw_add_custom_modal(
         Style::default().fg(DIM),
     ))
     .alignment(Alignment::Center);
-    f.render_widget(actions, layout[4]);
+    f.render_widget(actions, layout[5]);
 }
 
 fn draw_editor_fields(f: &mut Frame, area: Rect, editor: &EditorState) {
-    let block = picker_block(" edit mode ");
+    let block = picker_block(" edit routine ");
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let scalar_fields = [
-        EditorField::Name,
-        EditorField::Color,
-        EditorField::Max,
-        EditorField::Min,
-        EditorField::Cooldown,
-        EditorField::DailyCap,
-        EditorField::PanicDelay,
-        EditorField::Schedule,
-        EditorField::Sites,
-        EditorField::HookBefore,
-        EditorField::HookAfter,
-    ];
-    let mut constraints: Vec<Constraint> =
-        scalar_fields.iter().map(|_| Constraint::Length(2)).collect();
-    constraints.push(Constraint::Length(3));
+    let fields: Vec<EditorField> =
+        editor.visible_fields().into_iter().filter(|f| *f != EditorField::Blocklist).collect();
+    let mut constraints: Vec<Constraint> = fields.iter().map(|_| Constraint::Length(2)).collect();
+    constraints.push(Constraint::Min(3));
     let rows =
         Layout::default().direction(Direction::Vertical).constraints(constraints).split(inner);
 
-    for (i, field) in scalar_fields.iter().enumerate() {
+    for (i, field) in fields.iter().enumerate() {
         draw_editor_field(f, rows[i], editor, *field);
     }
 
-    let status_row = rows[scalar_fields.len()];
+    let status_row = rows[fields.len()];
     let mut lines: Vec<Line> = Vec::new();
     if let Some(err) = &editor.error {
         lines.push(Line::from(Span::styled(
@@ -607,9 +663,19 @@ fn draw_editor_fields(f: &mut Frame, area: Rect, editor: &EditorState) {
             editor.focus.help(),
             Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
         )));
+        if editor.focus == EditorField::Firmness {
+            let limits = editor.build_profile().map(|(_, p)| p.limits).unwrap_or_default();
+            lines.push(Line::from(Span::styled(
+                editor.firmness().note(&limits),
+                Style::default().fg(TEXT),
+            )));
+        }
     }
     if editor.is_dirty() {
-        lines.push(Line::from(Span::styled("● unsaved changes", Style::default().fg(GLOW))));
+        lines.push(Line::from(Span::styled(
+            crate::i18n::t!("tui.editor.unsaved").to_string(),
+            Style::default().fg(GLOW),
+        )));
     }
     f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), status_row);
 }
@@ -625,34 +691,51 @@ fn draw_editor_field(f: &mut Frame, area: Rect, editor: &EditorState, field: Edi
         Style::default().fg(DIM)
     };
     let prefix = if focused { "▶ " } else { "  " };
-    let label = format!("{prefix}{:<14}", field.label());
+    let indent = if field.is_advanced() { "  " } else { "" };
+    let label = format!("{prefix}{indent}{:<14}", field.label());
     let rows = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(label.len() as u16 + 1), Constraint::Min(5)])
+        .constraints([Constraint::Length(label.chars().count() as u16 + 1), Constraint::Min(5)])
         .split(area);
 
     f.render_widget(Paragraph::new(Line::from(Span::styled(label, label_style))), rows[0]);
 
-    if field == EditorField::Color {
-        draw_color_swatch(f, rows[1], editor, focused);
-        return;
+    let value_style = if focused { Style::default().fg(TEXT) } else { Style::default().fg(DIM) };
+    match field {
+        EditorField::Color => draw_color_swatch(f, rows[1], editor, focused),
+        EditorField::Firmness => {
+            let spans =
+                scale_spans(editor.firmness(), &[Firmness::Soft, Firmness::DelayedExit], focused);
+            f.render_widget(Paragraph::new(Line::from(spans)), rows[1]);
+        }
+        EditorField::Schedule => {
+            let text = match &editor.snapshot.schedule {
+                Some(s) => fmt_schedule(s),
+                None => crate::i18n::t!("tui.editor.schedule_none").to_string(),
+            };
+            let spans = vec![
+                Span::styled(text, value_style),
+                Span::styled(
+                    format!("   {}", crate::i18n::t!("tui.editor.schedule_edit")),
+                    Style::default().fg(DIM),
+                ),
+            ];
+            f.render_widget(Paragraph::new(Line::from(spans)), rows[1]);
+        }
+        EditorField::Advanced => {
+            let text = if editor.advanced_open {
+                crate::i18n::t!("tui.editor.advanced_open").to_string()
+            } else {
+                crate::i18n::t!("tui.editor.advanced_closed").to_string()
+            };
+            f.render_widget(Paragraph::new(Span::styled(text, value_style)), rows[1]);
+        }
+        _ => {
+            if let Some(input) = editor.input(field) {
+                input.render(rows[1], f.buffer_mut(), value_style);
+            }
+        }
     }
-    let input = match field {
-        EditorField::Name => &editor.name,
-        EditorField::Max => &editor.max,
-        EditorField::Min => &editor.min,
-        EditorField::Cooldown => &editor.cooldown,
-        EditorField::DailyCap => &editor.daily_cap,
-        EditorField::PanicDelay => &editor.panic_delay,
-        EditorField::Schedule => &editor.schedule,
-        EditorField::Sites => &editor.sites,
-        EditorField::HookBefore => &editor.hook_before,
-        EditorField::HookAfter => &editor.hook_after,
-        _ => return,
-    };
-    let style = if focused { Style::default().fg(TEXT) } else { Style::default().fg(DIM) };
-    let buf = f.buffer_mut();
-    input.render(rows[1], buf, style);
 }
 
 fn draw_color_swatch(f: &mut Frame, area: Rect, editor: &EditorState, focused: bool) {
@@ -672,27 +755,16 @@ fn draw_color_swatch(f: &mut Frame, area: Rect, editor: &EditorState, focused: b
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-fn draw_editor_aux(f: &mut Frame, area: Rect, editor: &EditorState) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(40),
-            Constraint::Percentage(30),
-            Constraint::Percentage(30),
-        ])
-        .split(area);
-
-    let brands_title = picker_title("brand presets", &editor.brands.filter);
-    let brands_focused = editor.focus == EditorField::Brands;
-    editor.brands.render(chunks[0], f.buffer_mut(), picker_block(&brands_title), brands_focused);
-
-    let apps_title = picker_title("blocked apps", &editor.apps.filter);
-    let apps_focused = editor.focus == EditorField::Apps;
-    editor.apps.render(chunks[1], f.buffer_mut(), picker_block(&apps_title), apps_focused);
-
-    let groups_title = picker_title("site groups", &editor.groups.filter);
-    let groups_focused = editor.focus == EditorField::Groups;
-    editor.groups.render(chunks[2], f.buffer_mut(), picker_block(&groups_title), groups_focused);
+fn draw_blocklist(f: &mut Frame, area: Rect, editor: &EditorState) {
+    let count = editor.blocklist.selected.len();
+    let base = crate::i18n::t!("tui.editor.blocklist_title", count = count).to_string();
+    let title = if editor.blocklist.filter.is_empty() {
+        format!(" {base} ")
+    } else {
+        format!(" {base} · /{} ", editor.blocklist.filter)
+    };
+    let focused = editor.focus == EditorField::Blocklist;
+    editor.blocklist.render(area, f.buffer_mut(), picker_block(&title), focused);
 }
 
 pub fn palette_color(key: &str) -> Color {
@@ -704,14 +776,6 @@ pub fn palette_color(key: &str) -> Color {
         "violet" => Color::Rgb(180, 140, 220),
         "red" => Color::Rgb(220, 110, 110),
         _ => DIM,
-    }
-}
-
-fn picker_title(label: &str, filter: &str) -> String {
-    if filter.is_empty() {
-        format!(" {label} ")
-    } else {
-        format!(" {label} · /{filter} ")
     }
 }
 
@@ -727,7 +791,9 @@ fn parse_opt_humantime(input: &TextInput) -> std::result::Result<Option<Duration
     if raw.is_empty() {
         return Ok(None);
     }
-    humantime::parse_duration(raw).map(Some).map_err(|e| format!("invalid duration: {e}"))
+    humantime::parse_duration(raw)
+        .map(Some)
+        .map_err(|_| crate::i18n::t!("tui.editor.bad_duration", value = raw).to_string())
 }
 
 /// Cheap sanity check for a macOS/Linux app identifier (reverse-DNS like
@@ -756,155 +822,126 @@ fn profile_eq(a: &Profile, b: &Profile) -> bool {
         && a.limits.max_duration == b.limits.max_duration
         && a.limits.min_duration == b.limits.min_duration
         && a.limits.cooldown == b.limits.cooldown
-        && a.limits.daily_cap == b.limits.daily_cap
+        && a.limits.panic_delay == b.limits.panic_delay
         && a.color == b.color
         && a.schedule == b.schedule
 }
 
-pub fn format_schedule_spec(s: Option<&crate::config::Schedule>) -> String {
-    let Some(s) = s else { return String::new() };
-    use crate::config::Weekday::*;
-    let order = [Mon, Tue, Wed, Thu, Fri, Sat, Sun];
-    let labels = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-    let days: String = order
-        .iter()
-        .zip(labels.iter())
-        .filter(|(d, _)| s.days.contains(d))
-        .map(|(_, l)| *l)
-        .collect::<Vec<_>>()
-        .join(",");
-    let prefix = if s.enabled { "" } else { "off " };
-    let tz = if s.tz == "local" { String::new() } else { format!(" {}", s.tz) };
-    format!("{prefix}{days} {}-{}{tz}", s.start, s.end)
+fn site_item(host: &str) -> MultiSelectItem {
+    let kind = crate::i18n::t!("tui.editor.kind_site");
+    MultiSelectItem::new(format!("{SITE}{host}"), format!("◇ {host}  · {kind}"))
 }
 
-pub fn parse_schedule_spec(
-    raw: &str,
-) -> std::result::Result<Option<crate::config::Schedule>, String> {
-    use crate::config::{Schedule, Weekday};
-    let s = raw.trim();
-    if s.is_empty() {
-        return Ok(None);
-    }
-    let mut tokens: Vec<&str> = s.split_whitespace().collect();
-    let enabled = if tokens.first().is_some_and(|t| t.eq_ignore_ascii_case("off")) {
-        tokens.remove(0);
-        false
-    } else {
-        true
+fn app_item(id: &str, label: Option<&str>) -> MultiSelectItem {
+    let kind = crate::i18n::t!("tui.editor.kind_app");
+    let text = match label {
+        Some(l) => format!("▫ {l}  · {kind} [{id}]"),
+        None => format!("▫ {id}  · {kind}"),
     };
-    if tokens.len() < 2 {
-        return Err("expected `<days> <start>-<end> [tz]`".into());
-    }
-    let days_tok = tokens.remove(0);
-    let window = tokens.remove(0);
-    let tz = tokens.first().map(|s| (*s).to_string()).unwrap_or_else(|| "local".into());
+    MultiSelectItem::new(format!("{APP}{id}"), text)
+}
 
-    let (start, end) =
-        window.split_once('-').ok_or_else(|| "window must be HH:MM-HH:MM".to_string())?;
-    let parse_day = |t: &str| -> std::result::Result<Weekday, String> {
-        Ok(match t.to_ascii_lowercase().as_str() {
-            "mon" | "mo" => Weekday::Mon,
-            "tue" | "tu" => Weekday::Tue,
-            "wed" | "we" => Weekday::Wed,
-            "thu" | "th" => Weekday::Thu,
-            "fri" | "fr" => Weekday::Fri,
-            "sat" | "sa" => Weekday::Sat,
-            "sun" | "su" => Weekday::Sun,
-            other => return Err(format!("unknown day `{other}`")),
-        })
-    };
-    let order = [
-        Weekday::Mon,
-        Weekday::Tue,
-        Weekday::Wed,
-        Weekday::Thu,
-        Weekday::Fri,
-        Weekday::Sat,
-        Weekday::Sun,
-    ];
-    let mut days: Vec<Weekday> = Vec::new();
-    let lower = days_tok.to_ascii_lowercase();
-    match lower.as_str() {
-        "daily" | "everyday" | "all" => days.extend(order),
-        "weekdays" | "workdays" => days.extend(&order[..5]),
-        "weekends" => days.extend(&order[5..]),
-        _ => {
-            for part in lower.split(',') {
-                if let Some((a, b)) = part.split_once('-') {
-                    let from = parse_day(a)?;
-                    let to = parse_day(b)?;
-                    let i = order.iter().position(|d| *d == from).unwrap();
-                    let j = order.iter().position(|d| *d == to).unwrap();
-                    if i <= j {
-                        days.extend(&order[i..=j]);
-                    } else {
-                        return Err("day range must be ascending".into());
-                    }
-                } else {
-                    days.push(parse_day(part)?);
-                }
-            }
+/// One list for everything a routine can block, in the order a person looks
+/// for things: well-known services first (each covers its sites and its
+/// app), then whole categories, then sites and apps of their own.
+fn load_blocklist(profile: &Profile) -> MultiSelectList {
+    let mut items: Vec<MultiSelectItem> = Vec::new();
+    let mut selected: Vec<String> = Vec::new();
+
+    let brand_kind = crate::i18n::t!("tui.editor.kind_brand").to_string();
+    if let Ok(brands) = crate::brands::all_brands() {
+        for b in brands {
+            let q = b.qualified();
+            items.push(MultiSelectItem::new(
+                format!("{BRAND}{q}"),
+                format!("{} {}  · {brand_kind}", b.icon.as_deref().unwrap_or("●"), b.name),
+            ));
         }
     }
-    days.sort_by_key(|d| order.iter().position(|x| x == d).unwrap());
-    days.dedup();
-    let sch = Schedule { enabled, days, start: start.into(), end: end.into(), tz };
-    sch.validate().map_err(|e| e.to_string())?;
-    Ok(Some(sch))
-}
+    for q in &profile.brands {
+        let id = format!("{BRAND}{q}");
+        if !items.iter().any(|i| i.id == id) {
+            items.push(MultiSelectItem::new(id.clone(), format!("● {q}  · {brand_kind}")));
+        }
+        selected.push(id);
+    }
 
-fn load_picklists(profile: &Profile) -> (MultiSelectList, MultiSelectList, MultiSelectList) {
-    let mut apps_items: Vec<MultiSelectItem> = crate::apps::load_or_scan(false)
-        .map(|cache| {
-            cache
-                .apps
-                .into_iter()
-                .map(|a| MultiSelectItem::new(a.id.clone(), format!("{} [{}]", a.label, a.id)))
-                .collect()
-        })
-        .unwrap_or_default();
-    // Preserve custom bundle ids from the saved profile that the cache
-    // doesn't know about (added previously via the inline "+ add custom"
-    // flow, or hand-edited in the toml). Otherwise saving would silently
-    // drop them on the next edit.
+    if let Ok(groups) = crate::sites::all_groups() {
+        for g in groups {
+            let q = g.qualified();
+            let kind =
+                crate::i18n::t!("tui.editor.kind_category", count = g.hosts.len()).to_string();
+            items.push(MultiSelectItem::new(format!("{GROUP}{q}"), format!("▤ {q}  · {kind}")));
+        }
+    }
+    for q in &profile.site_groups {
+        let id = format!("{GROUP}{q}");
+        if !items.iter().any(|i| i.id == id) {
+            let kind = crate::i18n::t!("tui.editor.kind_category", count = 0).to_string();
+            items.push(MultiSelectItem::new(id.clone(), format!("▤ {q}  · {kind}")));
+        }
+        selected.push(id);
+    }
+
+    for host in &profile.sites {
+        items.push(site_item(host));
+        selected.push(format!("{SITE}{host}"));
+    }
+
+    let mut app_ids: Vec<String> = Vec::new();
+    if let Ok(cache) = crate::apps::load_or_scan(false) {
+        for a in cache.apps {
+            app_ids.push(a.id.clone());
+            items.push(app_item(&a.id, Some(&a.label)));
+        }
+    }
+    // Ids the scan does not know (added by hand earlier) must survive a save.
     for id in &profile.apps {
-        if !apps_items.iter().any(|i| i.id == *id) {
-            apps_items.push(MultiSelectItem::new(id.clone(), format!("(custom) [{id}]")));
+        if !app_ids.contains(id) {
+            items.push(app_item(id, None));
         }
+        selected.push(format!("{APP}{id}"));
     }
-    let groups_items = crate::sites::all_groups()
-        .map(|gs| {
-            gs.into_iter()
-                .map(|g| {
-                    MultiSelectItem::new(
-                        g.qualified(),
-                        format!("{} ({} hosts)", g.qualified(), g.hosts.len()),
-                    )
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let brands_items = crate::brands::all_brands()
-        .map(|bs| {
-            bs.into_iter()
-                .map(|b| {
-                    MultiSelectItem::new(
-                        b.qualified(),
-                        format!(
-                            "{} {} [{}]",
-                            b.icon.as_deref().unwrap_or("●"),
-                            b.name,
-                            b.qualified()
-                        ),
-                    )
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    (
-        MultiSelectList::new(apps_items, &profile.apps),
-        MultiSelectList::new(groups_items, &profile.site_groups),
-        MultiSelectList::new(brands_items, &profile.brands),
-    )
+
+    MultiSelectList::new(items, &selected)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blocklist_round_trips_every_kind() {
+        let profile = Profile {
+            sites: vec!["example.com".into()],
+            apps: vec!["com.example.custom".into()],
+            limits: Limits { daily_cap: Some(Duration::from_secs(3600)), ..Default::default() },
+            ..Default::default()
+        };
+        let ed = EditorState::edit("x".into(), profile.clone());
+        let (_, built) = ed.build_profile().unwrap();
+        assert_eq!(built.sites, profile.sites);
+        assert_eq!(built.apps, profile.apps);
+        assert_eq!(built.limits.daily_cap, profile.limits.daily_cap);
+        assert!(!ed.is_dirty());
+    }
+
+    #[test]
+    fn firmness_is_a_view_over_cooldown() {
+        let mut ed = EditorState::new_mode();
+        assert_eq!(ed.firmness(), Firmness::Soft);
+        ed.set_firmness(Firmness::DelayedExit);
+        assert_eq!(ed.firmness(), Firmness::DelayedExit);
+        assert_eq!(ed.cooldown.value, humantime::format_duration(DEFAULT_COOLDOWN).to_string());
+        ed.set_firmness(Firmness::Soft);
+        assert!(ed.cooldown.value.is_empty());
+    }
+
+    #[test]
+    fn advanced_fields_hidden_until_opened() {
+        let mut ed = EditorState::new_mode();
+        assert!(!ed.visible_fields().contains(&EditorField::Max));
+        ed.toggle_advanced();
+        assert!(ed.visible_fields().contains(&EditorField::Max));
+    }
 }

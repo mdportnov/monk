@@ -13,6 +13,7 @@ use crate::{
     onboarding::{preset_blurb, preset_label, preset_meta, PresetTier, PRESETS},
     tui::{
         app::{App, EditorState, FlashLevel, HomeState, PickerState, PresetPickerState, Screen},
+        firmness::Firmness,
         theme::*,
         view::{draw_header, fmt_short},
     },
@@ -184,7 +185,7 @@ fn draw_preset_list(f: &mut Frame, area: Rect, state: &PresetPickerState) {
         let p = Paragraph::new(Span::styled(err.clone(), Style::default().fg(ALERT)))
             .wrap(Wrap { trim: true })
             .alignment(Alignment::Center)
-            .block(picker_block(" presets "));
+            .block(picker_block(&format!(" {} ", crate::i18n::t!("tui.preset_picker.title"))));
         f.render_widget(p, area);
         return;
     }
@@ -223,7 +224,7 @@ fn draw_preset_list(f: &mut Frame, area: Rect, state: &PresetPickerState) {
     }
 
     let list = List::new(items)
-        .block(picker_block(" presets "))
+        .block(picker_block(&format!(" {} ", crate::i18n::t!("tui.preset_picker.title"))))
         .highlight_style(Style::default().bg(Color::Rgb(35, 40, 55)).add_modifier(Modifier::BOLD))
         .highlight_symbol("▶ ");
 
@@ -246,7 +247,8 @@ fn short_blurb(full: &str) -> String {
 }
 
 fn draw_preset_preview(f: &mut Frame, area: Rect, state: &PresetPickerState) {
-    let block = picker_block(" preview ");
+    let preview_title = format!(" {} ", crate::i18n::t!("tui.preset_picker.preview"));
+    let block = picker_block(&preview_title);
     let Some(preset_name) = state.current() else {
         f.render_widget(block, area);
         return;
@@ -322,7 +324,6 @@ fn draw_preset_preview(f: &mut Frame, area: Rect, state: &PresetPickerState) {
     lines.push(kv("  max", &fmt_limit(profile.limits.max_duration)));
     lines.push(kv("  min", &fmt_limit(profile.limits.min_duration)));
     lines.push(kv("  cooldown", &fmt_limit(profile.limits.cooldown)));
-    lines.push(kv("  day cap", &fmt_limit(profile.limits.daily_cap)));
     if let Some(pd) = profile.limits.panic_delay {
         lines.push(kv("  panic", &fmt_short(pd)));
     }
@@ -386,7 +387,7 @@ fn draw_picker_list(
     if picker.loading {
         let p = Paragraph::new(crate::i18n::t!("tui.picker.loading"))
             .alignment(Alignment::Center)
-            .block(picker_block(" modes "));
+            .block(picker_block(&format!(" {} ", crate::i18n::t!("tui.picker.title"))));
         f.render_widget(p, area);
         return;
     }
@@ -394,16 +395,17 @@ fn draw_picker_list(
         let p = Paragraph::new(Span::styled(err.clone(), Style::default().fg(ALERT)))
             .wrap(Wrap { trim: true })
             .alignment(Alignment::Center)
-            .block(picker_block(" modes "));
+            .block(picker_block(&format!(" {} ", crate::i18n::t!("tui.picker.title"))));
         f.render_widget(p, area);
         return;
     }
 
     // Show filter status in title
     let title = if picker.filter.is_empty() {
-        " modes ".to_string()
+        format!(" {} ", crate::i18n::t!("tui.picker.title"))
     } else {
-        format!(" modes · filter: {} ", picker.filter)
+        let filter = picker.filter.clone();
+        format!(" {} ", crate::i18n::t!("tui.picker.title_filtered", filter = filter))
     };
 
     if picker.modes.is_empty() {
@@ -430,12 +432,12 @@ fn draw_picker_list(
         let lines = vec![
             Line::from(""),
             Line::from(Span::styled(
-                "no matches",
+                crate::i18n::t!("tui.picker.no_matches"),
                 Style::default().fg(TEXT).add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
             Line::from(Span::styled(
-                "press esc to clear filter · backspace to edit",
+                crate::i18n::t!("tui.picker.no_matches_hint"),
                 Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
             )),
         ];
@@ -470,7 +472,7 @@ fn render_mode_row(
     running_remaining: Option<Duration>,
     slot: Option<usize>,
 ) -> Line<'static> {
-    let (icon, icon_color, status_text) = status_signal(m, running_remaining);
+    let (icon, icon_color, status_text) = status_signal(running_remaining);
     let name_style = if m.is_default {
         Style::default().fg(TEXT).add_modifier(Modifier::BOLD)
     } else {
@@ -508,30 +510,17 @@ fn render_mode_row(
     Line::from(spans)
 }
 
-fn status_signal(
-    m: &ModeSummary,
-    running_remaining: Option<Duration>,
-) -> (&'static str, Color, String) {
+fn status_signal(running_remaining: Option<Duration>) -> (&'static str, Color, String) {
     if let Some(rem) = running_remaining {
-        return ("●", GLOW, format!("running · {} left", fmt_short(rem)));
-    }
-    if m.stats.cooldown_remaining.is_some() {
-        return (
-            "◐",
-            Color::Rgb(210, 180, 90),
-            format!("cool {}", fmt_short(m.stats.cooldown_remaining.unwrap_or_default())),
-        );
-    }
-    if let (Some(cap), Some(rem)) = (m.limits.daily_cap, m.stats.daily_cap_remaining) {
-        if rem.is_zero() && !cap.is_zero() {
-            return ("◌", ALERT, crate::i18n::t!("tui.picker.status_capped").to_string());
-        }
+        let left = fmt_short(rem);
+        return ("●", GLOW, crate::i18n::t!("tui.picker.status_running", left = left).to_string());
     }
     ("●", ACCENT, crate::i18n::t!("tui.picker.status_ready").to_string())
 }
 
 fn draw_picker_details(f: &mut Frame, area: Rect, picker: &PickerState) {
-    let block = picker_block(" details ");
+    let details_title = format!(" {} ", crate::i18n::t!("tui.picker.details"));
+    let block = picker_block(&details_title);
     let Some(m) = picker.current() else {
         f.render_widget(block, area);
         return;
@@ -550,18 +539,23 @@ fn draw_picker_details(f: &mut Frame, area: Rect, picker: &PickerState) {
     lines.push(kv(&crate::i18n::t!("tui.picker.field_groups"), &m.blocked_groups.to_string()));
     lines.push(Line::from(""));
 
-    lines.push(Line::from(Span::styled(
-        crate::i18n::t!("tui.picker.field_limits"),
-        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-    )));
-    lines.push(kv(&crate::i18n::t!("tui.picker.limit_max"), &fmt_limit(m.limits.max_duration)));
-    lines.push(dim_line(&format!("  {}", crate::i18n::t!("tui.picker.limit_max_desc"))));
-    lines.push(kv(&crate::i18n::t!("tui.picker.limit_min"), &fmt_limit(m.limits.min_duration)));
-    lines.push(dim_line(&format!("  {}", crate::i18n::t!("tui.picker.limit_min_desc"))));
-    lines.push(kv(&crate::i18n::t!("tui.picker.limit_cooldown"), &fmt_limit(m.limits.cooldown)));
-    lines.push(dim_line(&format!("  {}", crate::i18n::t!("tui.picker.limit_cooldown_desc"))));
-    lines.push(kv(&crate::i18n::t!("tui.picker.limit_daily_cap"), &fmt_limit(m.limits.daily_cap)));
-    lines.push(dim_line(&format!("  {}", crate::i18n::t!("tui.picker.limit_daily_cap_desc"))));
+    let level = Firmness::of_limits(&m.limits);
+    lines.push(Line::from(vec![
+        Span::styled(
+            format!("{}  ", crate::i18n::t!("tui.picker.field_firmness")),
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(level.label(), Style::default().fg(level.color())),
+    ]));
+    lines.push(dim_line(&format!("  {}", level.note(&m.limits))));
+    if let Some(max) = m.limits.max_duration {
+        lines.push(kv(&crate::i18n::t!("tui.picker.limit_max"), &fmt_short(max)));
+        lines.push(dim_line(&format!("  {}", crate::i18n::t!("tui.picker.limit_max_desc"))));
+    }
+    if let Some(min) = m.limits.min_duration {
+        lines.push(kv(&crate::i18n::t!("tui.picker.limit_min"), &fmt_short(min)));
+        lines.push(dim_line(&format!("  {}", crate::i18n::t!("tui.picker.limit_min_desc"))));
+    }
     lines.push(Line::from(""));
 
     lines.push(Line::from(Span::styled(
@@ -571,9 +565,6 @@ fn draw_picker_details(f: &mut Frame, area: Rect, picker: &PickerState) {
     lines.push(kv(&crate::i18n::t!("tui.picker.used"), &fmt_short(m.stats.used_24h)));
     if let Some(rem) = m.stats.cooldown_remaining {
         lines.push(kv(&crate::i18n::t!("tui.picker.cooldown_remaining"), &fmt_short(rem)));
-    }
-    if let Some(rem) = m.stats.daily_cap_remaining {
-        lines.push(kv(&crate::i18n::t!("tui.picker.budget_left"), &fmt_short(rem)));
     }
 
     let p = Paragraph::new(lines).wrap(Wrap { trim: false }).block(block);
@@ -598,7 +589,7 @@ fn fmt_limit(d: Option<Duration>) -> String {
     }
 }
 
-fn picker_block(title: &str) -> Block<'_> {
+fn picker_block(title: &str) -> Block<'static> {
     Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -608,11 +599,11 @@ fn picker_block(title: &str) -> Block<'_> {
 
 fn draw_picker_footer(f: &mut Frame, area: Rect, picker: &PickerState, selected_is_running: bool) {
     let help = if !picker.filter.is_empty() {
-        "↑/↓ select · ⏎ start · type to filter · backspace edit · esc clear filter"
+        crate::i18n::t!("tui.picker.footer_filter").to_string()
     } else if selected_is_running {
-        "↑/↓ · ⏎ view · type filter · 1..9 quick · n new · a preset · e edit · c copy · r refresh · esc back"
+        crate::i18n::t!("tui.picker.footer_running").to_string()
     } else {
-        "↑/↓ · ⏎ start · type filter · 1..9 quick · n new · a preset · e edit · c copy · d del · r refresh · esc"
+        crate::i18n::t!("tui.picker.footer").to_string()
     };
     let p = Paragraph::new(Span::styled(help, Style::default().fg(DIM)))
         .alignment(Alignment::Center)

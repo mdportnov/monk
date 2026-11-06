@@ -108,125 +108,36 @@ fn draw_flash_toast(f: &mut Frame, app: &App) {
 
 fn draw_help_overlay(f: &mut Frame, app: &App) {
     let area = f.area();
-    let lines: Vec<Line> = match &app.screen {
-        Screen::Home(_) => vec![
-            Line::from(Span::styled(
-                "home",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from("  ↑/↓ · j/k    navigate menu"),
-            Line::from("  enter        activate item"),
-            Line::from("  s · x · p    start · stop · panic"),
-            Line::from("  c            cancel scheduled panic"),
-            Line::from("  m            open modes picker"),
-            Line::from("  w            open schedules"),
-            Line::from("  u            check for updates"),
-            Line::from("  1..9         quick-start mode by slot"),
-            Line::from("  ? · F1       toggle help"),
-            Line::from("  q · esc      quit"),
-        ],
-        Screen::ModePicker(_) => vec![
-            Line::from(Span::styled(
-                "modes",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from("  ↑/↓ · j/k    navigate"),
-            Line::from("  enter        configure & start  (running: view)"),
-            Line::from("  1..9         quick-start mode by slot"),
-            Line::from("  n · a · e · c · d  new · add from preset · edit · copy · delete"),
-            Line::from("  r            refresh"),
-            Line::from("  esc · q      back to home"),
-        ],
-        Screen::ModeConfirm(_) => vec![
-            Line::from(Span::styled(
-                "confirm",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from("  ←/→ · h/l    adjust duration (5m steps)"),
-            Line::from("  ↑/↓ · j/k    select site group"),
-            Line::from("  enter        start session"),
-            Line::from("  i · o        inspect selected group"),
-            Line::from("  e            edit this mode"),
-            Line::from("  shift+h      toggle hard mode"),
-            Line::from("  esc · q      back to picker"),
-        ],
-        Screen::ModeEditor(_) => vec![
-            Line::from(Span::styled(
-                "editor",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from("  ↑/↓ · tab     next / prev field"),
-            Line::from("  ctrl+s          save"),
-            Line::from("  ctrl+⏎          save & start"),
-            Line::from("  space           toggle app/group"),
-            Line::from("  enter           activate item"),
-            Line::from("  esc             cancel"),
-        ],
-        Screen::Settings(_) => vec![
-            Line::from(Span::styled(
-                "settings",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from("  ↑/↓ · tab       next / prev field"),
-            Line::from("  space           toggle on/off"),
-            Line::from("  ←/→             cycle profile / locale"),
-            Line::from("  ctrl+s          save"),
-            Line::from("  enter           confirm reset (on reset row only)"),
-            Line::from("  esc             cancel"),
-        ],
-        Screen::Doctor(_) => vec![
-            Line::from(Span::styled(
-                "doctor",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from("  ↑/↓ · j/k    navigate checks"),
-            Line::from("  f            jump to first failure"),
-            Line::from("  r            rerun"),
-            Line::from("  esc · q      back to home"),
-        ],
-        Screen::Panic(_) => vec![
-            Line::from(Span::styled(
-                "panic",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from("  type phrase    confirm release"),
-            Line::from("  enter          submit"),
-            Line::from("  esc            cancel"),
-        ],
-        Screen::PresetPicker(_) => vec![
-            Line::from(Span::styled(
-                "presets",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from("  ↑/↓ · j/k    navigate presets"),
-            Line::from("  enter        prefill editor with preset"),
-            Line::from("  esc · q      back to picker"),
-        ],
-        Screen::Schedules(_) => vec![
-            Line::from(Span::styled(
-                "schedules",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from("  ↑/↓ · j/k    navigate modes"),
-            Line::from("  space        enable / disable schedule"),
-            Line::from("  ⏎ · e        edit schedule (form)"),
-            Line::from("  d            remove schedule"),
-            Line::from("  r            reload"),
-            Line::from("  form: 1..7 / space toggle days · w/a/n presets"),
-            Line::from("  form: ⏎ save · esc cancel"),
-            Line::from("  esc · q      back to home"),
-        ],
+    let body = match &app.screen {
+        Screen::Home(_) => crate::i18n::t!("tui.help_keys.home").to_string(),
+        Screen::ModePicker(_) => crate::i18n::t!("tui.help_keys.picker").to_string(),
+        Screen::ModeConfirm(_) => crate::i18n::t!("tui.help_keys.confirm").to_string(),
+        Screen::ModeEditor(_) => crate::i18n::t!("tui.help_keys.editor").to_string(),
+        Screen::Settings(_) => crate::i18n::t!("tui.help_keys.settings").to_string(),
+        Screen::Doctor(_) => crate::i18n::t!("tui.help_keys.doctor").to_string(),
+        Screen::Panic(_) => crate::i18n::t!("tui.help_keys.panic").to_string(),
+        Screen::PresetPicker(_) => crate::i18n::t!("tui.help_keys.templates").to_string(),
+        Screen::Schedules(_) => crate::i18n::t!("tui.help_keys.schedules").to_string(),
     };
-    let width = 44.min(area.width.saturating_sub(4));
+    let title = match &app.screen {
+        Screen::Home(_) => crate::i18n::t!("tui.help.home").to_string(),
+        Screen::ModePicker(_) => crate::i18n::t!("tui.help.modes").to_string(),
+        Screen::ModeConfirm(_) => crate::i18n::t!("tui.help.confirm").to_string(),
+        Screen::ModeEditor(_) => crate::i18n::t!("tui.help.editor").to_string(),
+        Screen::Settings(_) => crate::i18n::t!("tui.help.settings").to_string(),
+        Screen::Doctor(_) => crate::i18n::t!("tui.help.doctor").to_string(),
+        Screen::Panic(_) => crate::i18n::t!("tui.help.panic").to_string(),
+        Screen::PresetPicker(_) => crate::i18n::t!("tui.help.templates").to_string(),
+        Screen::Schedules(_) => crate::i18n::t!("tui.help.schedules").to_string(),
+    };
+    // One locale string per screen, one key binding per line: translators
+    // keep the alignment, and the overlay stays in the user's language.
+    let mut lines: Vec<Line> = vec![
+        Line::from(Span::styled(title, Style::default().fg(ACCENT).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+    ];
+    lines.extend(body.lines().map(|l| Line::from(format!("  {l}"))));
+    let width = 56.min(area.width.saturating_sub(4));
     let height = (lines.len() as u16 + 4).min(area.height.saturating_sub(4));
     let x = area.x + (area.width.saturating_sub(width)) / 2;
     let y = area.y + (area.height.saturating_sub(height)) / 2;
@@ -236,7 +147,7 @@ fn draw_help_overlay(f: &mut Frame, app: &App) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(ACCENT))
-        .title(" help ");
+        .title(format!(" {} ", crate::i18n::t!("tui.help.title")));
     let para = Paragraph::new(lines)
         .block(block)
         .style(Style::default().fg(TEXT))
@@ -337,7 +248,7 @@ pub fn fmt_limit(d: Option<Duration>) -> String {
     }
 }
 
-pub fn picker_block(title: &str) -> Block<'_> {
+pub fn picker_block(title: &str) -> Block<'static> {
     Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -365,11 +276,11 @@ pub fn draw_header(f: &mut Frame, area: Rect, app: &App) {
 
 pub fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
     let help = if app.globals.hard_mode.is_some() {
-        "↑/↓ move   ⏎ select   p panic   q quit   ·   stop disabled".to_string()
+        crate::i18n::t!("tui.home.footer_no_exit").to_string()
     } else if app.globals.active.is_some() {
-        "↑/↓ move   ⏎ select   x stop   m modes   q quit".to_string()
+        crate::i18n::t!("tui.home.footer_running").to_string()
     } else {
-        "↑/↓ move   ⏎ select   s start   m modes   q quit".to_string()
+        crate::i18n::t!("tui.home.footer_idle").to_string()
     };
     let p = Paragraph::new(Span::styled(help, Style::default().fg(DIM)))
         .alignment(Alignment::Center)
@@ -512,9 +423,9 @@ mod snapshot_tests {
     fn snapshot_editor_new() {
         let mut app = base_app();
         let mut editor = EditorState::new_mode();
-        editor.apps.items.clear();
-        editor.groups.items.clear();
-        editor.brands.items.clear();
+        // Installed apps differ per machine; bundled brands and categories
+        // come first in the list and are the same everywhere.
+        editor.blocklist.items.retain(|i| !i.id.starts_with("app:"));
         app.screen = Screen::ModeEditor(Box::new(editor));
         insta::assert_snapshot!(render(&app, 100, 30));
     }

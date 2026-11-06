@@ -99,7 +99,7 @@ pub fn install_service(bin: &str) -> Result<String> {
             tracing::debug!(?e, "systemctl --user enable --now monk failed");
             msgs.push(format!("NOT started: systemctl unavailable ({e})"));
             msgs.push(
-                "without systemd, run the daemon yourself: `monk daemon start` (or a supervisor \
+                "without systemd, run the daemon yourself: `monk service start` (or a supervisor \
                  of your choice)"
                     .into(),
             );

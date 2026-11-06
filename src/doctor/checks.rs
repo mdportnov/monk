@@ -426,6 +426,40 @@ pub(crate) fn check_config() -> Check {
     }
 }
 
+/// `daily_cap` used to cap how long a routine may block per day, which made
+/// the blocker refuse to block. It is still read so old configs load, but
+/// nothing enforces it; say so instead of letting people wonder.
+pub(crate) fn check_deprecated_limits() -> Check {
+    let Ok(cfg) = Config::load() else {
+        return Check::new(
+            "profiles.limits",
+            "routine limits",
+            Status::Skipped,
+            "config not loadable — see `config` check",
+        );
+    };
+    deprecated_limits_check(&cfg)
+}
+
+fn deprecated_limits_check(cfg: &Config) -> Check {
+    let stale: Vec<String> = cfg
+        .profiles
+        .iter()
+        .filter(|(_, p)| p.limits.daily_cap.is_some())
+        .map(|(name, _)| name.clone())
+        .collect();
+    if stale.is_empty() {
+        return Check::new("profiles.limits", "routine limits", Status::Ok, "nothing outdated");
+    }
+    Check::new(
+        "profiles.limits",
+        "routine limits",
+        Status::Info,
+        format!("daily cap is ignored since this version: {}", stale.join(", ")),
+    )
+    .with_hint("remove it with `monk routine limits NAME --clear`, or leave it — it has no effect")
+}
+
 pub(crate) fn check_profile_apps() -> Check {
     let cfg = match Config::load() {
         Ok(c) => c,
@@ -514,7 +548,7 @@ pub(crate) fn check_pidfile() -> Check {
                     c = c.with_hint("restart: `sudo launchctl kickstart -k system/dev.monk.monkd`");
                 } else {
                     c = c
-                        .with_hint("start it with `monk daemon` (or `sudo monk service install`)")
+                        .with_hint("start it with `sudo monk service install`")
                         .with_actions(vec![start]);
                 }
                 c
@@ -689,7 +723,7 @@ pub(crate) async fn check_dns_server() -> Check {
             Status::Fail,
             format!("send to 127.0.0.1:{} failed: {e}", dns_server::PORT),
         )
-        .with_hint("daemon not running? the dns server starts with `monk daemon`")
+        .with_hint("daemon not running? the dns server starts with the background service")
         .with_actions(vec![start]);
     }
 
@@ -969,6 +1003,19 @@ pub(crate) fn check_log_tail() -> Check {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn deprecated_daily_cap_is_reported_not_failed() {
+        let mut cfg = crate::config::Config::default();
+        let mut p = crate::config::Profile::default();
+        p.limits.daily_cap = Some(std::time::Duration::from_secs(3600));
+        cfg.profiles.insert("old".into(), p);
+        let c = super::deprecated_limits_check(&cfg);
+        assert_eq!(c.status, super::Status::Info);
+        assert!(c.detail.contains("old"));
+        cfg.profiles.clear();
+        assert_eq!(super::deprecated_limits_check(&cfg).status, super::Status::Ok);
+    }
+
     use super::*;
 
     fn build_a_response(ip: [u8; 4]) -> Vec<u8> {

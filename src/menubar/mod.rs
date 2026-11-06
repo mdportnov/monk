@@ -1,5 +1,6 @@
 //! macOS menu bar companion: a native NSStatusItem showing the current
-//! session state with quick start/stop for every configured mode.
+//! session state, a one-click start of the default routine and the rest of
+//! the routines one level down.
 //!
 //! Architecture: the tao event loop owns the tray and menu on the main
 //! thread; a worker thread with its own single-thread tokio runtime polls
@@ -81,9 +82,9 @@ use crate::{Error, Result};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 const FULL_REFRESH: Duration = Duration::from_secs(30);
-/// Index of the first mode submenu inside the tray menu:
-/// [header, info, usage, separator, <modes...>].
-const MODES_AT: usize = 4;
+/// Where the emergency-exit item goes while a no-exit session runs:
+/// [header, info, usage, sep, quick start, routines, sep, add time, stop, <here>].
+const EMERGENCY_AT: usize = 9;
 /// Offered from the "Add time" submenu, in minutes.
 const EXTEND_CHOICES: [u64; 4] = [5, 15, 30, 60];
 /// Start durations every mode submenu offers, on top of the configured
@@ -176,12 +177,20 @@ struct Ui {
     header: MenuItem,
     info: MenuItem,
     usage: MenuItem,
+    quick_start: MenuItem,
+    routines: Submenu,
     add_time: Submenu,
     stop: MenuItem,
+    emergency_exit: MenuItem,
+    /// Whether [`Ui::emergency_exit`] is in the menu right now. It only
+    /// belongs there during a no-exit session; any other time it is noise.
+    emergency_shown: bool,
     start_daemon: MenuItem,
     login: CheckMenuItem,
     mode_menus: Vec<Submenu>,
     mode_key: String,
+    /// The routine behind the one-click start, when there is one.
+    default_profile: Option<String>,
     default_duration: Duration,
     general: Option<crate::config::General>,
     mark: Mark,
@@ -201,6 +210,13 @@ impl Ui {
         let info = MenuItem::with_id("info", "—", false, None);
         let usage =
             MenuItem::with_id("usage", crate::i18n::t!("menubar.usage_unknown"), false, None);
+        let quick_start = MenuItem::with_id(
+            "quick_start",
+            crate::i18n::t!("menubar.start_quick_none"),
+            false,
+            None,
+        );
+        let routines = Submenu::with_id("routines", crate::i18n::t!("menubar.routines"), false);
         let add_time = Submenu::with_id("add_time", crate::i18n::t!("menubar.add_time"), false);
         for mins in EXTEND_CHOICES {
             let d = fmt_duration(Duration::from_secs(mins * 60));
@@ -213,6 +229,12 @@ impl Ui {
             add_time.append(&item).map_err(|e| Error::Other(e.to_string()))?;
         }
         let stop = MenuItem::with_id("stop", crate::i18n::t!("menubar.stop"), false, None);
+        let emergency_exit = MenuItem::with_id(
+            "emergency_exit",
+            crate::i18n::t!("menubar.emergency_exit"),
+            true,
+            None,
+        );
         let start_daemon =
             MenuItem::with_id("start_daemon", crate::i18n::t!("menubar.start_daemon"), false, None);
         let open_tui =
@@ -229,13 +251,15 @@ impl Ui {
         let sep_top = PredefinedMenuItem::separator();
         let sep_modes = PredefinedMenuItem::separator();
         let sep_bottom = PredefinedMenuItem::separator();
-        let items: [&dyn IsMenuItem; 12] = [
+        let items: [&dyn IsMenuItem; 14] = [
             &header,
             &info,
             &usage,
             &sep_top,
-            // Mode submenus are inserted at MODES_AT (after sep_top) once
-            // the first full snapshot arrives.
+            &quick_start,
+            // Filled with one submenu per routine once the first full
+            // snapshot arrives.
+            &routines,
             &sep_modes,
             &add_time,
             &stop,
@@ -255,12 +279,17 @@ impl Ui {
             header,
             info,
             usage,
+            quick_start,
+            routines,
             add_time,
             stop,
+            emergency_exit,
+            emergency_shown: false,
             start_daemon,
             login,
             mode_menus: Vec::new(),
             mode_key: String::new(),
+            default_profile: None,
             default_duration: Duration::from_secs(25 * 60),
             general: None,
             mark: Mark::Idle,
@@ -375,7 +404,7 @@ impl Ui {
     fn post(&self, title: &str, body: &str, kind: Kind) {
         match &self.notifier {
             Some(notifier) => notifier.post(title, body, kind),
-            None => crate::platform::notify(title, body),
+            None => notify::scripted(title, body),
         }
     }
 
@@ -406,8 +435,9 @@ impl Ui {
             if let Some(release) = h.panic_releases_at {
                 let at = release.with_timezone(&Local).format("%H:%M").to_string();
                 self.info.set_text(crate::i18n::t!("menubar.panic_pending", time = at));
-            } else {
-                self.info.set_text(crate::i18n::t!("menubar.hard_hint"));
+            } else if let Some(s) = &snap.session {
+                let at = s.ends_at().with_timezone(&Local).format("%H:%M").to_string();
+                self.info.set_text(crate::i18n::t!("menubar.hard_hint", time = at));
             }
         } else if let Some(s) = &snap.session {
             let at = s.ends_at().with_timezone(&Local).format("%H:%M").to_string();
@@ -431,12 +461,13 @@ impl Ui {
             }
         }
 
+        let can_start = snap.daemon_ok && !session_active;
+        self.quick_start.set_enabled(can_start && self.default_profile.is_some());
+        self.routines.set_enabled(can_start && !self.mode_menus.is_empty());
         self.add_time.set_enabled(snap.daemon_ok && session_active && !panic_pending);
         self.stop.set_enabled(snap.daemon_ok && session_active && !hard_active);
         self.start_daemon.set_enabled(!snap.daemon_ok);
-        for m in &self.mode_menus {
-            m.set_enabled(snap.daemon_ok && !session_active);
-        }
+        self.show_emergency_exit(snap.daemon_ok && hard_active && !panic_pending);
 
         let mark = match (session_active, hard_active) {
             (true, true) => Mark::Hard,
@@ -452,6 +483,23 @@ impl Ui {
                     self.mark = mark;
                 }
             }
+        }
+    }
+
+    /// Inserted and removed rather than greyed out: a disabled "Emergency
+    /// exit" sitting in every idle menu would only raise the question of
+    /// what it is for.
+    fn show_emergency_exit(&mut self, show: bool) {
+        if show == self.emergency_shown {
+            return;
+        }
+        let done = if show {
+            self.menu.insert(&self.emergency_exit, EMERGENCY_AT)
+        } else {
+            self.menu.remove(&self.emergency_exit)
+        };
+        if done.is_ok() {
+            self.emergency_shown = show;
         }
     }
 
@@ -476,13 +524,23 @@ impl Ui {
             return;
         }
         for old in self.mode_menus.drain(..) {
-            let _ = self.menu.remove(&old);
+            let _ = self.routines.remove(&old);
         }
-        for (i, mode) in modes.iter().enumerate() {
+        for mode in modes {
             let sub = self.mode_submenu(mode);
-            if self.menu.insert(&sub, MODES_AT + i).is_ok() {
+            if self.routines.append(&sub).is_ok() {
                 self.mode_menus.push(sub);
             }
+        }
+        self.default_profile = quick_start_profile(modes);
+        match &self.default_profile {
+            Some(name) => {
+                let p = name.clone();
+                let d = fmt_duration(self.default_duration);
+                let label = crate::i18n::t!("menubar.start_quick", profile = p, duration = d);
+                self.quick_start.set_text(label);
+            }
+            None => self.quick_start.set_text(crate::i18n::t!("menubar.start_quick_none")),
         }
         self.mode_key = key;
     }
@@ -553,7 +611,14 @@ impl Ui {
             "start_daemon" => {
                 let _ = cmd_tx.send(Cmd::StartDaemon);
             }
-            "open_tui" => open_tui(),
+            "open_tui" => open_tui(None),
+            "emergency_exit" => open_tui(Some("panic")),
+            "quick_start" => {
+                if let Some(profile) = self.default_profile.clone() {
+                    let duration = self.default_duration;
+                    let _ = cmd_tx.send(Cmd::Start { profile, duration, hard: false });
+                }
+            }
             "login" => {
                 let result = if agent::installed() {
                     agent::uninstall()
@@ -605,16 +670,14 @@ fn session_kind(snap: &Snapshot) -> Kind {
 }
 
 /// Hands the user the full TUI. There is no window to fall back on, so a
-/// terminal is the only place the rest of monk lives.
-fn open_tui() {
+/// terminal is the only place the rest of monk lives. `screen` names the
+/// screen the TUI opens on, e.g. `panic` for the emergency exit.
+fn open_tui(screen: Option<&str>) {
     let Ok(exe) = std::env::current_exe() else {
         tracing::warn!("cannot resolve the monk binary path");
         return;
     };
-    let quoted = exe.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
-    let script = format!(
-        "tell application \"Terminal\"\nactivate\ndo script \"\\\"{quoted}\\\" tui\"\nend tell"
-    );
+    let script = tui_script(&exe.to_string_lossy(), screen);
     let spawned = std::process::Command::new("osascript")
         .args(["-e", &script])
         .stdin(std::process::Stdio::null())
@@ -624,6 +687,27 @@ fn open_tui() {
     if let Err(e) = spawned {
         tracing::warn!(error = %e, "could not open Terminal");
     }
+}
+
+/// AppleScript that opens Terminal on `monk tui`. The binary path is quoted
+/// for the shell first and the whole command for AppleScript second, so a
+/// path with spaces or quotes survives both.
+fn tui_script(exe: &str, screen: Option<&str>) -> String {
+    let shell_quoted = format!("'{}'", exe.replace('\'', r"'\''"));
+    let env = screen.map(|s| format!("MONK_TUI_START={s} ")).unwrap_or_default();
+    let command = format!("{env}{shell_quoted} tui");
+    let escaped = command.replace('\\', r"\\").replace('"', "\\\"");
+    format!("tell application \"Terminal\"\nactivate\ndo script \"{escaped}\"\nend tell")
+}
+
+/// The routine the one-click start fires: the starred one, or the only one
+/// there is. With several and no star it stays empty rather than guess.
+fn quick_start_profile(modes: &[ModeSummary]) -> Option<String> {
+    modes
+        .iter()
+        .find(|m| m.is_default)
+        .or(if modes.len() == 1 { modes.first() } else { None })
+        .map(|m| m.name.clone())
 }
 
 /// Moving the star means replacing the whole `general` section, so the
@@ -650,7 +734,7 @@ fn set_default_request(rt: &tokio::runtime::Runtime, profile: String) -> Option<
 /// reason goes to Notification Center instead of only to the log.
 fn report_rejection(message: &str) {
     tracing::warn!(%message, "menu bar action rejected");
-    crate::platform::notify(&crate::i18n::t!("menubar.action_failed"), message);
+    notify::scripted(&crate::i18n::t!("menubar.action_failed"), message);
 }
 
 fn worker(rx: mpsc::Receiver<Cmd>, proxy: EventLoopProxy<UserEvent>) {
@@ -860,6 +944,23 @@ pub(crate) fn require_user_session() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn emergency_exit_opens_the_panic_screen() {
+        let script = tui_script("/Applications/monk.app/Contents/MacOS/monk", Some("panic"));
+        assert!(
+            script.contains(
+                "do script \"MONK_TUI_START=panic '/Applications/monk.app/Contents/MacOS/monk' tui\""
+            ),
+            "{script}"
+        );
+    }
+
+    #[test]
+    fn tui_script_survives_quotes_in_the_path() {
+        let script = tui_script("/tmp/it's \"odd\"/monk", None);
+        assert!(script.contains(r#"do script "'/tmp/it'\\''s \"odd\"/monk' tui""#), "{script}");
+    }
 
     #[test]
     fn a_running_session_never_shows_zero() {

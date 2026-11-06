@@ -157,6 +157,7 @@ pub async fn run() -> Report {
     checks.extend(checks::check_paths());
     checks.push(checks::check_config());
     checks.push(checks::check_profile_apps());
+    checks.push(checks::check_deprecated_limits());
     checks.push(checks::check_pidfile());
     checks.push(checks::check_ipc().await);
     checks.push(checks::check_hard_mode().await);

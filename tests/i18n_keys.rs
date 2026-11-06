@@ -138,3 +138,28 @@ fn parse_locale(yaml: &str) -> BTreeSet<String> {
     }
     out
 }
+
+#[test]
+fn placeholders_use_the_percent_form() {
+    for file in ["locales/en.yml", "locales/ru.yml"] {
+        let text = fs::read_to_string(file).unwrap();
+        for (n, line) in text.lines().enumerate() {
+            let bytes = line.as_bytes();
+            for (i, &b) in bytes.iter().enumerate() {
+                if b != b'{' || (i > 0 && bytes[i - 1] == b'%') {
+                    continue;
+                }
+                let tail = &line[i + 1..];
+                let Some(end) = tail.find('}') else { continue };
+                let name = &tail[..end];
+                let is_placeholder =
+                    !name.is_empty() && name.bytes().all(|c| c.is_ascii_lowercase() || c == b'_');
+                assert!(
+                    !is_placeholder,
+                    "{file}:{}: `{{{name}}}` is printed literally — rust-i18n fills only `%{{{name}}}`",
+                    n + 1
+                );
+            }
+        }
+    }
+}

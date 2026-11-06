@@ -21,18 +21,24 @@ pub enum Error {
     #[diagnostic(code(monk::storage))]
     Storage(#[from] rusqlite::Error),
 
-    #[error("daemon not running")]
-    #[diagnostic(code(monk::daemon::not_running), help("start it with `monk daemon start`"))]
+    #[error("the monk background service is not running")]
+    #[diagnostic(
+        code(monk::daemon::not_running),
+        help(
+            "start it with `{}`, or let `monk doctor --fix` find what is wrong",
+            crate::daemon::install_hint()
+        )
+    )]
     DaemonNotRunning,
 
-    #[error("daemon already running (pid {0})")]
+    #[error("the background service is already running (pid {0})")]
     #[diagnostic(code(monk::daemon::already_running))]
     DaemonAlreadyRunning(u32),
 
-    #[error("hard mode is active")]
+    #[error("this is a no-exit session: it cannot be stopped early")]
     #[diagnostic(
         code(monk::hard_mode::active),
-        help("use `monk panic` to request an escape with delay")
+        help("the only way out is the delayed emergency exit: `monk panic`")
     )]
     HardModeActive,
 
@@ -46,11 +52,14 @@ pub enum Error {
     #[error("site blocking unavailable: {0}")]
     #[diagnostic(
         code(monk::blocker::unavailable),
-        help("run `sudo monk service install` so the daemon can manage /etc/hosts")
+        help(
+            "install the background service so it can manage /etc/hosts: `{}`",
+            crate::daemon::install_hint()
+        )
     )]
     BlockerUnavailable(String),
 
-    #[error("ipc error: {0}")]
+    #[error("could not talk to the background service: {0}")]
     #[diagnostic(code(monk::ipc))]
     Ipc(String),
 
@@ -65,6 +74,20 @@ pub enum Error {
     #[error("elevation cancelled or failed: {0}")]
     #[diagnostic(code(monk::elevation), help("run `sudo monk service install` from a terminal"))]
     Elevation(String),
+
+    #[error("{0}")]
+    #[diagnostic(code(monk::limits))]
+    Limit(String),
+
+    #[error("the background service answered in a way this monk does not understand")]
+    #[diagnostic(
+        code(monk::ipc::unexpected),
+        help(
+            "the service and the cli are probably different versions — refresh it with `{}`",
+            crate::daemon::install_hint()
+        )
+    )]
+    UnexpectedResponse,
 
     #[error("{0}")]
     Other(String),

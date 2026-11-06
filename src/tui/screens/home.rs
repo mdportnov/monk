@@ -85,7 +85,10 @@ fn draw_session_card(f: &mut Frame, area: Rect, app: &App) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(DIM))
-        .title(Span::styled(" session ", Style::default().fg(ACCENT)));
+        .title(Span::styled(
+            format!(" {} ", crate::i18n::t!("tui.home.session")),
+            Style::default().fg(ACCENT),
+        ));
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -166,37 +169,14 @@ fn draw_session_card(f: &mut Frame, area: Rect, app: &App) {
         )));
     }
     if let Some(mode) = &app.globals.active_mode {
-        if let Some(cap) = mode.limits.daily_cap {
-            let used = mode.stats.used_24h;
+        if let Some(rem) = mode.stats.cooldown_remaining {
             info_lines.push(Line::from(vec![
                 Span::styled(
-                    format!("{}  ", crate::i18n::t!("tui.home.today")),
+                    format!("{}  ", crate::i18n::t!("tui.home.next_early_stop")),
                     Style::default().fg(DIM),
                 ),
-                Span::styled(
-                    format!("{} / {}", fmt_short(used), fmt_short(cap)),
-                    Style::default().fg(TEXT),
-                ),
+                Span::styled(fmt_short(rem).to_string(), Style::default().fg(TEXT)),
             ]));
-        }
-        if let Some(cd) = mode.limits.cooldown {
-            if let Some(rem) = mode.stats.cooldown_remaining {
-                info_lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("{}  ", crate::i18n::t!("tui.home.cooldown")),
-                        Style::default().fg(DIM),
-                    ),
-                    Span::styled(fmt_short(rem).to_string(), Style::default().fg(TEXT)),
-                ]));
-            } else {
-                info_lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("{}  ", crate::i18n::t!("tui.home.cooldown")),
-                        Style::default().fg(DIM),
-                    ),
-                    Span::styled(fmt_short(cd).to_string(), Style::default().fg(DIM)),
-                ]));
-            }
         }
     }
     let info = Paragraph::new(info_lines).alignment(Alignment::Center);
@@ -216,7 +196,10 @@ fn draw_session_card(f: &mut Frame, area: Rect, app: &App) {
                     fmt_short(remaining),
                     Style::default().fg(GLOW).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled("   ·   c cancel", Style::default().fg(DIM)),
+                Span::styled(
+                    format!("   ·   {}", crate::i18n::t!("tui.home_hard.cancel_key")),
+                    Style::default().fg(DIM),
+                ),
             ])
         } else {
             Line::from(vec![
@@ -272,7 +255,10 @@ fn draw_menu(f: &mut Frame, area: Rect, app: &App, home: &HomeState) {
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(DIM))
-                .title(Span::styled(" menu ", Style::default().fg(ACCENT))),
+                .title(Span::styled(
+                    format!(" {} ", crate::i18n::t!("tui.home.menu")),
+                    Style::default().fg(ACCENT),
+                )),
         )
         .highlight_style(Style::default().fg(Color::Black).bg(ACCENT).add_modifier(Modifier::BOLD))
         .highlight_symbol("▶ ");
@@ -287,7 +273,10 @@ fn draw_menu(f: &mut Frame, area: Rect, app: &App, home: &HomeState) {
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(DIM))
-            .title(Span::styled(" status ", Style::default().fg(ACCENT))),
+            .title(Span::styled(
+                format!(" {} ", crate::i18n::t!("tui.home.status")),
+                Style::default().fg(ACCENT),
+            )),
     );
     f.render_widget(info, chunks[1]);
 }

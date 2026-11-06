@@ -19,4 +19,3 @@ apps = []
 max_duration = "4h"
 min_duration = "25m"
 cooldown = "20m"
-daily_cap = "8h"

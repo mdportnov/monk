@@ -10,7 +10,7 @@ async fn load_cfg_via_daemon() -> Result<Config> {
     match ipc::send(&Request::GetConfig).await {
         Ok(Response::Config(c)) => Ok(*c),
         Ok(Response::Error { message }) => Err(Error::Other(message)),
-        Ok(_) => Err(Error::Ipc("unexpected response".into())),
+        Ok(_) => Err(Error::UnexpectedResponse),
         Err(e) => Err(e),
     }
 }
@@ -20,7 +20,7 @@ async fn save_cfg_via_daemon(cfg: Config) -> Result<()> {
     match ipc::send(&req).await {
         Ok(Response::Ok) => Ok(()),
         Ok(Response::Error { message }) => Err(Error::Other(message)),
-        Ok(_) => Err(Error::Ipc("unexpected response".into())),
+        Ok(_) => Err(Error::UnexpectedResponse),
         Err(e) => Err(e),
     }
 }
@@ -58,7 +58,33 @@ pub async fn start(
     match ipc::send(&req).await? {
         Response::Session(s) => {
             let dur_h = humantime::format_duration(s.duration).to_string();
-            println!("started `{}` for {dur_h}", s.profile);
+            println!(
+                "{}",
+                crate::i18n::t!(
+                    "status.started",
+                    profile = s.profile.as_str(),
+                    duration = dur_h.as_str()
+                )
+            );
+            if s.duration < duration {
+                println!(
+                    "{}",
+                    crate::i18n::t!(
+                        "status.clamped",
+                        profile = s.profile.as_str(),
+                        max = dur_h.as_str()
+                    )
+                );
+            } else if s.duration > duration {
+                println!(
+                    "{}",
+                    crate::i18n::t!(
+                        "status.lengthened",
+                        profile = s.profile.as_str(),
+                        min = dur_h.as_str()
+                    )
+                );
+            }
             if hard_mode {
                 println!("{}", crate::i18n::t!("hard.started_note"));
             }
@@ -71,7 +97,7 @@ pub async fn start(
             Ok(())
         }
         Response::Error { message } => Err(Error::Other(message)),
-        _ => Err(Error::Ipc("unexpected response".into())),
+        _ => Err(Error::UnexpectedResponse),
     }
 }
 
@@ -94,7 +120,8 @@ pub async fn panic_cmd(phrase: Option<String>, cancel: bool) -> Result<()> {
     match ipc::send(&Request::Panic { phrase, cancel }).await? {
         Response::PanicScheduled(info) => {
             if let Some(at) = info.panic_releases_at {
-                println!("{}", crate::i18n::t!("panic.scheduled", at = at.to_rfc3339()));
+                let at = at.with_timezone(&chrono::Local).format("%H:%M").to_string();
+                println!("{}", crate::i18n::t!("panic.scheduled", at = at));
             } else {
                 println!("{}", crate::i18n::t!("panic.cancelled"));
             }
@@ -105,14 +132,14 @@ pub async fn panic_cmd(phrase: Option<String>, cancel: bool) -> Result<()> {
             Ok(())
         }
         Response::Error { message } => Err(Error::Other(message)),
-        _ => Err(Error::Ipc("unexpected response".into())),
+        _ => Err(Error::UnexpectedResponse),
     }
 }
 
 pub async fn stop() -> Result<()> {
     match ipc::send(&Request::Stop { id: None }).await? {
         Response::Session(s) => {
-            println!("stopped `{}`", s.profile);
+            println!("{}", crate::i18n::t!("status.stopped", profile = s.profile.as_str()));
             crate::platform::notify("monk: session ended", &format!("`{}`", s.profile));
             Ok(())
         }
@@ -127,7 +154,7 @@ pub async fn stop() -> Result<()> {
             Err(Error::HardModeActive)
         }
         Response::Error { message } => Err(Error::Other(message)),
-        _ => Err(Error::Ipc("unexpected response".into())),
+        _ => Err(Error::UnexpectedResponse),
     }
 }
 
@@ -147,14 +174,14 @@ pub async fn extend(by: Duration) -> Result<()> {
             Ok(())
         }
         Response::Error { message } => Err(Error::Other(ipc::explain_rejection(message))),
-        _ => Err(Error::Ipc("unexpected response".into())),
+        _ => Err(Error::UnexpectedResponse),
     }
 }
 
 pub async fn status() -> Result<()> {
     match ipc::send(&Request::Status).await {
         Ok(Response::Status { active, hard_mode, pid }) => {
-            println!("daemon: running (pid {pid})");
+            println!("background service: running (pid {pid})");
             if let Some(s) = active {
                 // Truncated to whole seconds: the raw Duration renders as
                 // "24m 59s 903ms 562us", which reads like a stopwatch, not a
@@ -169,21 +196,24 @@ pub async fn status() -> Result<()> {
             }
             if let Some(h) = hard_mode {
                 println!(
-                    "hard mode: on ({} remaining)",
+                    "no-exit session: {} to go",
                     humantime::format_duration(Duration::from_secs(h.remaining.as_secs()))
                 );
-                println!("panic phrase: {}", h.panic_phrase);
-                println!("    invoke: monk panic \"{}\"", h.panic_phrase);
+                println!("emergency exit: monk panic --phrase \"{}\"", h.panic_phrase);
                 if let Some(at) = h.panic_releases_at {
-                    println!("panic releases at: {}", at.to_rfc3339());
+                    let at = at.with_timezone(&chrono::Local).format("%H:%M");
+                    println!("emergency exit accepted: blocking lifts at {at}");
                 }
             }
             Ok(())
         }
         Ok(Response::Error { message }) => Err(Error::Other(message)),
-        Ok(_) => Err(Error::Ipc("unexpected response".into())),
+        Ok(_) => Err(Error::UnexpectedResponse),
         Err(Error::DaemonNotRunning) => {
-            println!("daemon: not running");
+            println!(
+                "background service: not running — start it with `{}`",
+                crate::daemon::install_hint()
+            );
             Ok(())
         }
         Err(e) => Err(e),
@@ -193,7 +223,7 @@ pub async fn status() -> Result<()> {
 pub async fn profiles() -> Result<()> {
     let cfg = load_cfg_via_daemon().await?;
     if cfg.profiles.is_empty() {
-        println!("no profiles defined");
+        println!("no routines yet — create one with `monk routine create NAME --preset deepwork`");
         return Ok(());
     }
     for (name, p) in &cfg.profiles {
@@ -225,12 +255,12 @@ pub fn apps_scan() -> Result<()> {
 pub async fn profile_create(name: &str, preset: Option<&str>) -> Result<()> {
     let mut cfg = load_cfg_via_daemon().await?;
     if cfg.profiles.contains_key(name) {
-        return Err(Error::Config(format!("profile `{name}` already exists")));
+        return Err(Error::Other(format!("routine `{name}` already exists")));
     }
     let profile = if let Some(pname) = preset {
         crate::onboarding::lookup_preset(pname).ok_or_else(|| {
-            Error::Config(format!(
-                "unknown preset `{pname}` — try one of: {}",
+            Error::Other(format!(
+                "there is no template `{pname}` — try one of: {}",
                 crate::onboarding::PRESET_NAMES.join(", ")
             ))
         })?
@@ -240,10 +270,10 @@ pub async fn profile_create(name: &str, preset: Option<&str>) -> Result<()> {
     cfg.profiles.insert(name.to_string(), profile);
     save_cfg_via_daemon(cfg).await?;
     let hint = match preset {
-        Some(p) => format!("seeded from preset `{p}`"),
-        None => format!("run `monk profile edit {name}` to populate"),
+        Some(p) => format!("made from template `{p}`"),
+        None => format!("run `monk routine edit {name}` to fill it in"),
     };
-    println!("created profile `{name}` — {hint}");
+    println!("created routine `{name}` — {hint}");
     Ok(())
 }
 
@@ -252,7 +282,7 @@ pub async fn profile_duplicate(source: &str, target: Option<&str>) -> Result<()>
     let src = cfg
         .profiles
         .get(source)
-        .ok_or_else(|| Error::Config(format!("profile `{source}` not found")))?
+        .ok_or_else(|| Error::Other(format!("there is no routine `{source}`")))?
         .clone();
     let base = target.unwrap_or(source).to_string();
     let taken: std::collections::BTreeSet<String> = cfg.profiles.keys().cloned().collect();
@@ -285,7 +315,7 @@ pub async fn profile_show(name: &str, json: bool) -> Result<()> {
     let profile = cfg
         .profiles
         .get(name)
-        .ok_or_else(|| Error::Config(format!("profile `{name}` not found")))?;
+        .ok_or_else(|| Error::Other(format!("there is no routine `{name}`")))?;
     if json {
         let payload = serde_json::json!({
             "name": name,
@@ -294,7 +324,7 @@ pub async fn profile_show(name: &str, json: bool) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&payload)?);
         return Ok(());
     }
-    println!("profile: {name}");
+    println!("routine: {name}");
     if let Some(c) = &profile.color {
         println!("  color: {c}");
     }
@@ -303,7 +333,6 @@ pub async fn profile_show(name: &str, json: bool) -> Result<()> {
     println!("    max:       {}", fmt_opt(l.max_duration));
     println!("    min:       {}", fmt_opt(l.min_duration));
     println!("    cooldown:  {}", fmt_opt(l.cooldown));
-    println!("    daily cap: {}", fmt_opt(l.daily_cap));
     println!("    panic delay: {}", fmt_opt(l.panic_delay));
     if let Some(sch) = &profile.schedule {
         println!("  schedule: {:?}", sch);
@@ -352,7 +381,7 @@ pub async fn profile_limits(
     let profile = cfg
         .profiles
         .get_mut(name)
-        .ok_or_else(|| Error::Config(format!("profile `{name}` not found")))?;
+        .ok_or_else(|| Error::Other(format!("there is no routine `{name}`")))?;
     if clear {
         profile.limits = crate::config::Limits::default();
     }
@@ -366,17 +395,19 @@ pub async fn profile_limits(
     if let Some(v) = cooldown {
         profile.limits.cooldown = Some(parse(v)?);
     }
-    if let Some(v) = daily_cap {
-        profile.limits.daily_cap = Some(parse(v)?);
+    if daily_cap.is_some() {
+        eprintln!(
+            "--daily-cap is ignored since this version: capping how long you may block makes a \
+             blocker work against you. Use --cooldown to limit early stops instead."
+        );
     }
     let snapshot = profile.limits.clone();
     save_cfg_via_daemon(cfg).await?;
     println!(
-        "limits for `{name}`: max={} min={} cooldown={} daily_cap={}",
+        "limits for `{name}`: max={} min={} cooldown={}",
         fmt_opt(snapshot.max_duration),
         fmt_opt(snapshot.min_duration),
         fmt_opt(snapshot.cooldown),
-        fmt_opt(snapshot.daily_cap),
     );
     Ok(())
 }
@@ -391,13 +422,13 @@ fn fmt_opt(d: Option<Duration>) -> String {
 pub async fn profile_delete(name: &str) -> Result<()> {
     let mut cfg = load_cfg_via_daemon().await?;
     if cfg.profiles.remove(name).is_none() {
-        return Err(Error::Config(format!("profile `{name}` not found")));
+        return Err(Error::Other(format!("there is no routine `{name}`")));
     }
     if cfg.general.default_profile == name {
         cfg.general.default_profile = cfg.profiles.keys().next().cloned().unwrap_or_default();
     }
     save_cfg_via_daemon(cfg).await?;
-    println!("deleted profile `{name}`");
+    println!("deleted routine `{name}`");
     Ok(())
 }
 
@@ -406,7 +437,7 @@ pub async fn profile_edit(name: &str, add: Vec<String>, remove: Vec<String>) -> 
 
     let mut cfg = load_cfg_via_daemon().await?;
     if !cfg.profiles.contains_key(name) {
-        return Err(Error::Config(format!("profile `{name}` not found")));
+        return Err(Error::Other(format!("there is no routine `{name}`")));
     }
 
     if !add.is_empty() || !remove.is_empty() {
@@ -420,12 +451,14 @@ pub async fn profile_edit(name: &str, add: Vec<String>, remove: Vec<String>) -> 
             }
         }
         save_cfg_via_daemon(cfg).await?;
-        println!("profile `{name}` updated");
+        println!("routine `{name}` updated");
         return Ok(());
     }
 
     if !std::io::stdin().is_terminal() {
-        return Err(Error::Other("profile edit requires a TTY (or use --add/--remove)".into()));
+        return Err(Error::Other(
+            "editing a routine interactively needs a terminal (or use --add/--remove)".into(),
+        ));
     }
 
     let cache = crate::apps::load_or_scan(false)?;
@@ -440,7 +473,7 @@ pub async fn profile_edit(name: &str, add: Vec<String>, remove: Vec<String>) -> 
     profile.site_groups = selected_groups;
     profile.sites = custom_sites;
     save_cfg_via_daemon(cfg).await?;
-    println!("profile `{name}` saved");
+    println!("routine `{name}` saved");
     Ok(())
 }
 
@@ -543,27 +576,37 @@ pub async fn stats() -> Result<()> {
     // sessions list would need a new daemon RPC; this is the 80% answer.
     let resp = ipc::send(&Request::ListModes).await?;
     let Response::Modes { modes } = resp else {
-        return Err(Error::Ipc("unexpected response from daemon".into()));
+        return Err(Error::UnexpectedResponse);
     };
     if modes.is_empty() {
-        println!("no modes configured");
+        println!("no routines yet — create one with `monk routine create NAME --preset deepwork`");
         return Ok(());
     }
-    println!("{:<24} {:>8} {:>10} {:>10}", "mode", "today", "budget", "blocked");
+    println!("{:<24} {:>8} {:>14} {:>10}", "routine", "24h", "early stop", "blocked");
     for m in &modes {
         let used = humantime::format_duration(m.stats.used_24h).to_string();
-        let budget = m
+        let early = m
             .stats
-            .daily_cap_remaining
-            .map(|d| humantime::format_duration(d).to_string())
-            .unwrap_or_else(|| "—".into());
+            .cooldown_remaining
+            .map(|d| {
+                format!(
+                    "in {}",
+                    humantime::format_duration(Duration::from_secs(d.as_secs().div_ceil(60) * 60))
+                )
+            })
+            .unwrap_or_else(|| "available".into());
         let blocked = format!("{}a/{}g/{}s", m.blocked_apps, m.blocked_groups, m.blocked_sites);
-        println!("{:<24} {:>8} {:>10} {:>10}", m.name, used, budget, blocked);
+        println!("{:<24} {:>8} {:>14} {:>10}", m.name, used, early, blocked);
     }
     Ok(())
 }
 
-pub async fn tui() -> Result<()> {
+/// `--panic` is handed to the TUI through `MONK_TUI_START`, which it reads
+/// on start to open the emergency-exit screen instead of home.
+pub async fn tui(panic: bool) -> Result<()> {
+    if panic {
+        std::env::set_var("MONK_TUI_START", "panic");
+    }
     crate::tui::run().await
 }
 
@@ -760,12 +803,12 @@ fn refresh_service_after_update() {
                 println!("{}", crate::i18n::t!("update.service_refreshed"));
             }
             Some(Err(e)) => {
-                eprintln!(
-                    "{}",
-                    crate::i18n::t!("update.service_refresh_failed", error = e.to_string())
-                );
+                eprintln!("{}", refresh_failed(&e.to_string()));
             }
-            None => println!("{}", crate::i18n::t!("update.daemon_hint")),
+            None => println!(
+                "{}",
+                crate::i18n::t!("update.service_missing", cmd = crate::daemon::install_hint())
+            ),
         }
         return;
     }
@@ -793,10 +836,7 @@ fn refresh_service_after_update() {
             println!("{}", crate::i18n::t!("update.service_refreshed"));
         }
         Err(e) => {
-            eprintln!(
-                "{}",
-                crate::i18n::t!("update.service_refresh_failed", error = e.to_string())
-            );
+            eprintln!("{}", refresh_failed(&e.to_string()));
         }
     }
 }
@@ -839,4 +879,9 @@ pub fn menubar_install() -> Result<()> {
 #[cfg(not(target_os = "macos"))]
 pub fn menubar_uninstall() -> Result<()> {
     menubar_run()
+}
+
+fn refresh_failed(error: &str) -> String {
+    let cmd = crate::daemon::install_hint();
+    crate::i18n::t!("update.service_refresh_failed", cmd = cmd, error = error).to_string()
 }

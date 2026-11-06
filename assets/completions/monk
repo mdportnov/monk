@@ -25,9 +25,6 @@ _monk() {
             monk,config)
                 cmd="monk__config"
                 ;;
-            monk,daemon)
-                cmd="monk__daemon"
-                ;;
             monk,doctor)
                 cmd="monk__doctor"
                 ;;
@@ -49,11 +46,14 @@ _monk() {
             monk,panic)
                 cmd="monk__panic"
                 ;;
-            monk,profile)
-                cmd="monk__profile"
+            monk,routine)
+                cmd="monk__routine"
                 ;;
-            monk,profiles)
-                cmd="monk__profiles"
+            monk,routines)
+                cmd="monk__routines"
+                ;;
+            monk,service)
+                cmd="monk__service"
                 ;;
             monk,start)
                 cmd="monk__start"
@@ -115,48 +115,6 @@ _monk() {
             monk__config__help,path)
                 cmd="monk__config__help__path"
                 ;;
-            monk__daemon,help)
-                cmd="monk__daemon__help"
-                ;;
-            monk__daemon,install)
-                cmd="monk__daemon__install"
-                ;;
-            monk__daemon,run)
-                cmd="monk__daemon__run"
-                ;;
-            monk__daemon,start)
-                cmd="monk__daemon__start"
-                ;;
-            monk__daemon,status)
-                cmd="monk__daemon__status"
-                ;;
-            monk__daemon,stop)
-                cmd="monk__daemon__stop"
-                ;;
-            monk__daemon,uninstall)
-                cmd="monk__daemon__uninstall"
-                ;;
-            monk__daemon__help,help)
-                cmd="monk__daemon__help__help"
-                ;;
-            monk__daemon__help,install)
-                cmd="monk__daemon__help__install"
-                ;;
-            monk__daemon__help,run)
-                cmd="monk__daemon__help__run"
-                ;;
-            monk__daemon__help,start)
-                cmd="monk__daemon__help__start"
-                ;;
-            monk__daemon__help,status)
-                cmd="monk__daemon__help__status"
-                ;;
-            monk__daemon__help,stop)
-                cmd="monk__daemon__help__stop"
-                ;;
-            monk__daemon__help,uninstall)
-                cmd="monk__daemon__help__uninstall"
-                ;;
             monk__help,apps)
                 cmd="monk__help__apps"
                 ;;
@@ -165,9 +123,6 @@ _monk() {
                 ;;
             monk__help,config)
                 cmd="monk__help__config"
-                ;;
-            monk__help,daemon)
-                cmd="monk__help__daemon"
                 ;;
             monk__help,doctor)
                 cmd="monk__help__doctor"
@@ -190,11 +145,14 @@ _monk() {
             monk__help,panic)
                 cmd="monk__help__panic"
                 ;;
-            monk__help,profile)
-                cmd="monk__help__profile"
+            monk__help,routine)
+                cmd="monk__help__routine"
                 ;;
-            monk__help,profiles)
-                cmd="monk__help__profiles"
+            monk__help,routines)
+                cmd="monk__help__routines"
+                ;;
+            monk__help,service)
+                cmd="monk__help__service"
                 ;;
             monk__help,start)
                 cmd="monk__help__start"
@@ -229,47 +187,47 @@ _monk() {
             monk__help__config,path)
                 cmd="monk__help__config__path"
                 ;;
-            monk__help__daemon,install)
-                cmd="monk__help__daemon__install"
-                ;;
-            monk__help__daemon,run)
-                cmd="monk__help__daemon__run"
-                ;;
-            monk__help__daemon,start)
-                cmd="monk__help__daemon__start"
-                ;;
-            monk__help__daemon,status)
-                cmd="monk__help__daemon__status"
-                ;;
-            monk__help__daemon,stop)
-                cmd="monk__help__daemon__stop"
-                ;;
-            monk__help__daemon,uninstall)
-                cmd="monk__help__daemon__uninstall"
-                ;;
             monk__help__menubar,install)
                 cmd="monk__help__menubar__install"
                 ;;
             monk__help__menubar,uninstall)
                 cmd="monk__help__menubar__uninstall"
                 ;;
-            monk__help__profile,create)
-                cmd="monk__help__profile__create"
+            monk__help__routine,create)
+                cmd="monk__help__routine__create"
                 ;;
-            monk__help__profile,delete)
-                cmd="monk__help__profile__delete"
+            monk__help__routine,delete)
+                cmd="monk__help__routine__delete"
                 ;;
-            monk__help__profile,duplicate)
-                cmd="monk__help__profile__duplicate"
+            monk__help__routine,duplicate)
+                cmd="monk__help__routine__duplicate"
                 ;;
-            monk__help__profile,edit)
-                cmd="monk__help__profile__edit"
+            monk__help__routine,edit)
+                cmd="monk__help__routine__edit"
                 ;;
-            monk__help__profile,limits)
-                cmd="monk__help__profile__limits"
+            monk__help__routine,limits)
+                cmd="monk__help__routine__limits"
                 ;;
-            monk__help__profile,show)
-                cmd="monk__help__profile__show"
+            monk__help__routine,show)
+                cmd="monk__help__routine__show"
+                ;;
+            monk__help__service,install)
+                cmd="monk__help__service__install"
+                ;;
+            monk__help__service,run)
+                cmd="monk__help__service__run"
+                ;;
+            monk__help__service,start)
+                cmd="monk__help__service__start"
+                ;;
+            monk__help__service,status)
+                cmd="monk__help__service__status"
+                ;;
+            monk__help__service,stop)
+                cmd="monk__help__service__stop"
+                ;;
+            monk__help__service,uninstall)
+                cmd="monk__help__service__uninstall"
                 ;;
             monk__menubar,help)
                 cmd="monk__menubar__help"
@@ -289,47 +247,89 @@ _monk() {
             monk__menubar__help,uninstall)
                 cmd="monk__menubar__help__uninstall"
                 ;;
-            monk__profile,create)
-                cmd="monk__profile__create"
+            monk__routine,create)
+                cmd="monk__routine__create"
                 ;;
-            monk__profile,delete)
-                cmd="monk__profile__delete"
+            monk__routine,delete)
+                cmd="monk__routine__delete"
                 ;;
-            monk__profile,duplicate)
-                cmd="monk__profile__duplicate"
+            monk__routine,duplicate)
+                cmd="monk__routine__duplicate"
                 ;;
-            monk__profile,edit)
-                cmd="monk__profile__edit"
+            monk__routine,edit)
+                cmd="monk__routine__edit"
                 ;;
-            monk__profile,help)
-                cmd="monk__profile__help"
+            monk__routine,help)
+                cmd="monk__routine__help"
                 ;;
-            monk__profile,limits)
-                cmd="monk__profile__limits"
+            monk__routine,limits)
+                cmd="monk__routine__limits"
                 ;;
-            monk__profile,show)
-                cmd="monk__profile__show"
+            monk__routine,show)
+                cmd="monk__routine__show"
                 ;;
-            monk__profile__help,create)
-                cmd="monk__profile__help__create"
+            monk__routine__help,create)
+                cmd="monk__routine__help__create"
                 ;;
-            monk__profile__help,delete)
-                cmd="monk__profile__help__delete"
+            monk__routine__help,delete)
+                cmd="monk__routine__help__delete"
                 ;;
-            monk__profile__help,duplicate)
-                cmd="monk__profile__help__duplicate"
+            monk__routine__help,duplicate)
+                cmd="monk__routine__help__duplicate"
                 ;;
-            monk__profile__help,edit)
-                cmd="monk__profile__help__edit"
+            monk__routine__help,edit)
+                cmd="monk__routine__help__edit"
                 ;;
-            monk__profile__help,help)
-                cmd="monk__profile__help__help"
+            monk__routine__help,help)
+                cmd="monk__routine__help__help"
                 ;;
-            monk__profile__help,limits)
-                cmd="monk__profile__help__limits"
+            monk__routine__help,limits)
+                cmd="monk__routine__help__limits"
                 ;;
-            monk__profile__help,show)
-                cmd="monk__profile__help__show"
+            monk__routine__help,show)
+                cmd="monk__routine__help__show"
+                ;;
+            monk__service,help)
+                cmd="monk__service__help"
+                ;;
+            monk__service,install)
+                cmd="monk__service__install"
+                ;;
+            monk__service,run)
+                cmd="monk__service__run"
+                ;;
+            monk__service,start)
+                cmd="monk__service__start"
+                ;;
+            monk__service,status)
+                cmd="monk__service__status"
+                ;;
+            monk__service,stop)
+                cmd="monk__service__stop"
+                ;;
+            monk__service,uninstall)
+                cmd="monk__service__uninstall"
+                ;;
+            monk__service__help,help)
+                cmd="monk__service__help__help"
+                ;;
+            monk__service__help,install)
+                cmd="monk__service__help__install"
+                ;;
+            monk__service__help,run)
+                cmd="monk__service__help__run"
+                ;;
+            monk__service__help,start)
+                cmd="monk__service__help__start"
+                ;;
+            monk__service__help,status)
+                cmd="monk__service__help__status"
+                ;;
+            monk__service__help,stop)
+                cmd="monk__service__help__stop"
+                ;;
+            monk__service__help,uninstall)
+                cmd="monk__service__help__uninstall"
                 ;;
             *)
                 ;;
@@ -338,7 +338,7 @@ _monk() {
 
     case "${cmd}" in
         monk)
-            opts="-h -V --locale --help --version init tui lang start stop extend panic status profiles profile apps stats doctor config daemon menubar completions update help"
+            opts="-h -V --locale --help --version init tui lang start stop extend panic status routines routine apps stats doctor config service menubar completions update help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -625,244 +625,6 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__daemon)
-            opts="-h -V --locale --help --version start stop status run install uninstall help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --locale)
-                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__help)
-            opts="start stop status run install uninstall help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__help__help)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__help__install)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__help__run)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__help__start)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__help__status)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__help__stop)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__help__uninstall)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__install)
-            opts="-h -V --reinstall --locale --help --version"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --locale)
-                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__run)
-            opts="-h -V --locale --help --version"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --locale)
-                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__start)
-            opts="-h -V --locale --help --version"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --locale)
-                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__status)
-            opts="-h -V --locale --help --version"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --locale)
-                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__stop)
-            opts="-h -V --locale --help --version"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --locale)
-                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__daemon__uninstall)
-            opts="-h -V --purge --locale --help --version"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --locale)
-                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
         monk__doctor)
             opts="-h -V --json --fix --locale --help --version"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
@@ -900,7 +662,7 @@ _monk() {
             return 0
             ;;
         monk__help)
-            opts="init tui lang start stop extend panic status profiles profile apps stats doctor config daemon menubar completions update help"
+            opts="init tui lang start stop extend panic status routines routine apps stats doctor config service menubar completions update help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1012,104 +774,6 @@ _monk() {
             return 0
             ;;
         monk__help__config__path)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__help__daemon)
-            opts="start stop status run install uninstall"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__help__daemon__install)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__help__daemon__run)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__help__daemon__start)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__help__daemon__status)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__help__daemon__stop)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        monk__help__daemon__uninstall)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1249,7 +913,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__help__profile)
+        monk__help__routine)
             opts="show edit create duplicate delete limits"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1263,7 +927,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__help__profile__create)
+        monk__help__routine__create)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1277,7 +941,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__help__profile__delete)
+        monk__help__routine__delete)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1291,7 +955,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__help__profile__duplicate)
+        monk__help__routine__duplicate)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1305,7 +969,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__help__profile__edit)
+        monk__help__routine__edit)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1319,7 +983,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__help__profile__limits)
+        monk__help__routine__limits)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1333,7 +997,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__help__profile__show)
+        monk__help__routine__show)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1347,9 +1011,107 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__help__profiles)
+        monk__help__routines)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__help__service)
+            opts="start stop status run install uninstall"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__help__service__install)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__help__service__run)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__help__service__start)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__help__service__status)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__help__service__stop)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__help__service__uninstall)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -1625,7 +1387,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile)
+        monk__routine)
             opts="-h -V --locale --help --version show edit create duplicate delete limits help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1643,8 +1405,8 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__create)
-            opts="-h -V --preset --locale --help --version <PROFILE>"
+        monk__routine__create)
+            opts="-h -V --preset --locale --help --version <ROUTINE>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1665,8 +1427,8 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__delete)
-            opts="-h -V --locale --help --version <PROFILE>"
+        monk__routine__delete)
+            opts="-h -V --locale --help --version <ROUTINE>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1683,7 +1445,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__duplicate)
+        monk__routine__duplicate)
             opts="-h -V --locale --help --version <SOURCE> [TARGET]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1701,8 +1463,8 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__edit)
-            opts="-h -V --add --remove --locale --help --version <PROFILE>"
+        monk__routine__edit)
+            opts="-h -V --add --remove --locale --help --version <ROUTINE>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1727,7 +1489,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__help)
+        monk__routine__help)
             opts="show edit create duplicate delete limits help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1741,7 +1503,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__help__create)
+        monk__routine__help__create)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1755,7 +1517,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__help__delete)
+        monk__routine__help__delete)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1769,7 +1531,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__help__duplicate)
+        monk__routine__help__duplicate)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1783,7 +1545,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__help__edit)
+        monk__routine__help__edit)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1797,7 +1559,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__help__help)
+        monk__routine__help__help)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1811,7 +1573,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__help__limits)
+        monk__routine__help__limits)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1825,7 +1587,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__help__show)
+        monk__routine__help__show)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1839,8 +1601,8 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__limits)
-            opts="-h -V --max --min --cooldown --daily-cap --clear --locale --help --version <PROFILE>"
+        monk__routine__limits)
+            opts="-h -V --max --min --cooldown --daily-cap --clear --locale --help --version <ROUTINE>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1873,8 +1635,8 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profile__show)
-            opts="-h -V --json --locale --help --version <PROFILE>"
+        monk__routine__show)
+            opts="-h -V --json --locale --help --version <ROUTINE>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1891,7 +1653,7 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        monk__profiles)
+        monk__routines)
             opts="-h -V --locale --help --version"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1909,8 +1671,246 @@ _monk() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        monk__service)
+            opts="-h -V --locale --help --version start stop status run install uninstall help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --locale)
+                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__help)
+            opts="start stop status run install uninstall help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__help__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__help__install)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__help__run)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__help__start)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__help__status)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__help__stop)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__help__uninstall)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__install)
+            opts="-h -V --reinstall --locale --help --version"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --locale)
+                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__run)
+            opts="-h -V --locale --help --version"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --locale)
+                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__start)
+            opts="-h -V --locale --help --version"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --locale)
+                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__status)
+            opts="-h -V --locale --help --version"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --locale)
+                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__stop)
+            opts="-h -V --locale --help --version"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --locale)
+                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        monk__service__uninstall)
+            opts="-h -V --purge --locale --help --version"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --locale)
+                    COMPREPLY=($(compgen -W "en ru" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         monk__start)
-            opts="-d -h -V --duration --hard --reason --locale --help --version [PROFILE]"
+            opts="-d -h -V --duration --hard --reason --locale --help --version [ROUTINE]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1994,7 +1994,7 @@ _monk() {
             return 0
             ;;
         monk__tui)
-            opts="-h -V --locale --help --version"
+            opts="-h -V --panic --locale --help --version"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

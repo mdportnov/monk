@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-06
+
+### Changed
+
+- One vocabulary everywhere, shared with the Android app: a profile or mode
+  is now a **routine**, a preset a **template**, hard mode a **no-exit**
+  session, panic the **emergency exit**, the daemon the **background
+  service**. `monk routine`, `monk routines` and `monk service` are the
+  commands; `monk profile`, `monk profiles` and `monk daemon` keep working.
+  Config keys are unchanged.
+- Cooldown now limits early exits: one early stop (or emergency exit) per
+  window. Starting a new block is never refused — it used to be refused right
+  after a session you had sat through, while stopping early cost nothing.
+- A session shorter than a routine's minimum is lengthened to it instead of
+  refused; one longer than its maximum is shortened. `monk start` says when
+  either happens. A scheduled window with less time left than the minimum is
+  skipped, so a schedule never outlives its own hours.
+- `daily_cap` is no longer enforced: it capped how long you could block.
+  Old configs still load; `monk doctor` names the routines that set it.
+- The TUI editor: one searchable list of what to block (brands, categories,
+  your sites, installed apps), a firmness scale instead of raw limits (which
+  move under "advanced"), and the schedule edited only in its form.
+- Menu bar: the default routine starts in one click, the rest sit under
+  "Routines", and a no-exit session offers "Emergency exit…", which opens the
+  TUI straight on that screen (`monk tui --panic`).
+- Onboarding offers four templates, no longer asks about hard mode up front,
+  and asks before turning on a template's schedule.
+- Every hint that repairs the service names one command,
+  `sudo monk service install`; errors read as sentences.
+
+### Fixed
+
+- A session stopped by hand was not written to the audit log, so a daemon
+  restart within its time could bring it back.
+- Placeholders in several messages were printed literally (`{profile}`,
+  `{duration}`).
+- The "autostart at login" setting in the TUI did nothing; it is gone.
+- `monk status` suggested a panic command form the CLI does not accept.
+
 ### Changed
 
 - The repository is now `mdportnov/monk`: it holds both the CLI and the

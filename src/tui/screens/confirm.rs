@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
@@ -16,6 +16,7 @@ use crate::{
     ipc::ModeSummary,
     tui::{
         app::{App, Screen},
+        firmness::{scale_spans, Firmness},
         theme::*,
         view::{draw_header, fmt_limit, fmt_schedule, fmt_short, kv, picker_block},
     },
@@ -28,6 +29,8 @@ pub struct ConfirmState {
     pub requested: Duration,
     pub hard: bool,
     pub clamped: bool,
+    /// The requested length was below the routine's minimum and was raised.
+    pub raised: bool,
     pub error: Option<String>,
     pub detail: Option<crate::ipc::ModeDetailPayload>,
     /// Index into `detail.profile.site_groups` of the highlighted group.
@@ -51,6 +54,7 @@ impl ConfirmState {
             duration: default,
             hard: hard_default,
             clamped: false,
+            raised: false,
             error: None,
             mode,
             detail: None,
@@ -100,6 +104,7 @@ impl ConfirmState {
         let mut d = self.requested.max(Self::MIN_BOUND).min(Self::MAX_BOUND);
         let ceiling = self.effective_max();
         let mut clamped = false;
+        let mut raised = false;
         if d > ceiling {
             d = ceiling;
             clamped = true;
@@ -107,10 +112,12 @@ impl ConfirmState {
         if let Some(min) = self.mode.limits.min_duration {
             if d < min {
                 d = min;
+                raised = true;
             }
         }
         self.duration = d;
         self.clamped = clamped;
+        self.raised = raised;
     }
 
     pub fn effective_max(&self) -> Duration {
@@ -127,23 +134,6 @@ impl ConfirmState {
         self.reclamp();
     }
 
-    pub fn blocked_reason(&self) -> Option<String> {
-        if let Some(rem) = self.mode.stats.cooldown_remaining {
-            let d = fmt_short(rem);
-            return Some(
-                crate::i18n::t!("tui.confirm.cooldown_available_in", duration = d).to_string(),
-            );
-        }
-        if let (Some(_cap), Some(rem)) =
-            (self.mode.limits.daily_cap, self.mode.stats.daily_cap_remaining)
-        {
-            if rem.is_zero() {
-                return Some(crate::i18n::t!("tui.confirm.daily_cap_reached").to_string());
-            }
-        }
-        None
-    }
-
     pub fn slider_fraction(&self) -> f32 {
         let max = self.effective_max().as_secs() as f32;
         let min = Self::MIN_BOUND.as_secs() as f32;
@@ -156,6 +146,10 @@ impl ConfirmState {
 
     pub fn limits(&self) -> &Limits {
         &self.mode.limits
+    }
+
+    pub fn firmness(&self) -> Firmness {
+        Firmness::of_session(&self.mode.limits, self.hard)
     }
 }
 
@@ -267,13 +261,8 @@ pub fn draw_confirm(f: &mut Frame, app: &App, confirm: &ConfirmState) {
             ),
         ])
     } else {
-        let chip_label = if confirm.hard { " HARD " } else { " SOFT " };
-        let chip_style = if confirm.hard {
-            Style::default().fg(Color::Black).bg(ALERT).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::Black).bg(ACCENT).add_modifier(Modifier::BOLD)
-        };
-        Line::from(vec![
+        let base = Firmness::of_limits(&confirm.mode.limits);
+        let mut spans = vec![
             Span::styled(
                 crate::i18n::t!("tui.confirm.start_prefix").to_string(),
                 Style::default().fg(DIM),
@@ -283,9 +272,13 @@ pub fn draw_confirm(f: &mut Frame, app: &App, confirm: &ConfirmState) {
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
             Span::raw("   "),
-            Span::styled(chip_label, chip_style),
-            Span::styled("  H toggle", Style::default().fg(DIM)),
-        ])
+        ];
+        spans.extend(scale_spans(confirm.firmness(), &[base, Firmness::NoExit], true));
+        spans.push(Span::styled(
+            format!("   {}", crate::i18n::t!("tui.confirm.no_exit_toggle")),
+            Style::default().fg(DIM),
+        ));
+        Line::from(spans)
     };
     let title = Paragraph::new(title_line).alignment(Alignment::Center);
     f.render_widget(title, body[0]);
@@ -310,8 +303,7 @@ pub fn draw_confirm(f: &mut Frame, app: &App, confirm: &ConfirmState) {
     f.render_widget(big, body[1]);
 
     if !is_running {
-        let blocked = confirm.blocked_reason().is_some();
-        draw_duration_slider(f, body[2], confirm, blocked);
+        draw_duration_slider(f, body[2], confirm);
     }
 
     let hints = Paragraph::new(build_confirm_status(confirm, is_running))
@@ -328,8 +320,6 @@ pub fn draw_confirm(f: &mut Frame, app: &App, confirm: &ConfirmState) {
         } else {
             crate::i18n::t!("tui.confirm.footer_running_no_groups").to_string()
         }
-    } else if confirm.blocked_reason().is_some() {
-        crate::i18n::t!("tui.confirm.footer_blocked").to_string()
     } else if has_groups {
         crate::i18n::t!("tui.confirm.footer_default").to_string()
     } else {
@@ -409,7 +399,7 @@ fn draw_group_inspector(f: &mut Frame, group_id: &str, scroll: u16) {
     f.render_widget(hint, chunks[2]);
 }
 
-fn draw_duration_slider(f: &mut Frame, area: Rect, confirm: &ConfirmState, blocked: bool) {
+fn draw_duration_slider(f: &mut Frame, area: Rect, confirm: &ConfirmState) {
     let width = area.width.saturating_sub(20).max(10) as usize;
     let frac = confirm.slider_fraction();
     let pos = ((width as f32) * frac).round() as usize;
@@ -421,7 +411,7 @@ fn draw_duration_slider(f: &mut Frame, area: Rect, confirm: &ConfirmState, block
             bar.push('─');
         }
     }
-    let bar_color = if blocked { DIM } else { ACCENT };
+    let bar_color = ACCENT;
     let line = Line::from(vec![
         Span::styled(
             format!("  {:>5}  ", fmt_short(ConfirmState::MIN_BOUND)),
@@ -458,23 +448,23 @@ fn build_confirm_status(confirm: &ConfirmState, is_running: bool) -> Vec<Line<'s
             Style::default().fg(ALERT).add_modifier(Modifier::BOLD),
         )));
     }
-    if let Some(reason) = confirm.blocked_reason() {
+    if confirm.raised {
+        let m = fmt_short(confirm.mode.limits.min_duration.unwrap_or_default());
         lines.push(Line::from(Span::styled(
-            reason,
-            Style::default().fg(ALERT).add_modifier(Modifier::BOLD),
-        )));
-    } else if let Some(err) = &confirm.error {
-        lines.push(Line::from(Span::styled(err.clone(), Style::default().fg(ALERT))));
-    } else if confirm.hard {
-        lines.push(Line::from(Span::styled(
-            crate::i18n::t!("tui.confirm.hard_mode_note").to_string(),
+            crate::i18n::t!("tui.confirm.raised_to_min", min = m).to_string(),
             Style::default().fg(GLOW).add_modifier(Modifier::BOLD),
         )));
+    }
+    if let Some(err) = &confirm.error {
+        lines.push(Line::from(Span::styled(err.clone(), Style::default().fg(ALERT))));
     } else {
-        lines.push(Line::from(Span::styled(
-            crate::i18n::t!("tui.confirm.soft_mode_note").to_string(),
-            Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
-        )));
+        let level = confirm.firmness();
+        let style = if level == Firmness::NoExit {
+            Style::default().fg(GLOW).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(DIM).add_modifier(Modifier::ITALIC)
+        };
+        lines.push(Line::from(Span::styled(level.note(&confirm.mode.limits), style)));
     }
     lines
 }
@@ -500,44 +490,14 @@ fn build_contract_panel(confirm: &ConfirmState) -> Paragraph<'static> {
         kv(&crate::i18n::t!("tui.confirm.field_max"), &fmt_limit(limits.max_duration)),
         kv(&crate::i18n::t!("tui.confirm.field_min"), &fmt_limit(limits.min_duration)),
         kv(&crate::i18n::t!("tui.confirm.field_cooldown"), &fmt_limit(limits.cooldown)),
-        kv(&crate::i18n::t!("tui.confirm.field_daily_cap"), &fmt_limit(limits.daily_cap)),
         Line::from(""),
         kv(
             &crate::i18n::t!("tui.confirm.field_used_today"),
             &fmt_short(confirm.mode.stats.used_24h),
         ),
     ];
-    if let Some(rem) = confirm.mode.stats.daily_cap_remaining {
-        lines.push(kv(&crate::i18n::t!("tui.confirm.field_budget_left"), &fmt_short(rem)));
-
-        // Daily-cap usage as a percentage, color-coded so an almost-spent
-        // budget is obvious before the user commits to a session.
-        if let Some(cap) = limits.daily_cap {
-            let used_secs = cap.as_secs().saturating_sub(rem.as_secs());
-            let pct = if cap.as_secs() == 0 {
-                0u16
-            } else {
-                ((used_secs as f64 / cap.as_secs() as f64) * 100.0).clamp(0.0, 100.0) as u16
-            };
-            lines.push(Line::from(""));
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("{}  ", crate::i18n::t!("tui.confirm.field_progress")),
-                    Style::default().fg(DIM),
-                ),
-                Span::styled(
-                    crate::i18n::t!("tui.confirm.progress_of_cap", pct = pct.to_string())
-                        .to_string(),
-                    Style::default().fg(if pct >= 90 {
-                        ALERT
-                    } else if pct >= 70 {
-                        Color::Rgb(220, 180, 90)
-                    } else {
-                        TEXT
-                    }),
-                ),
-            ]));
-        }
+    if let Some(rem) = confirm.mode.stats.cooldown_remaining {
+        lines.push(kv(&crate::i18n::t!("tui.confirm.field_next_early_stop"), &fmt_short(rem)));
     }
     if let Some(detail) = &confirm.detail {
         lines.push(Line::from(""));
@@ -554,11 +514,13 @@ fn build_contract_panel(confirm: &ConfirmState) -> Paragraph<'static> {
             lines.push(kv(&crate::i18n::t!("tui.confirm.field_schedule"), &fmt_schedule(sch)));
         }
     }
-    Paragraph::new(lines).wrap(Wrap { trim: false }).block(picker_block(" contract "))
+    let title = format!(" {} ", crate::i18n::t!("tui.confirm.panel_limits"));
+    Paragraph::new(lines).wrap(Wrap { trim: false }).block(picker_block(&title))
 }
 
 fn draw_blocklist_panel(f: &mut Frame, area: Rect, confirm: &ConfirmState) {
-    let block = picker_block(" blocked ");
+    let title = format!(" {} ", crate::i18n::t!("tui.confirm.panel_blocked"));
+    let block = picker_block(&title);
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -574,7 +536,7 @@ fn draw_blocklist_panel(f: &mut Frame, area: Rect, confirm: &ConfirmState) {
     let mut lines: Vec<Line> = Vec::new();
     let apps = &detail.profile.apps;
     lines.push(Line::from(vec![Span::styled(
-        format!("apps · {}", apps.len()),
+        crate::i18n::t!("tui.confirm.apps_count", count = apps.len()).to_string(),
         Style::default().fg(ACCENT),
     )]));
     if apps.is_empty() {
@@ -592,7 +554,7 @@ fn draw_blocklist_panel(f: &mut Frame, area: Rect, confirm: &ConfirmState) {
         }
         if apps.len() > 6 {
             lines.push(Line::from(Span::styled(
-                format!("  +{} more", apps.len() - 6),
+                crate::i18n::t!("tui.confirm.more", count = apps.len() - 6).to_string(),
                 Style::default().fg(DIM),
             )));
         }
@@ -605,9 +567,12 @@ fn draw_blocklist_panel(f: &mut Frame, area: Rect, confirm: &ConfirmState) {
     let groups = &detail.profile.site_groups;
     if !groups.is_empty() {
         lines.push(Line::from(vec![
-            Span::styled(format!("site groups · {}", groups.len()), Style::default().fg(ACCENT)),
             Span::styled(
-                "    ↑/↓ select · i inspect",
+                crate::i18n::t!("tui.confirm.categories_count", count = groups.len()).to_string(),
+                Style::default().fg(ACCENT),
+            ),
+            Span::styled(
+                format!("    {}", crate::i18n::t!("tui.confirm.inspect_hint")),
                 Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
             ),
         ]));
@@ -633,7 +598,10 @@ fn draw_blocklist_panel(f: &mut Frame, area: Rect, confirm: &ConfirmState) {
             lines.push(Line::from(vec![
                 Span::styled(bullet, bullet_style),
                 Span::styled(q.clone(), name_style),
-                Span::styled(format!("  ({size} hosts)"), Style::default().fg(DIM)),
+                Span::styled(
+                    format!("  ({})", crate::i18n::t!("tui.confirm.hosts_count", count = size)),
+                    Style::default().fg(DIM),
+                ),
             ]));
         }
         lines.push(Line::from(""));
@@ -643,7 +611,7 @@ fn draw_blocklist_panel(f: &mut Frame, area: Rect, confirm: &ConfirmState) {
     let custom = &detail.profile.sites;
     if !custom.is_empty() {
         lines.push(Line::from(vec![Span::styled(
-            format!("custom sites · {}", custom.len()),
+            crate::i18n::t!("tui.confirm.own_sites_count", count = custom.len()).to_string(),
             Style::default().fg(ACCENT),
         )]));
         let used = lines.len() as u16;
@@ -658,7 +626,7 @@ fn draw_blocklist_panel(f: &mut Frame, area: Rect, confirm: &ConfirmState) {
         }
         if custom.len() > shown {
             lines.push(Line::from(Span::styled(
-                format!("  +{} more", custom.len() - shown),
+                crate::i18n::t!("tui.confirm.more", count = custom.len() - shown).to_string(),
                 Style::default().fg(DIM),
             )));
         }
@@ -667,7 +635,7 @@ fn draw_blocklist_panel(f: &mut Frame, area: Rect, confirm: &ConfirmState) {
 
     // Footer: total blocked hosts after group expansion.
     lines.push(Line::from(Span::styled(
-        format!("total · {} hosts", detail.expanded_sites.len()),
+        crate::i18n::t!("tui.confirm.total_hosts", count = detail.expanded_sites.len()).to_string(),
         Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
     )));
 
@@ -675,7 +643,8 @@ fn draw_blocklist_panel(f: &mut Frame, area: Rect, confirm: &ConfirmState) {
 }
 
 fn draw_usage_panel(f: &mut Frame, area: Rect, confirm: &ConfirmState) {
-    let block = picker_block(" usage · 14d ");
+    let title = format!(" {} ", crate::i18n::t!("tui.confirm.panel_usage"));
+    let block = picker_block(&title);
     let inner = block.inner(area);
     f.render_widget(block, area);
 

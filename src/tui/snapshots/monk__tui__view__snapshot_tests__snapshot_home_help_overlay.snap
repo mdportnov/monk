@@ -6,26 +6,26 @@ expression: "render(&app, 90, 28)"
                                                                                           
 ──────────────────────────────────────────────────────────────────────────────────────────
 ╭ menu ──────────────────────────────────────────╮╭ companion ───────────────────────────╮
-│▶   Start session                               ││               ·   *   ·              │
-│    Stop session                                ││              *         *             │
-│    Panic escape      ╭ help ────────────────────────────────────╮  ___                 │
-│    Modes             │home                                      │ /   \                │
-│    Schedules ⏰       │                                          │( -.- )               │
-│    Settings          │  ↑/↓ · j/k    navigate menu              │ \___/                │
-│    Doctor            │  enter        activate item              │  |_|                 │
-│    Quit              │  s · x · p    start · stop · panic       │__|_|__               │
-│                      │  c            cancel scheduled panic     │       \              │
-│                      │  m            open modes picker          │  ___   |             │
-│                      │  w            open schedules             │ /   \  |             │
-│                      │  u            check for updates          │ \___/  |             │
-│                      │  1..9         quick-start mode by slot   │       /              │
-│                      │  ? · F1       toggle help                │________\             │
-╰──────────────────────│  q · esc      quit                       │_________)            │
-╭ status ──────────────│                                          │~~~~~~~               │
-│daemon  running       │                                          │                      │
-│session idle          ╰──────────────────────────────────────────╯athe in …             │
-│pick a mode and start a focus session           ││                                      │
+│▶   Start a session                             ││               ·   *   ·              │
+│    Stop the session                            ││              *         *             │
+│    Emergency ex╭ keys ────────────────────────────────────────────────╮                │
+│    Routines    │home                                                  │                │
+│    Schedules ⏰ │                                                      │)               │
+│    Settings    │  ↑/↓ · j/k    move                                   │                │
+│    Check setup │  ⏎            choose                                 │                │
+│    Quit        │  s · x · p    start · stop · emergency exit          │_               │
+│                │  c            cancel the emergency exit              │ \              │
+│                │  m            routines                               │  |             │
+│                │  w            schedules                              │  |             │
+│                │  1..9         start routine by number                │  |             │
+│                │  u            check for updates                      │ /              │
+│                │  ? · F1       this help                              │__\             │
+╰────────────────│  q · esc      quit                                   │___)            │
+╭ status ────────│                                                      │~               │
+│background servi│                                                      │                │
+│session none    ╰──────────────────────────────────────────────────────╯n …             │
+│pick a routine and start a focus session        ││                                      │
 │                                                ││                                      │
 ╰────────────────────────────────────────────────╯╰──────────────────────────────────────╯
 ──────────────────────────────────────────────────────────────────────────────────────────
- monk v0.3.1         ↑/↓ move   ⏎ select   s start   m modes   q quit
+ monk v0.4.0          ↑/↓ move   ⏎ select   s start   q quit   ? keys

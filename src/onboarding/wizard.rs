@@ -11,7 +11,10 @@ use crate::{
     ipc::{self, Request, Response},
     onboarding::{
         curated,
-        presets::{load_preset, preset_blurb, preset_label, PresetTier, PRESETS, PRESET_NAMES},
+        presets::{
+            load_preset, preset_blurb, preset_label, PresetTier, ONBOARDING_PRESETS, PRESETS,
+            PRESET_NAMES,
+        },
     },
     paths, platform, Error, Result,
 };
@@ -52,21 +55,22 @@ pub async fn run(opts: Options) -> Result<()> {
     let presets = pick_presets()?;
     let duration = pick_duration(cfg.general.default_duration)?;
 
-    let (hard_mode, autostart, chosen_apps);
+    // No-exit sessions are a decision for later, once the user has felt a
+    // soft one; onboarding never asks it up front.
+    let hard_mode = cfg.general.hard_mode;
+    let (autostart, chosen_apps);
     if opts.quick {
-        hard_mode = cfg.general.hard_mode;
         autostart = true;
         let cache = scan_with_spinner()?;
         chosen_apps = curated_only(&cache);
         if !chosen_apps.is_empty() {
             println!(
-                "  pre-selected {} common distractor app(s); edit later with `monk profile edit`",
+                "  pre-selected {} common distractor app(s); edit later with `monk routine edit`",
                 chosen_apps.len()
             );
         }
     } else {
-        hard_mode = pick_hard_mode(cfg.general.hard_mode)?;
-        autostart = pick_autostart(cfg.general.autostart)?;
+        autostart = pick_autostart(true)?;
         let cache = scan_with_spinner()?;
         println!("  found {} applications", cache.apps.len());
         chosen_apps = pick_apps_for_presets(&cache)?;
@@ -80,7 +84,12 @@ pub async fn run(opts: Options) -> Result<()> {
             profile.apps = chosen_apps.clone();
         }
     }
-    print_apply_notices(&cfg, &created, &kept);
+    if opts.quick {
+        print_apply_notices(&cfg, &created, &kept);
+    } else {
+        confirm_schedules(&mut cfg, &created)?;
+        print_apply_notices(&cfg, &[], &kept);
+    }
 
     check_hosts();
 
@@ -94,7 +103,10 @@ pub async fn run(opts: Options) -> Result<()> {
         if autostart {
             run_service_install();
         } else {
-            println!("  {}", t!("onboarding.autostart_skipped"));
+            println!(
+                "  {}",
+                t!("onboarding.autostart_skipped", cmd = crate::daemon::install_hint())
+            );
         }
     }
 
@@ -169,7 +181,14 @@ async fn persist_config(cfg: &Config) -> Result<()> {
         // write it directly. Reaching here means the daemon is down, and the
         // raw EACCES tells the user nothing about why or what to do.
         if crate::paths::system_mode() && !nix_is_root() {
-            Error::Other(t!("setup.config_needs_daemon", error = e.to_string()).to_string())
+            Error::Other(
+                t!(
+                    "setup.config_needs_daemon",
+                    cmd = crate::daemon::install_hint(),
+                    error = e.to_string()
+                )
+                .to_string(),
+            )
         } else {
             e
         }
@@ -191,8 +210,8 @@ fn run_service_install() {
             }
         }
         Err(e) => {
-            eprintln!("  autostart setup failed: {e}");
-            eprintln!("  → run `monk doctor --fix` later to retry");
+            eprintln!("  background service setup failed: {e}");
+            eprintln!("  → run `{}` later to retry", crate::daemon::install_hint());
         }
     }
 }
@@ -337,7 +356,10 @@ pub async fn run_non_interactive(opts: Options) -> Result<()> {
         if autostart {
             run_service_install();
         } else {
-            println!("  {}", t!("onboarding.autostart_skipped"));
+            println!(
+                "  {}",
+                t!("onboarding.autostart_skipped", cmd = crate::daemon::install_hint())
+            );
         }
     }
 
@@ -389,7 +411,7 @@ fn apply(
     }
     cfg.general.default_duration = duration;
     cfg.general.hard_mode = hard_mode;
-    cfg.general.autostart = autostart;
+    let _ = autostart;
     Ok((created, kept))
 }
 
@@ -410,6 +432,33 @@ fn print_apply_notices(cfg: &Config, created: &[String], kept: &[String]) {
             }
         }
     }
+}
+
+/// A template that carries a schedule asks before it starts firing on its
+/// own: a routine that turns itself on at 06:00 is not something to learn
+/// about from a surprise block.
+fn confirm_schedules(cfg: &mut Config, created: &[String]) -> Result<()> {
+    let yes = t!("common.yes").to_string();
+    let no = t!("common.no").to_string();
+    for name in created {
+        let Some(sch) = cfg.profiles.get_mut(name).and_then(|p| p.schedule.as_mut()) else {
+            continue;
+        };
+        if !sch.enabled {
+            continue;
+        }
+        let label = preset_label(name).into_owned();
+        let q = t!("onboarding.schedule_q", routine = label, window = sch.human()).to_string();
+        let ans = Select::new(&q, vec![yes.clone(), no.clone()])
+            .with_starting_cursor(0)
+            .prompt()
+            .map_err(prompt_err)?;
+        sch.enabled = ans == yes;
+        if !sch.enabled {
+            println!("  {}", t!("onboarding.schedule_off", routine = name.as_str()));
+        }
+    }
+    Ok(())
 }
 
 fn reset() -> Result<()> {
@@ -452,7 +501,7 @@ fn pick_locale(cli: Option<&str>) -> Result<String> {
 fn pick_presets() -> Result<Vec<String>> {
     let mut labels: Vec<(String, String)> = Vec::new();
     let mut last_tier: Option<PresetTier> = None;
-    for meta in PRESETS {
+    for meta in PRESETS.iter().filter(|m| ONBOARDING_PRESETS.contains(&m.id)) {
         if Some(meta.tier) != last_tier {
             let header = i18n::lookup(meta.tier.label_key()).into_owned();
             labels.push((format!("── {} {} ──", meta.tier.glyph(), header), String::new()));
@@ -471,6 +520,7 @@ fn pick_presets() -> Result<Vec<String>> {
 
     let display: Vec<String> = labels.iter().map(|(l, _)| l.clone()).collect();
     let default_idx = labels.iter().position(|(_, id)| id == "deepwork").unwrap_or(0);
+    println!("  {}", t!("onboarding.more_templates"));
     let chosen = MultiSelect::new(&t!("onboarding.pick_preset"), display.clone())
         .with_default(&[default_idx])
         .prompt()
@@ -534,16 +584,6 @@ fn validate_default_duration(d: Duration) -> Result<()> {
     Ok(())
 }
 
-fn pick_hard_mode(default: bool) -> Result<bool> {
-    let yes = t!("common.yes").to_string();
-    let no = t!("common.no").to_string();
-    let q = format!("{}  ({})", t!("onboarding.hard_mode_q"), t!("onboarding.hard_mode_hint"));
-    let opts = vec![no.clone(), yes.clone()];
-    let cursor = usize::from(default);
-    let ans = Select::new(&q, opts).with_starting_cursor(cursor).prompt().map_err(prompt_err)?;
-    Ok(ans == yes)
-}
-
 fn pick_autostart(default: bool) -> Result<bool> {
     let yes = t!("common.yes").to_string();
     let no = t!("common.no").to_string();
@@ -604,7 +644,7 @@ fn check_hosts() {
     let hosts = blocker::hosts_path();
     match fs_err::OpenOptions::new().append(true).open(&hosts) {
         Ok(_) => println!("  {}", t!("onboarding.hosts_ok")),
-        Err(_) => println!("  {}", t!("onboarding.hosts_ro")),
+        Err(_) => println!("  {}", t!("onboarding.hosts_ro", cmd = crate::daemon::install_hint())),
     }
 }
 
@@ -624,14 +664,19 @@ fn farewell() -> Result<()> {
     println!();
     println!("  {} {}", t!("onboarding.done_config_at"), paths::config_file()?.display());
     println!();
+    print_next_steps();
+    println!();
+    let _ = PRESET_NAMES;
+    Ok(())
+}
+
+/// The one "what now" list, shared by onboarding and `monk setup`.
+pub fn print_next_steps() {
     println!("  {}", t!("onboarding.done_next_header"));
     println!("{}", t!("onboarding.done_next_start"));
     println!("{}", t!("onboarding.done_next_tui"));
     println!("{}", t!("onboarding.done_next_doctor"));
     println!("{}", t!("onboarding.done_next_help"));
-    println!();
-    let _ = PRESET_NAMES;
-    Ok(())
 }
 
 fn install_completions_step() {

@@ -5,24 +5,24 @@ expression: "render(&app, 110, 40)"
                                        monk  silence · discipline · flow                                      
                                                                                                               
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
-╭ presets ──────────────────────────────────────────────────╮╭ preview ──────────────────────────────────────╮
+╭ templates ────────────────────────────────────────────────╮╭ preview ──────────────────────────────────────╮
 │                                                           ││Deep Work  [◆ Scenarios]                       │
 │   ◆  Scenarios                                            ││                                               │
 │▶   Deep Work                                              ││Work-session focus: social, video, news and    │
 │      Work-session focus: social, video, news and tech-news││tech-news traps are blocked. Chat stays open   │
 │    Morning Routine                                        ││for Slack.                                     │
-│      Auto-starts daily 06:00–09:00 (your laptop's timezone││                                               │
+│      Can start by itself daily 06:00–09:00 (your laptop's ││                                               │
 │    Study                                                  ││blocks                                         │
 │      Student mode: social, video, games, chat, AI tools an││  news, productivity_trap, social, video       │
 │    Digital Detox                                          ││  8 groups · 791 hosts                         │
 │      Long content cleanse: social, video, news, shopping a││                                               │
 │    Sleep Mode                                             ││limits                                         │
-│      Evening wind-down: social, video, news and games. Aut││  max      3h                                  │
+│      Evening wind-down: social, video, news and games. Can││  max      3h                                  │
 │    Sober                                                  ││  min      25m                                 │
 │      Recovery: adult, betting, crypto, dating, finance doo││  cooldown 30m                                 │
-│                                                           ││  day cap  6h                                  │
-│   •  Single category                                      ││                                               │
-│    No Social                                              ││press enter to instantiate                     │
+│                                                           ││                                               │
+│   •  Single category                                      ││⏎ make a routine from it                       │
+│    No Social                                              ││                                               │
 │      FB, IG, X, TikTok, Reddit, Threads, VK, OK and the re││                                               │
 │    No Video                                               ││                                               │
 │      Anti-binge: YouTube, Netflix, Twitch, Disney+, stream││                                               │
@@ -35,7 +35,7 @@ expression: "render(&app, 110, 40)"
 │    No Shopping                                            ││                                               │
 │      Anti-impulse-buy: Amazon, eBay, AliExpress, Wildberri││                                               │
 │    No Adult                                               ││                                               │
-│      Adult content. Long min-duration and cooldown so it a││                                               │
+│      Adult content. A long minimum length and one early st││                                               │
 │    No Gambling                                            ││                                               │
 │      Betting, crypto exchanges and finance-doom feeds — on││                                               │
 ╰───────────────────────────────────────────────────────────╯╰───────────────────────────────────────────────╯

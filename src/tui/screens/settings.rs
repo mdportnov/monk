@@ -19,8 +19,8 @@ pub enum SettingsField {
     DefaultProfile,
     DefaultDuration,
     HardMode,
-    Autostart,
     Locale,
+    Advanced,
     PanicDelay,
     TamperPenalty,
     Reset,
@@ -31,8 +31,8 @@ impl SettingsField {
         SettingsField::DefaultProfile,
         SettingsField::DefaultDuration,
         SettingsField::HardMode,
-        SettingsField::Autostart,
         SettingsField::Locale,
+        SettingsField::Advanced,
         SettingsField::PanicDelay,
         SettingsField::TamperPenalty,
         SettingsField::Reset,
@@ -43,7 +43,7 @@ impl SettingsField {
             SettingsField::DefaultProfile => "tui.settings_field.default_profile",
             SettingsField::DefaultDuration => "tui.settings_field.default_duration",
             SettingsField::HardMode => "tui.settings_field.hard_mode",
-            SettingsField::Autostart => "tui.settings_field.autostart",
+            SettingsField::Advanced => "tui.settings_field.advanced",
             SettingsField::Locale => "tui.settings_field.locale",
             SettingsField::PanicDelay => "tui.settings_field.panic_delay",
             SettingsField::TamperPenalty => "tui.settings_field.tamper_penalty",
@@ -57,13 +57,18 @@ impl SettingsField {
             SettingsField::DefaultProfile => "tui.settings_field_help.default_profile",
             SettingsField::DefaultDuration => "tui.settings_field_help.default_duration",
             SettingsField::HardMode => "tui.settings_field_help.hard_mode",
-            SettingsField::Autostart => "tui.settings_field_help.autostart",
+            SettingsField::Advanced => "tui.settings_field_help.advanced",
             SettingsField::Locale => "tui.settings_field_help.locale",
             SettingsField::PanicDelay => "tui.settings_field_help.panic_delay",
             SettingsField::TamperPenalty => "tui.settings_field_help.tamper_penalty",
             SettingsField::Reset => "tui.settings_field_help.reset",
         };
         crate::i18n::t!(key).to_string()
+    }
+
+    /// Fields that only show once the "advanced" group is expanded.
+    pub fn is_advanced(self) -> bool {
+        matches!(self, SettingsField::PanicDelay | SettingsField::TamperPenalty)
     }
 }
 
@@ -77,13 +82,13 @@ pub struct SettingsState {
     pub default_profile_idx: usize,
     pub default_duration: TextInput,
     pub hard_mode: bool,
-    pub autostart: bool,
     pub locale_idx: usize,
     pub panic_delay: TextInput,
     pub tamper_penalty: TextInput,
     pub focus: SettingsField,
     pub error: Option<String>,
     pub confirm_reset: bool,
+    pub advanced_open: bool,
 }
 
 impl SettingsState {
@@ -99,7 +104,6 @@ impl SettingsState {
                 humantime::format_duration(g.default_duration).to_string(),
             ),
             hard_mode: g.hard_mode,
-            autostart: g.autostart,
             locale_idx,
             panic_delay: TextInput::new(humantime::format_duration(g.panic_delay).to_string()),
             tamper_penalty: TextInput::new(
@@ -108,22 +112,39 @@ impl SettingsState {
             focus: SettingsField::DefaultProfile,
             error: None,
             confirm_reset: false,
+            advanced_open: false,
             original: g,
         };
         s.sync_focus();
         s
     }
 
+    pub fn visible_fields(&self) -> Vec<SettingsField> {
+        SettingsField::ORDER
+            .into_iter()
+            .filter(|f| self.advanced_open || !f.is_advanced())
+            .collect()
+    }
+
     pub fn next_field(&mut self) {
-        let idx = SettingsField::ORDER.iter().position(|f| *f == self.focus).unwrap_or(0);
-        self.focus = SettingsField::ORDER[(idx + 1) % SettingsField::ORDER.len()];
+        let fields = self.visible_fields();
+        let idx = fields.iter().position(|f| *f == self.focus).unwrap_or(0);
+        self.focus = fields[(idx + 1) % fields.len()];
         self.sync_focus();
     }
 
     pub fn prev_field(&mut self) {
-        let idx = SettingsField::ORDER.iter().position(|f| *f == self.focus).unwrap_or(0);
-        self.focus = SettingsField::ORDER
-            [(idx + SettingsField::ORDER.len() - 1) % SettingsField::ORDER.len()];
+        let fields = self.visible_fields();
+        let idx = fields.iter().position(|f| *f == self.focus).unwrap_or(0);
+        self.focus = fields[(idx + fields.len() - 1) % fields.len()];
+        self.sync_focus();
+    }
+
+    pub fn toggle_advanced(&mut self) {
+        self.advanced_open = !self.advanced_open;
+        if !self.advanced_open && self.focus.is_advanced() {
+            self.focus = SettingsField::Advanced;
+        }
         self.sync_focus();
     }
 
@@ -161,7 +182,6 @@ impl SettingsState {
             default_profile: self.default_profile_name().to_string(),
             default_duration,
             hard_mode: self.hard_mode,
-            autostart: self.autostart,
             locale,
             panic_delay,
             tamper_penalty,
@@ -197,8 +217,10 @@ pub async fn handle_settings_key(app: &mut App, key: KeyEvent) {
         KeyCode::Tab | KeyCode::Down => settings.next_field(),
         KeyCode::BackTab | KeyCode::Up => settings.prev_field(),
         KeyCode::Enter => {
-            if settings.focus == SettingsField::Reset {
-                settings.confirm_reset = true;
+            match settings.focus {
+                SettingsField::Reset => settings.confirm_reset = true,
+                SettingsField::Advanced => settings.toggle_advanced(),
+                _ => {}
             }
             // Enter on non-Reset fields is intentionally a no-op. Save with ctrl+s.
         }
@@ -218,9 +240,9 @@ pub async fn handle_settings_key(app: &mut App, key: KeyEvent) {
                         settings.hard_mode = !settings.hard_mode;
                     }
                 }
-                SettingsField::Autostart => {
+                SettingsField::Advanced => {
                     if matches!(key.code, KeyCode::Char(' ')) {
-                        settings.autostart = !settings.autostart;
+                        settings.toggle_advanced();
                     }
                 }
                 SettingsField::Locale => match key.code {
@@ -263,7 +285,7 @@ pub fn draw_settings(f: &mut Frame, app: &App, st: &SettingsState) {
     let inner = block.inner(outer[1]);
     f.render_widget(block, outer[1]);
 
-    let fields = SettingsField::ORDER;
+    let fields = st.visible_fields();
     let mut constraints: Vec<Constraint> = fields.iter().map(|_| Constraint::Length(2)).collect();
     constraints.push(Constraint::Length(3));
     let rows =
@@ -288,7 +310,7 @@ pub fn draw_settings(f: &mut Frame, app: &App, st: &SettingsState) {
     }
     f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), status_row);
 
-    let help = "↑/↓ · tab fields   ctrl+s save   esc cancel";
+    let help = crate::i18n::t!("tui.settings.footer").to_string();
     let footer = Paragraph::new(Span::styled(help, Style::default().fg(DIM)))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::TOP).border_style(Style::default().fg(DIM)));
@@ -345,7 +367,8 @@ fn draw_settings_field(f: &mut Frame, area: Rect, st: &SettingsState, field: Set
         Style::default().fg(DIM)
     };
     let prefix = if focused { "▶ " } else { "  " };
-    let label = format!("{prefix}{:<22}", field.label());
+    let indent = if field.is_advanced() { "  " } else { "" };
+    let label = format!("{prefix}{indent}{:<22}", field.label());
     let rows = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Length(label.len() as u16 + 1), Constraint::Min(5)])
@@ -382,11 +405,19 @@ fn draw_settings_field(f: &mut Frame, area: Rect, st: &SettingsState, field: Set
             st.tamper_penalty.render(rows[1], f.buffer_mut(), value_style);
         }
         SettingsField::HardMode => {
-            let text = if st.hard_mode { "[x] on" } else { "[ ] off" };
+            let text = if st.hard_mode {
+                crate::i18n::t!("tui.settings.on").to_string()
+            } else {
+                crate::i18n::t!("tui.settings.off").to_string()
+            };
             f.render_widget(Paragraph::new(Span::styled(text, value_style)), rows[1]);
         }
-        SettingsField::Autostart => {
-            let text = if st.autostart { "[x] on" } else { "[ ] off" };
+        SettingsField::Advanced => {
+            let text = if st.advanced_open {
+                crate::i18n::t!("tui.settings.advanced_open").to_string()
+            } else {
+                crate::i18n::t!("tui.settings.advanced_closed").to_string()
+            };
             f.render_widget(Paragraph::new(Span::styled(text, value_style)), rows[1]);
         }
         SettingsField::Locale => {
@@ -407,7 +438,13 @@ fn draw_settings_field(f: &mut Frame, area: Rect, st: &SettingsState, field: Set
             } else {
                 Style::default().fg(ALERT)
             };
-            f.render_widget(Paragraph::new(Span::styled("⟲ wipe all data", style)), rows[1]);
+            f.render_widget(
+                Paragraph::new(Span::styled(
+                    crate::i18n::t!("tui.settings.wipe").to_string(),
+                    style,
+                )),
+                rows[1],
+            );
         }
     }
 }

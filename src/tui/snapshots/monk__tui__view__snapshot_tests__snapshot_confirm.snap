@@ -5,7 +5,7 @@ expression: "render(&app, 100, 30)"
                                   monk  silence · discipline · flow                                 
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-                                 start  deepwork    SOFT   H toggle                                 
+                   start  deepwork    soft    delayed exit    no-exit    H no-exit                  
                                                                                                     
                                   ▟▀▜▖▟▀▜▖ ▄  █▀▀ ▟▀▜▖ ▄  ▟▀▜▖▟▀▜▖                                  
                                   █▗█▌█▗█▌ ▀  ▀▀▙ █▗█▌ ▀  █▗█▌█▗█▌                                  
@@ -17,17 +17,17 @@ expression: "render(&app, 100, 30)"
                                                                                                     
        5m  ───────────────────────────────●────────────────────────────────────────────────  2h     
                                                                                                     
-                                      soft mode — stop anytime                                      
+                You can stop early, but only once per 30m; the next early stop waits.               
                                                                                                     
-╭ contract ────────────────╮╭ blocked ─────────────────────────────╮╭ usage · 14d ─────────────────╮
-│max        2h             ││loading…                              ││loading…                      │
-│min        15m            ││                                      ││                              │
-│cooldown   30m            ││                                      ││                              │
-│daily cap  4h             ││                                      ││                              │
+╭ limits ──────────────────╮╭ blocked ─────────────────────────────╮╭ last 14 days ────────────────╮
+│longest    2h             ││loading…                              ││loading…                      │
+│shortest   15m            ││                                      ││                              │
+│early stop 30m            ││                                      ││                              │
 │                          ││                                      ││                              │
-│used today 45m            ││                                      ││                              │
-│budget left 3h15          ││                                      ││                              │
+│focused today 45m         ││                                      ││                              │
+│                          ││                                      ││                              │
+│                          ││                                      ││                              │
 │                          ││                                      ││                              │
 ╰──────────────────────────╯╰──────────────────────────────────────╯╰──────────────────────────────╯
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-                         ←/→ duration   ⏎ start   e edit   H hard   esc back
+                        ←/→ length   ⏎ start   H no-exit   esc back   ? keys

@@ -149,7 +149,7 @@ impl Supervisor {
         let cfg = self.config.read().clone();
         let profile = cfg
             .profile(name)
-            .ok_or_else(|| Error::Config(format!("unknown mode `{name}`")))?
+            .ok_or_else(|| Error::Other(format!("there is no routine `{name}`")))?
             .clone();
         let mut expanded: std::collections::BTreeSet<String> = profile
             .sites
@@ -187,15 +187,16 @@ impl Supervisor {
 
     pub fn mode_stats(&self, name: &str) -> Result<crate::audit::stats::ModeStats> {
         let cfg = self.config.read().clone();
-        let profile =
-            cfg.profile(name).ok_or_else(|| Error::Config(format!("unknown mode `{name}`")))?;
+        let profile = cfg
+            .profile(name)
+            .ok_or_else(|| Error::Other(format!("there is no routine `{name}`")))?;
         let events = self.audit.read_all().unwrap_or_default();
         Ok(crate::audit::stats::mode_stats(&events, name, &profile.limits, chrono::Utc::now()))
     }
 
     pub fn save_mode(&self, name: String, profile: Profile) -> Result<()> {
         if name.is_empty() {
-            return Err(Error::Config("mode name cannot be empty".into()));
+            return Err(Error::Other("a routine needs a name".into()));
         }
         // Empty profile = nothing to block. The user can always add things
         // later, but starting an empty session is a no-op trap (you'd think
@@ -206,28 +207,18 @@ impl Supervisor {
             && profile.apps.is_empty()
             && profile.brands.is_empty()
         {
-            return Err(Error::Config(
-                "profile blocks nothing — add at least one site, group, app, or brand".into(),
+            return Err(Error::Other(
+                "this routine blocks nothing yet — add at least one site, app or brand".into(),
             ));
         }
         // Cross-validate limits beyond what the editor already checks; the
         // CLI / direct config import can bypass the editor's validator.
         if let (Some(mn), Some(mx)) = (profile.limits.min_duration, profile.limits.max_duration) {
             if mn > mx {
-                return Err(Error::Config(format!(
-                    "profile `{name}` has min_duration ({}) > max_duration ({})",
+                return Err(Error::Limit(format!(
+                    "routine `{name}`: the shortest session ({}) is longer than the longest one ({})",
                     humantime::format_duration(mn),
                     humantime::format_duration(mx)
-                )));
-            }
-        }
-        if let (Some(cap), Some(min)) = (profile.limits.daily_cap, profile.limits.min_duration) {
-            if cap < min {
-                return Err(Error::Config(format!(
-                    "profile `{name}` has daily_cap ({}) smaller than min_duration ({}) — \
-                     no session would ever fit",
-                    humantime::format_duration(cap),
-                    humantime::format_duration(min)
                 )));
             }
         }
@@ -264,7 +255,7 @@ impl Supervisor {
     pub fn reset_all(&self) -> Result<()> {
         let _guard = self.config_write.lock();
         if self.store.load()?.is_some() {
-            return Err(Error::Config("cannot reset while a session is active".into()));
+            return Err(Error::Other("stop the running session first, then reset".into()));
         }
         let cfg_path = crate::paths::config_file()?;
         if cfg_path.exists() {
@@ -292,7 +283,7 @@ impl Supervisor {
     pub fn delete_mode(&self, name: &str) -> Result<()> {
         self.with_write(|cfg| {
             if cfg.profiles.remove(name).is_none() {
-                return Err(Error::Config(format!("mode `{name}` not found")));
+                return Err(Error::Other(format!("there is no routine `{name}`")));
             }
             if cfg.general.default_profile == name {
                 cfg.general.default_profile =
@@ -337,9 +328,9 @@ impl Supervisor {
         let cfg = self.config.read().clone();
         let profile_def = cfg
             .profile(&profile)
-            .ok_or_else(|| Error::Config(format!("unknown profile `{profile}`")))?
+            .ok_or_else(|| Error::Other(format!("there is no routine `{profile}`")))?
             .clone();
-        let duration = enforce_limits(&profile, &profile_def.limits, duration, &self.audit)?;
+        let duration = enforce_limits(&profile, &profile_def.limits, duration)?;
         let set = build_block_set(&profile_def)?;
 
         if !set.sites.is_empty() {
@@ -430,8 +421,8 @@ impl Supervisor {
         let mut granted = by;
         if let Some(max) = limits.max_duration {
             if planned >= max {
-                return Err(Error::Config(format!(
-                    "profile `{}` is capped at {}",
+                return Err(Error::Limit(format!(
+                    "routine `{}` runs at most {}, so no more time can be added",
                     lock.profile,
                     humantime::format_duration(max)
                 )));
@@ -462,7 +453,34 @@ impl Supervisor {
             self.audit.append(AuditKind::StopDenied, Some(lock.id), "stop denied in hard mode");
             return Err(Error::HardModeActive);
         }
+        if !lock.is_expired() {
+            let cooldown =
+                self.config.read().profile(&lock.profile).and_then(|p| p.limits.cooldown);
+            if let Some(cd) = cooldown {
+                let events = self.audit.read_all().unwrap_or_default();
+                let limits = Limits { cooldown: Some(cd), ..Limits::default() };
+                let stats = crate::audit::stats::mode_stats(
+                    &events,
+                    &lock.profile,
+                    &limits,
+                    chrono::Utc::now(),
+                );
+                if let Some(remaining) = stats.cooldown_remaining {
+                    self.audit.append(AuditKind::StopDenied, Some(lock.id), "early stop cooldown");
+                    return Err(early_stop_locked(&lock.profile, cd, remaining));
+                }
+            }
+        }
         self.finalize(&lock, SessionState::Aborted)?;
+        self.audit.append_with(
+            AuditKind::SessionStopped,
+            Some(lock.id),
+            &lock.profile,
+            serde_json::json!({
+                "duration_ms": u64::try_from(lock.duration_ms).unwrap_or(u64::MAX),
+                "progressed_ms": u64::try_from(lock.progressed_ms).unwrap_or(u64::MAX),
+            }),
+        );
         Ok(Some(lock_to_session(&lock)))
     }
 
@@ -524,7 +542,12 @@ impl Supervisor {
 
         if lock.should_release_via_panic() {
             self.finalize(&lock, SessionState::Aborted)?;
-            self.audit.append(AuditKind::SessionPanicked, Some(lock.id), "panic released");
+            self.audit.append_with(
+                AuditKind::SessionPanicked,
+                Some(lock.id),
+                "panic released",
+                serde_json::json!({ "profile": lock.profile }),
+            );
             return Ok(true);
         }
 
@@ -646,6 +669,19 @@ impl Supervisor {
             return;
         };
         let remaining = w.remaining(now);
+        // A hand start shorter than the floor is lengthened, but a scheduled
+        // one must not outlive its own window: too little window left means
+        // the window is skipped, as it always was.
+        let floor = cfg.profile(&name).and_then(|p| p.limits.min_duration);
+        if floor.is_some_and(|min| remaining < min) {
+            *self.last_fired_window.lock() = Some((name.clone(), w.start));
+            self.audit.append(
+                AuditKind::ScheduleSkipped,
+                None,
+                &format!("{name}: less of the window is left than the routine's shortest session"),
+            );
+            return;
+        }
         let phrase = crate::session::lock::generate_phrase();
         match self.start(name.clone(), remaining, false, Some("scheduled".into()), phrase) {
             Ok(_) => {
@@ -781,43 +817,29 @@ impl Supervisor {
     }
 }
 
-fn enforce_limits(
-    profile: &str,
-    limits: &Limits,
-    requested: Duration,
-    audit: &AuditLog,
-) -> Result<Duration> {
+/// A session shorter than the routine's floor is lengthened to it rather
+/// than refused: making a block longer only ever tightens it.
+fn enforce_limits(_profile: &str, limits: &Limits, requested: Duration) -> Result<Duration> {
     let mut duration = requested;
-    if let Some(max) = limits.max_duration {
-        if duration > max {
-            duration = max;
-        }
-    }
     if let Some(min) = limits.min_duration {
-        if duration < min {
-            return Err(Error::Config(format!(
-                "profile `{profile}` requires at least {}",
-                humantime::format_duration(min)
-            )));
-        }
+        duration = duration.max(min);
     }
-    let events = audit.read_all().unwrap_or_default();
-    let stats = crate::audit::stats::mode_stats(&events, profile, limits, chrono::Utc::now());
-    if let Some(remaining) = stats.cooldown_remaining {
-        return Err(Error::Config(format!(
-            "profile `{profile}` cooldown active ({}s remaining)",
-            remaining.as_secs()
-        )));
-    }
-    if let (Some(cap), Some(remaining)) = (limits.daily_cap, stats.daily_cap_remaining) {
-        if remaining.is_zero() || duration > remaining {
-            return Err(Error::Config(format!(
-                "profile `{profile}` daily cap reached ({})",
-                humantime::format_duration(cap)
-            )));
-        }
+    if let Some(max) = limits.max_duration {
+        duration = duration.min(max);
     }
     Ok(duration)
+}
+
+fn early_stop_locked(profile: &str, cooldown: Duration, remaining: Duration) -> Error {
+    let wait = Duration::from_secs(remaining.as_secs().div_ceil(60).max(1) * 60);
+    let at = chrono::Local::now()
+        + chrono::Duration::from_std(remaining).unwrap_or_else(|_| chrono::Duration::zero());
+    Error::Limit(format!(
+        "`{profile}` allows one early stop per {}: the next one opens at {} (in {})",
+        humantime::format_duration(cooldown),
+        at.format("%H:%M"),
+        humantime::format_duration(wait)
+    ))
 }
 
 fn session_claim(lock: &SessionLock) -> serde_json::Value {
@@ -843,8 +865,8 @@ fn build_block_set(profile: &Profile) -> Result<BlockSet> {
     if !profile.brands.is_empty() {
         let resolved = crate::brands::resolve(&profile.brands)?;
         if resolved.unknown.len() == profile.brands.len() {
-            return Err(Error::Config(format!(
-                "all brands in profile are unknown: {:?}",
+            return Err(Error::Other(format!(
+                "none of this routine's brands are known to this monk: {:?}",
                 resolved.unknown
             )));
         }
@@ -898,6 +920,19 @@ fn lock_to_session(lock: &SessionLock) -> Session {
 mod tests {
     use super::*;
     use crate::{blocker::BlockSet, Error};
+
+    #[test]
+    fn short_start_is_lengthened_to_min_and_long_one_cut_to_max() {
+        let limits = Limits {
+            min_duration: Some(Duration::from_secs(1800)),
+            max_duration: Some(Duration::from_secs(3600)),
+            ..Limits::default()
+        };
+        let short = enforce_limits("p", &limits, Duration::from_secs(600)).unwrap();
+        assert_eq!(short, Duration::from_secs(1800));
+        let long = enforce_limits("p", &limits, Duration::from_secs(7200)).unwrap();
+        assert_eq!(long, Duration::from_secs(3600));
+    }
 
     #[derive(Debug)]
     struct MockBlocker {

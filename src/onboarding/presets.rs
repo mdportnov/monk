@@ -52,6 +52,10 @@ pub const PRESETS: &[PresetMeta] = &[
     PresetMeta { id: "lockdown", tier: PresetTier::Maximum },
 ];
 
+/// What onboarding offers: the four everyday scenarios. Every other
+/// template stays one keypress away in the TUI.
+pub const ONBOARDING_PRESETS: &[&str] = &["deepwork", "morning", "study", "sleep"];
+
 pub const PRESET_NAMES: &[&str] = &[
     "deepwork",
     "morning",

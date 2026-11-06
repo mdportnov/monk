@@ -21,6 +21,8 @@ pub enum AuditKind {
     SessionCompleted,
     SessionExtended,
     SessionPanicked,
+    /// A soft session the user stopped by hand before it ran out.
+    SessionStopped,
     PanicRequested,
     PanicCancelled,
     StopDenied,
@@ -49,6 +51,7 @@ impl AuditKind {
             Self::SessionCompleted => "session_completed",
             Self::SessionExtended => "session_extended",
             Self::SessionPanicked => "session_panicked",
+            Self::SessionStopped => "session_stopped",
             Self::PanicRequested => "panic_requested",
             Self::PanicCancelled => "panic_cancelled",
             Self::StopDenied => "stop_denied",
@@ -74,6 +77,7 @@ impl AuditKind {
             "session_completed" => Self::SessionCompleted,
             "session_extended" => Self::SessionExtended,
             "session_panicked" => Self::SessionPanicked,
+            "session_stopped" => Self::SessionStopped,
             "panic_requested" => Self::PanicRequested,
             "panic_cancelled" => Self::PanicCancelled,
             "stop_denied" => Self::StopDenied,
@@ -234,7 +238,7 @@ impl AuditLog {
                AND session_id IS NOT NULL
                AND session_id NOT IN (
                    SELECT session_id FROM audit_events
-                   WHERE kind IN ('session_completed', 'session_panicked')
+                   WHERE kind IN ('session_completed', 'session_panicked', 'session_stopped')
                      AND session_id IS NOT NULL
                )
              ORDER BY id DESC LIMIT 1",
@@ -256,7 +260,7 @@ impl AuditLog {
                    AND session_id IS NOT NULL
                    AND session_id NOT IN (
                        SELECT session_id FROM audit_events
-                       WHERE kind IN ('session_completed', 'session_panicked')
+                       WHERE kind IN ('session_completed', 'session_panicked', 'session_stopped')
                          AND session_id IS NOT NULL
                    )
                  ORDER BY id DESC LIMIT 1",
@@ -412,6 +416,18 @@ pub mod stats {
         pub total: Duration,
     }
 
+    /// A session that ended before its time: stopped by hand or released
+    /// through panic. Cooldown is measured from these, never from a session
+    /// that ran out — sitting a block through is not something to ration.
+    fn is_early_exit(e: &AuditEvent, mode: &str) -> bool {
+        let profile = e.extra.get("profile").and_then(|v| v.as_str());
+        match e.kind {
+            AuditKind::SessionStopped => e.message == mode,
+            AuditKind::SessionPanicked => profile == Some(mode),
+            _ => false,
+        }
+    }
+
     pub fn daily_usage(
         events: &[AuditEvent],
         mode: &str,
@@ -453,7 +469,11 @@ pub mod stats {
         let since = now - chrono::Duration::hours(24);
         let mut used_24h = Duration::ZERO;
         let mut last_completed_at: Option<DateTime<Utc>> = None;
+        let mut last_early_exit_at: Option<DateTime<Utc>> = None;
         for e in events {
+            if is_early_exit(e, mode) && last_early_exit_at.is_none_or(|prev| e.at > prev) {
+                last_early_exit_at = Some(e.at);
+            }
             if e.kind != AuditKind::SessionCompleted || e.message != mode || e.at < since {
                 continue;
             }
@@ -464,7 +484,7 @@ pub mod stats {
                 _ => e.at,
             });
         }
-        let cooldown_remaining = match (limits.cooldown, last_completed_at) {
+        let cooldown_remaining = match (limits.cooldown, last_early_exit_at) {
             (Some(cd), Some(last)) => {
                 let elapsed = now.signed_duration_since(last);
                 let cd_chrono =
@@ -510,6 +530,67 @@ pub mod stats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ev(kind: AuditKind, message: &str, extra: serde_json::Value, ago_min: i64) -> AuditEvent {
+        AuditEvent {
+            at: Utc::now() - chrono::Duration::minutes(ago_min),
+            kind,
+            session_id: Some(Uuid::new_v4()),
+            message: message.into(),
+            extra,
+        }
+    }
+
+    fn cooldown_10m() -> crate::config::Limits {
+        crate::config::Limits {
+            cooldown: Some(std::time::Duration::from_secs(600)),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn completed_session_does_not_start_cooldown() {
+        let events = vec![ev(
+            AuditKind::SessionCompleted,
+            "p",
+            serde_json::json!({ "duration_ms": 1_800_000 }),
+            1,
+        )];
+        let st = stats::mode_stats(&events, "p", &cooldown_10m(), Utc::now());
+        assert!(st.cooldown_remaining.is_none());
+    }
+
+    #[test]
+    fn early_stop_starts_cooldown_for_its_profile_only() {
+        let events = vec![ev(AuditKind::SessionStopped, "p", serde_json::Value::Null, 3)];
+        let st = stats::mode_stats(&events, "p", &cooldown_10m(), Utc::now());
+        let rem = st.cooldown_remaining.unwrap();
+        assert!(rem.as_secs() > 6 * 60 && rem.as_secs() <= 7 * 60);
+        let other = stats::mode_stats(&events, "q", &cooldown_10m(), Utc::now());
+        assert!(other.cooldown_remaining.is_none());
+    }
+
+    #[test]
+    fn panic_release_counts_as_early_exit() {
+        let events = vec![ev(
+            AuditKind::SessionPanicked,
+            "panic released",
+            serde_json::json!({ "profile": "p" }),
+            2,
+        )];
+        let st = stats::mode_stats(&events, "p", &cooldown_10m(), Utc::now());
+        assert!(st.cooldown_remaining.is_some());
+    }
+
+    #[test]
+    fn stopped_session_is_not_reconstructed() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = AuditLog::with_path(dir.path().join(AUDIT_FILE));
+        let id = Uuid::new_v4();
+        log.append(AuditKind::SessionStarted, Some(id), "a");
+        log.append(AuditKind::SessionStopped, Some(id), "a");
+        assert!(log.last_open_session_start().unwrap().is_none());
+    }
 
     #[test]
     fn append_and_read_roundtrip() {

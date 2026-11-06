@@ -10,6 +10,19 @@ pub use server::run;
 pub use service::{run as service_run, ServiceAction};
 pub use supervisor::Supervisor;
 
+/// The one command that installs or repairs the background service, as the
+/// user should type it on this OS. Every hint that sends people to fix the
+/// service quotes this, so they never meet three spellings of one fix.
+pub fn install_hint() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "sudo monk service install"
+    } else if cfg!(windows) {
+        "monk service install (in an Administrator terminal)"
+    } else {
+        "monk service install"
+    }
+}
+
 /// Spawn `monk daemon run` detached from the calling terminal so the daemon
 /// survives the terminal (and shell session) closing.
 ///

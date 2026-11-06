@@ -6,13 +6,13 @@ expression: "render(&app, 90, 28)"
                                                                                           
 ──────────────────────────────────────────────────────────────────────────────────────────
 ╭ menu ──────────────────────────────────────────╮╭ companion ───────────────────────────╮
-│▶   Start session                               ││               ·   *   ·              │
-│    Stop session                                ││              *         *             │
-│    Panic escape                                ││                  ___                 │
-│    Modes                                       ││                 /   \                │
+│▶   Start a session                             ││               ·   *   ·              │
+│    Stop the session                            ││              *         *             │
+│    Emergency exit                              ││                  ___                 │
+│    Routines                                    ││                 /   \                │
 │    Schedules ⏰                                 ││                ( -.- )               │
 │    Settings                                    ││                 \___/                │
-│    Doctor                                      ││                  |_|                 │
+│    Check setup                                 ││                  |_|                 │
 │    Quit                                        ││                __|_|__               │
 │                                                ││               /       \              │
 │                                                ││              |   ___   |             │
@@ -22,10 +22,10 @@ expression: "render(&app, 90, 28)"
 │                                                ││              /_________\             │
 ╰────────────────────────────────────────────────╯│             (___________)            │
 ╭ status ────────────────────────────────────────╮│                ~~~~~~~               │
-│daemon  running                                 ││                                      │
-│session idle                                    ││             breathe in …             │
+│background service  running                     ││                                      │
+│session none                                    ││             breathe in …             │
 │started `deepwork`                              ││                                      │
 │                                                ││                                      │
 ╰────────────────────────────────────────────────╯╰──────────────────────────────────────╯
 ──────────────────────────────────────────────────────────────────────────────────────────
- monk v0.3.1         ↑/↓ move   ⏎ select   s start   m modes   q quit
+ monk v0.4.0          ↑/↓ move   ⏎ select   s start   q quit   ? keys

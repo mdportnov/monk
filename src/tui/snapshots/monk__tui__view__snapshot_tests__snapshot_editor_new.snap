@@ -5,29 +5,29 @@ expression: "render(&app, 100, 30)"
                                   monk  silence · discipline · flow                                 
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-╭ edit mode ──────────────────────────────────────────╮╭ brand presets ────────────────────────────╮
-│▶ name                                               ││                                           │
-│                                                     ││                                           │
-│  color           —   blue   cyan   green   amber   v││                                           │
-│                                                     ││                                           │
-│  max duration                                       ││                                           │
-│                                                     ││                                           │
-│  min duration                                       ││                                           │
-│  cooldown                                           ││                                           │
-│                                                     │╰───────────────────────────────────────────╯
-│  daily cap                                          │╭ blocked apps ─────────────────────────────╮
-│                                                     ││                                           │
-│  panic delay                                        ││                                           │
-│                                                     ││                                           │
-│  schedule                                           ││                                           │
-│                                                     ││                                           │
-│  custom sites                                       │╰───────────────────────────────────────────╯
-│                                                     │╭ site groups ──────────────────────────────╮
-│  hook before                                        ││                                           │
-│  hook after                                         ││                                           │
-│                                                     ││                                           │
-│mode identifier (1-30 chars)                         ││                                           │
-│● unsaved changes                                    ││                                           │
+╭ edit routine ───────────────────────────────────────╮╭ what to block · 0 chosen ─────────────────╮
+│▶ name                                               ││▶  [ ] 📷  Instagram  · site + app          │
+│                                                     ││   [ ] 📘  Facebook  · site + app           │
+│  firmness        soft    delayed exit    no-exit    ││   [ ] 🐦  X (Twitter)  · site + app        │
+│                                                     ││   [ ] 🎵  TikTok  · site + app             │
+│  schedule       no schedule   ⏎ edit                ││   [ ] 👽  Reddit  · site + app             │
+│                                                     ││   [ ] 💼  LinkedIn  · site + app           │
+│  color           —   blue   cyan   green   amber   v││   [ ] 👻  Snapchat  · site + app           │
+│                                                     ││   [ ] 📌  Pinterest  · site + app          │
+│  advanced       ▸ show raw limits and hooks (⏎)     ││   [ ] 🧵  Threads  · site + app            │
+│                                                     ││   [ ] 🦋  Bluesky  · site + app            │
+│what you'll call it (1–30 characters)                ││   [ ] 💬  Discord  · site + app            │
+│● unsaved changes                                    ││   [ ] 💼  Slack  · site + app              │
+│                                                     ││   [ ] ✈️  Telegram  · site + app           │
+│                                                     ││   [ ] 📱  WhatsApp  · site + app           │
+│                                                     ││   [ ] 💬  Messenger  · site + app          │
+│                                                     ││   [ ] ▶️  YouTube  · site + app            │
+│                                                     ││   [ ] 🎬  Netflix  · site + app            │
+│                                                     ││   [ ] 🟣  Twitch  · site + app             │
+│                                                     ││   [ ] 📦  Amazon  · site + app             │
+│                                                     ││   [ ] 🛒  eBay  · site + app               │
+│                                                     ││   [ ] 🛍 AliExpress  · site + app          │
+│                                                     ││   [ ] 🤖  ChatGPT  · site + app            │
 ╰─────────────────────────────────────────────────────╯╰───────────────────────────────────────────╯
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-                  ↑/↓ · tab fields   ctrl+s save   ctrl+⏎ save & start   esc cancel
+                  tab next   ctrl+s save   ctrl+⏎ save & start   esc back   F1 keys

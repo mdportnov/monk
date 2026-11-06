@@ -5,4 +5,3 @@ apps = []
 [limits]
 max_duration = "2h"
 min_duration = "15m"
-daily_cap = "4h"

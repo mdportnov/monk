@@ -70,7 +70,7 @@ fn persist_config(cfg: crate::config::Config) -> std::result::Result<(), String>
             match crate::ipc::send(&req).await {
                 Ok(crate::ipc::Response::Ok) => Ok(()),
                 Ok(crate::ipc::Response::Error { message }) => Err(message),
-                Ok(_) => Err("unexpected response from daemon".to_string()),
+                Ok(_) => Err(crate::Error::UnexpectedResponse.to_string()),
                 Err(e) => Err(format!(
                     "{e} — the daemon owns the config file; start it, or rerun as `sudo monk doctor --fix`"
                 )),

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-06
+
+### Security
+
+- tokio 1.54.1 for RUSTSEC-2026-0386 (`AsyncFd` constructors violated I/O
+  safety); 0.4.0 shipped with 1.51.0.
+
+### Fixed
+
+- Unit tests no longer open, prune or write the installed service's audit
+  log, which also made them race each other for it.
+
 ## [0.4.0] - 2026-11-06
 
 ### Changed

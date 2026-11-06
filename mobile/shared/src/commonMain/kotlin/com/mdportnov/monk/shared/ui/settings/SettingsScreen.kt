@@ -80,8 +80,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mdportnov.monk.shared.data.MonkStore
 import com.mdportnov.monk.shared.data.formatClock
-import com.mdportnov.monk.shared.data.nextMidnightMillis
-import com.mdportnov.monk.shared.data.nowMillis
 import com.mdportnov.monk.shared.i18n.strings
 import com.mdportnov.monk.shared.model.ThemeMode
 import com.mdportnov.monk.shared.platform.MonkPlatform
@@ -101,6 +99,8 @@ import com.mdportnov.monk.shared.ui.components.Hint
 import com.mdportnov.monk.shared.ui.components.SliderSetting
 import com.mdportnov.monk.shared.ui.components.Segments
 import com.mdportnov.monk.shared.ui.components.UpdateCard
+import com.mdportnov.monk.shared.ui.components.StrictModeFlow
+import com.mdportnov.monk.shared.ui.components.StrictPick
 import com.mdportnov.monk.shared.ui.theme.supportsDynamicColor
 
 @Composable
@@ -111,9 +111,7 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
     val host = LocalHostActions.current
     val now = rememberNow(listOf(config.strictUntil, config.pausedUntil))
     val strict = config.isStrict(now)
-    val paused = config.isPaused(now)
-    // Minutes chosen (or [STRICT_UNTIL_MIDNIGHT]), not an end time: the end is fixed on confirm.
-    var strictCandidate by rememberSaveable { mutableStateOf<Int?>(null) }
+    var strictOpen by rememberSaveable { mutableStateOf(false) }
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     var showHelp by rememberSaveable { mutableStateOf(false) }
     val haptic = rememberHaptics()
@@ -202,10 +200,7 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
                     // Labelled: an unlabelled time range under the word "Routines" read as the
                     // routines' own hours, which is the opposite of what it is.
                     subtitle = listOf(
-                        s.baseHoursLabel(
-                            if (config.schedule.enabled) "${formatMinute(config.schedule.startMinute)}–${formatMinute(config.schedule.endMinute)}"
-                            else s.scheduleAlways.lowercase(),
-                        ),
+                        s.baseHoursLabel(s.protectionHoursSummary(config.schedule).replaceFirstChar { it.lowercase() }),
                         config.routines.count { it.enabled }.let { if (it == 0) s.routinesNoneOn else s.routinesOn(it) },
                     ).joinToString(" · "),
                     icon = Icons.Outlined.AutoAwesome,
@@ -217,44 +212,18 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
 
         SectionTitle(s.strictTitle)
         SettingsGroup {
-            SettingBlock(icon = Icons.Outlined.Lock, title = s.strictTitle, subtitle = s.strictHint) {
-                if (strict) {
-                    Text(s.strictUntil(formatClock(config.strictUntil)), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
-                } else {
-                    var preset by rememberSaveable { mutableStateOf(StrictPreset.Midnight) }
-                    var customMinutes by rememberSaveable { mutableStateOf(180) }
-                    val h = rememberHaptics()
-                    Segments(
-                        options = listOf(StrictPreset.Midnight to s.strictUntilMidnight, StrictPreset.Hour to s.strict1h, StrictPreset.Custom to s.strictCustom),
-                        selected = preset,
-                        onSelect = { preset = it },
-                    )
-                    AnimatedVisibility(visible = preset == StrictPreset.Custom, enter = Motion.reveal(), exit = Motion.conceal()) {
-                        Column {
-                            var draft by remember(customMinutes) { mutableStateOf(customMinutes.toFloat()) }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(s.forDuration(s.duration(draft.toLong() * 60_000L)), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                                Pill(formatClock(nowMillis() + draft.toLong() * 60_000L), MaterialTheme.colorScheme.primary)
-                            }
-                            Slider(
-                                value = draft,
-                                onValueChange = { v -> val next = ((v / 15f).toInt() * 15).toFloat(); if (next != draft) h.tick(); draft = next },
-                                onValueChangeFinished = { h.select(); customMinutes = draft.toInt() },
-                                valueRange = 15f..(24 * 60).toFloat(),
-                                steps = 24 * 4 - 2,
-                            )
-                        }
-                    }
-                    val minutes = when (preset) {
-                        StrictPreset.Midnight -> STRICT_UNTIL_MIDNIGHT
-                        StrictPreset.Hour -> 60
-                        StrictPreset.Custom -> customMinutes
-                    }
-                    Button(onClick = { h.select(); strictCandidate = minutes }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Outlined.Lock, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(s.strictStart(formatClock(strictUntil(minutes, now))))
-                    }
+            // A door, not a form: the same flow the status card opens, so the two never drift.
+            Surface(
+                onClick = { if (!strict) strictOpen = true },
+                enabled = !strict,
+                color = MaterialTheme.colorScheme.surfaceContainer,
+            ) {
+                SettingRow(
+                    title = s.strictTitle,
+                    subtitle = if (strict) s.strictUntil(formatClock(config.strictUntil)) else s.strictHint,
+                    icon = Icons.Outlined.Lock,
+                ) {
+                    if (!strict) Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -410,22 +379,7 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
     }
 
     if (showHelp) HowItWorksSheet(onDismiss = { showHelp = false })
-    strictCandidate?.let { minutes ->
-        val until = strictUntil(minutes, now)
-        AlertDialog(
-            onDismissRequest = { strictCandidate = null },
-            title = { Text(s.strictConfirmTitle) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(s.strictConfirmBody(formatClock(until)))
-                    if (paused) Hint(s.endsBreakNote)
-                    if (!config.enabled) Hint(s.turnsOnNote)
-                }
-            },
-            confirmButton = { TextButton(onClick = { haptic.confirm(); store.enableStrict(strictUntil(minutes, nowMillis())); strictCandidate = null }) { Text(s.confirm) } },
-            dismissButton = { TextButton(onClick = { strictCandidate = null }) { Text(s.cancel) } },
-        )
-    }
+    if (strictOpen) StrictModeFlow(store, config, now, StrictPick.Custom, onDone = { strictOpen = false })
     if (confirmReset) {
         AlertDialog(
             onDismissRequest = { confirmReset = false },
@@ -439,9 +393,3 @@ fun SettingsScreen(store: MonkStore, platform: MonkPlatform, scrollState: Scroll
         )
     }
 }
-
-private enum class StrictPreset { Midnight, Hour, Custom }
-
-private const val STRICT_UNTIL_MIDNIGHT = -1
-
-private fun strictUntil(minutes: Int, now: Long) = if (minutes == STRICT_UNTIL_MIDNIGHT) nextMidnightMillis() else now + minutes * 60_000L

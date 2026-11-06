@@ -192,6 +192,13 @@ data class MonkConfig(
     val run: RoutineRun? = null,
     /** Epoch millis; protection is off until then. 0 = not paused. */
     val pausedUntil: Long = 0,
+    /**
+     * Epoch millis when the master switch comes back on by itself. Switching off always names a
+     * time: an "off" with no end was how a single evening off turned into a week of open apps.
+     * 0 with [enabled] false is only ever a config from before this field, and the store gives
+     * it an end on load.
+     */
+    val offUntil: Long = 0,
     /** Epoch millis; until then nothing that weakens protection can be changed. 0 = off. */
     val strictUntil: Long = 0,
     /**
@@ -238,6 +245,8 @@ data class MonkConfig(
         minOf((app.delaySeconds ?: defaultDelaySeconds) + app.escalateSeconds * opensToday, MAX_PAUSE_SECONDS)
     fun allowFor(app: BlockedApp) = app.allowMinutes ?: defaultAllowMinutes
     fun isPaused(now: Long) = pausedUntil > now
+    /** The master switch is off this moment. Past [offUntil] it is on again, saved or not yet. */
+    fun isOff(now: Long) = !enabled && (offUntil == 0L || offUntil > now)
     fun isStrict(now: Long) = strictUntil > now
 
     fun routine(id: String): Routine? = routines.firstOrNull { it.id == id }
@@ -280,7 +289,7 @@ data class MonkConfig(
     fun routineHolds(routine: Routine, now: Long, sealed: Boolean = false): Boolean = when {
         activeRun(now)?.routineId == routine.id -> true
         sealed || isStrict(now) -> true
-        !enabled -> false
+        isOff(now) -> false
         isPaused(now) -> routine.ignoresBreaks
         else -> true
     }
@@ -323,7 +332,7 @@ data class MonkConfig(
      */
     fun state(now: Long, dayIso: Int, minuteOfDay: Int): ProtectionState {
         if (activeRun(now) != null) return ProtectionState.ROUTINE
-        if (!enabled) return ProtectionState.OFF
+        if (isOff(now)) return ProtectionState.OFF
         // In force, not merely open: a break outside the base hours used to leave this saying
         // ROUTINE while the policy was letting every app through.
         val held = routinesInForce(now, dayIso, minuteOfDay)
@@ -353,12 +362,16 @@ data class MonkConfig(
             RoutineRun(BuiltInRoutines.FOCUS, focusStartedAt.takeIf { s -> s in 1..it } ?: now, it)
         }
         val nextRun = (run ?: legacyFocus)?.takeIf { r -> r.until > now && all.any { it.id == r.routineId } }
+        // An off that has run out is stored as on, so nothing reading the raw switch is misled.
+        val offOver = !enabled && offUntil in 1..now
         return copy(
             schemaVersion = CURRENT_SCHEMA,
             routines = all,
             run = nextRun,
             focusUntil = 0,
             focusStartedAt = 0,
+            enabled = enabled || offOver,
+            offUntil = if (offOver) 0 else offUntil,
         )
     }
 
@@ -373,6 +386,7 @@ data class MonkConfig(
         fun Long.moved() = if (this == 0L) 0L else this + deltaMillis
         return copy(
             pausedUntil = pausedUntil.moved(),
+            offUntil = offUntil.moved(),
             strictUntil = strictUntil.moved(),
             focusUntil = focusUntil.moved(),
             focusStartedAt = focusStartedAt.moved(),
@@ -527,7 +541,7 @@ object BlockPolicy {
      */
     fun layersAt(config: MonkConfig, app: BlockedApp, nowMillis: Long, dayIso: Int, minuteOfDay: Int): Layers {
         val sealed = app.locked || config.isStrict(nowMillis)
-        val off = !config.enabled
+        val off = config.isOff(nowMillis)
         val onBreak = config.isPaused(nowMillis)
         val routines = config.activeRoutines(app.packageName, nowMillis, dayIso, minuteOfDay)
             .filter { config.routineHolds(it, nowMillis, sealed) }
@@ -650,7 +664,8 @@ object BlockPolicy {
         // front, and nothing else would tell us the moment protection comes back.
         val breakEnd = if (nowMillis > 0 && config.isPaused(nowMillis)) config.pausedUntil - nowMillis else null
         val runEnd = if (nowMillis > 0) config.activeRun(nowMillis)?.let { it.until - nowMillis } else null
-        return listOfNotNull(minutes, breakEnd, runEnd).minOrNull()
+        val offEnd = if (nowMillis > 0 && config.isOff(nowMillis) && config.offUntil > 0) config.offUntil - nowMillis else null
+        return listOfNotNull(minutes, breakEnd, runEnd, offEnd).minOrNull()
     }
 
     /**

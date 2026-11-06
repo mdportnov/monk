@@ -190,7 +190,7 @@ class FocusTileService : MonkTileService(TileRegistry.FOCUS) {
         val minutes = routine.manualMinutes.coerceAtLeast(5)
         val until = now + minutes * 60_000L
         // Starting one ends a running break and turns protection on: say so where it applies.
-        val notes = listOfNotNull(s.endsBreakNote.takeIf { c.isPaused(now) }, s.turnsOnNote.takeIf { !c.enabled })
+        val notes = listOfNotNull(s.endsBreakNote.takeIf { c.isPaused(now) }, s.turnsOnNote.takeIf { c.isOff(now) })
         val dialog = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(s.routineStartTitle(name))
             .setMessage((listOf(s.routineStartBody(name, formatClock(until))) + notes).joinToString("\n\n"))

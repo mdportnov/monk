@@ -90,7 +90,7 @@ fun routineStateLine(store: MonkStore, config: MonkConfig, routine: Routine, now
     // or a break it does not hold through. Saying "active until 07:00" there is the app telling
     // the user they are protected while the gate lets every app through.
     if (!config.routineHolds(routine, now)) {
-        return if (!config.enabled) s.routineHeldOffBySwitch else s.routineHeldOffByBreak
+        return if (config.isOff(now)) s.routineHeldOffBySwitch else s.routineHeldOffByBreak
     }
     val until = store.routineEndsAt(routine)
     return if (until == null) s.routineOpenNow else s.routineOpenUntil(formatClock(until))
@@ -175,7 +175,7 @@ fun RoutineStartSheet(store: MonkStore, routine: Routine, onDismiss: () -> Unit)
                     )
                     if (tooShort) Hint(s.routineRunsUntil(formatClock(live.until)))
                     if (config.isPaused(now)) Hint(s.endsBreakNote)
-                    if (!config.enabled) Hint(s.turnsOnNote)
+                    if (config.isOff(now)) Hint(s.turnsOnNote)
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -20,6 +20,9 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -155,124 +158,158 @@ fun AppDetailScreen(store: MonkStore, packageName: String, onClose: () -> Unit, 
                         // Tightening (Pause → Block) stays possible under a lock; loosening does not.
                         enabled = !strict || app.mode == BlockMode.DELAY,
                     ) { mode -> if (!strict || mode == BlockMode.BLOCK) store.upsertApp(app.copy(mode = mode)) }
-                }
-            }
-
-            // The pause length and the allowance matter wherever a pause screen can show, the
-            // limit wherever the app can open at all: a Block app with a Pause or Free window included.
-            if (app.hasPauseScreen) {
-                SectionTitle(s.delayLength)
-                SettingsGroup {
-                    SettingRow(title = s.useDefault, subtitle = s.currently("${config.defaultDelaySeconds} ${s.seconds}")) {
-                        HapticSwitch(
-                            checked = app.delaySeconds == null,
-                            enabled = !strict,
-                            onCheckedChange = { useDefault ->
-                                store.upsertApp(app.copy(delaySeconds = if (useDefault) null else config.defaultDelaySeconds))
-                            },
-                        )
-                    }
-                    if (app.delaySeconds != null) {
-                        SettingsDivider()
-                        SliderSetting(
-                            title = s.delayLength, hint = s.delayLengthHint, value = app.delaySeconds, unit = s.seconds,
-                            range = 3..120, enabled = !strict,
-                            onChange = { store.upsertApp(app.copy(delaySeconds = it)) },
-                        )
-                    }
-                    SettingsDivider()
-                    SliderSetting(
-                        title = s.escalate,
-                        hint = if (app.escalateSeconds > 0) {
-                            s.escalateHint + "\n" + s.escalateToday(config.delayFor(app, store.opensToday(app.packageName)))
-                        } else {
-                            s.escalateHint
-                        },
-                        value = app.escalateSeconds, unit = s.seconds, range = 0..30, step = 5,
-                        enabled = !strict,
-                        format = { if (it == 0) s.escalateOff else "+$it ${s.seconds}" },
-                        onChange = { store.upsertApp(app.copy(escalateSeconds = it)) },
+                    Text(
+                        s.appSummary(
+                            block = app.mode == BlockMode.BLOCK,
+                            delay = app.delaySeconds ?: config.defaultDelaySeconds,
+                            grows = app.escalateSeconds > 0,
+                            allow = app.allowMinutes ?: config.defaultAllowMinutes,
+                            limit = app.dailyLimit,
+                            rules = app.rules.size,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-
-                SectionTitle(s.allowLength)
-                SettingsGroup {
-                    SettingRow(title = s.useDefault, subtitle = s.currently("${config.defaultAllowMinutes} ${s.minutes}")) {
-                        HapticSwitch(
-                            checked = app.allowMinutes == null,
-                            enabled = !strict,
-                            onCheckedChange = { useDefault ->
-                                store.upsertApp(app.copy(allowMinutes = if (useDefault) null else config.defaultAllowMinutes))
-                            },
-                        )
-                    }
-                    if (app.allowMinutes != null) {
-                        SettingsDivider()
-                        SliderSetting(
-                            title = s.allowLength, hint = s.allowLengthHint, value = app.allowMinutes, unit = s.minutes,
-                            range = 1..60, enabled = !strict,
-                            onChange = { store.upsertApp(app.copy(allowMinutes = it)) },
-                        )
-                    }
-                }
             }
 
-            if (app.canOpen) {
-                SectionTitle(s.dailyLimit)
-                SettingsGroup {
-                    SettingRow(title = s.noLimit, subtitle = s.dailyLimitHint) {
-                        HapticSwitch(
-                            checked = app.dailyLimit == null,
-                            enabled = !strict,
-                            onCheckedChange = { unlimited -> store.upsertApp(app.copy(dailyLimit = if (unlimited) null else 3)) },
-                        )
-                    }
-                    if (app.dailyLimit != null) {
-                        SettingsDivider()
-                        SliderSetting(
-                            title = s.dailyLimit, hint = null, value = app.dailyLimit, unit = s.times,
-                            range = 1..20, enabled = !strict, format = { "$it${s.times}" },
-                            onChange = { store.upsertApp(app.copy(dailyLimit = it)) },
-                        )
-                    }
-                }
-            }
-
-            SectionTitle(s.rulesTitle)
+            // Everything below the mode is tuning most people never touch, so it starts folded —
+            // unless something in it already differs from the defaults, which must not hide.
+            val tuned = app.delaySeconds != null || app.allowMinutes != null || app.escalateSeconds > 0 ||
+                app.dailyLimit != null || app.rules.isNotEmpty()
+            var expanded by rememberSaveable(packageName) { mutableStateOf(tuned) }
             SettingsGroup {
-                SettingBlock(icon = Icons.Outlined.Schedule, subtitle = s.rulesHint) {
-                    if (app.rules.isEmpty()) Hint(s.noRules)
-                    // Rules are the app's own layer, and that layer is switched off outside the
-                    // base hours. Without this the page reads as though a 22:00 rule would fire.
-                    if (config.schedule.enabled) {
-                        Hint(s.rulesInsideBaseHours("${formatMinute(config.schedule.startMinute)}–${formatMinute(config.schedule.endMinute)}"))
-                    }
+                Surface(onClick = { expanded = !expanded }, color = MaterialTheme.colorScheme.surfaceContainer) {
+                    SettingRow(
+                        title = s.fineTuning,
+                        subtitle = s.fineTuningHint,
+                        icon = Icons.Outlined.Tune,
+                        trailing = {
+                            Icon(
+                                if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                    )
                 }
-                app.rules.sortedBy { it.startMinute }.forEach { rule -> key(rule.id) {
-                    // The answer is a walk over every minute of the week; it changes only when the
-                    // rule or the base hours do, and it must not be recomputed on every frame.
-                    val dead = remember(rule, config.schedule) { !rule.everAppliesUnder(config.schedule) }
-                    SettingsDivider()
-                    Surface(onClick = { if (!strict) { editing = rule; editingIsNew = false } }, color = MaterialTheme.colorScheme.surfaceContainer, enabled = !strict) {
-                        SettingRow(
-                            title = ruleSummary(rule),
-                            subtitle = if (dead) s.ruleOutsideBaseHours else null,
-                            trailing = if (strict) null else ({ Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }),
+            }
+            if (expanded) {
+                // The pause length and the allowance matter wherever a pause screen can show, the
+                // limit wherever the app can open at all: a Block app with a Pause or Free window included.
+                if (app.hasPauseScreen) {
+                    SectionTitle(s.delayLength)
+                    SettingsGroup {
+                        SettingRow(title = s.useDefault, subtitle = s.currently("${config.defaultDelaySeconds} ${s.seconds}")) {
+                            HapticSwitch(
+                                checked = app.delaySeconds == null,
+                                enabled = !strict,
+                                onCheckedChange = { useDefault ->
+                                    store.upsertApp(app.copy(delaySeconds = if (useDefault) null else config.defaultDelaySeconds))
+                                },
+                            )
+                        }
+                        if (app.delaySeconds != null) {
+                            SettingsDivider()
+                            SliderSetting(
+                                title = s.delayLength, hint = s.delayLengthHint, value = app.delaySeconds, unit = s.seconds,
+                                range = 3..120, enabled = !strict,
+                                onChange = { store.upsertApp(app.copy(delaySeconds = it)) },
+                            )
+                        }
+                        SettingsDivider()
+                        SliderSetting(
+                            title = s.escalate,
+                            hint = if (app.escalateSeconds > 0) {
+                                s.escalateHint + "\n" + s.escalateToday(config.delayFor(app, store.opensToday(app.packageName)))
+                            } else {
+                                s.escalateHint
+                            },
+                            value = app.escalateSeconds, unit = s.seconds, range = 0..30, step = 5,
+                            enabled = !strict,
+                            format = { if (it == 0) s.escalateOff else "+$it ${s.seconds}" },
+                            onChange = { store.upsertApp(app.copy(escalateSeconds = it)) },
                         )
                     }
-                } }
-                // Outside the loop over rules: with no rule yet there is nothing to iterate, and
-                // the one way to make the first one would have been missing.
-                if (!strict) {
-                    SettingsDivider()
-                    SettingBlock {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = {
-                                editing = TimeRule(id = nowMillis(), startMinute = 6 * 60, endMinute = 9 * 60)
-                                editingIsNew = true
-                            }) { Text(s.addRule) }
-                            if (app.rules.isNotEmpty()) {
-                                TextButton(onClick = { store.upsertApp(app.copy(rules = emptyList())) }) { Text(s.resetRules, color = MaterialTheme.colorScheme.error) }
+
+                    SectionTitle(s.allowLength)
+                    SettingsGroup {
+                        SettingRow(title = s.useDefault, subtitle = s.currently("${config.defaultAllowMinutes} ${s.minutes}")) {
+                            HapticSwitch(
+                                checked = app.allowMinutes == null,
+                                enabled = !strict,
+                                onCheckedChange = { useDefault ->
+                                    store.upsertApp(app.copy(allowMinutes = if (useDefault) null else config.defaultAllowMinutes))
+                                },
+                            )
+                        }
+                        if (app.allowMinutes != null) {
+                            SettingsDivider()
+                            SliderSetting(
+                                title = s.allowLength, hint = s.allowLengthHint, value = app.allowMinutes, unit = s.minutes,
+                                range = 1..60, enabled = !strict,
+                                onChange = { store.upsertApp(app.copy(allowMinutes = it)) },
+                            )
+                        }
+                    }
+                }
+
+                if (app.canOpen) {
+                    SectionTitle(s.dailyLimit)
+                    SettingsGroup {
+                        SettingRow(title = s.noLimit, subtitle = s.dailyLimitHint) {
+                            HapticSwitch(
+                                checked = app.dailyLimit == null,
+                                enabled = !strict,
+                                onCheckedChange = { unlimited -> store.upsertApp(app.copy(dailyLimit = if (unlimited) null else 3)) },
+                            )
+                        }
+                        if (app.dailyLimit != null) {
+                            SettingsDivider()
+                            SliderSetting(
+                                title = s.dailyLimit, hint = null, value = app.dailyLimit, unit = s.times,
+                                range = 1..20, enabled = !strict, format = { "$it${s.times}" },
+                                onChange = { store.upsertApp(app.copy(dailyLimit = it)) },
+                            )
+                        }
+                    }
+                }
+
+                SectionTitle(s.rulesTitle)
+                SettingsGroup {
+                    SettingBlock(icon = Icons.Outlined.Schedule, subtitle = s.rulesHint) {
+                        if (app.rules.isEmpty()) Hint(s.noRules)
+                        // Rules are the app's own layer, and that layer is switched off outside the
+                        // base hours. Without this the page reads as though a 22:00 rule would fire.
+                        if (config.schedule.enabled) {
+                            Hint(s.rulesInsideBaseHours("${formatMinute(config.schedule.startMinute)}–${formatMinute(config.schedule.endMinute)}"))
+                        }
+                    }
+                    app.rules.sortedBy { it.startMinute }.forEach { rule -> key(rule.id) {
+                        // The answer is a walk over every minute of the week; it changes only when the
+                        // rule or the base hours do, and it must not be recomputed on every frame.
+                        val dead = remember(rule, config.schedule) { !rule.everAppliesUnder(config.schedule) }
+                        SettingsDivider()
+                        Surface(onClick = { if (!strict) { editing = rule; editingIsNew = false } }, color = MaterialTheme.colorScheme.surfaceContainer, enabled = !strict) {
+                            SettingRow(
+                                title = ruleSummary(rule),
+                                subtitle = if (dead) s.ruleOutsideBaseHours else null,
+                                trailing = if (strict) null else ({ Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }),
+                            )
+                        }
+                    } }
+                    // Outside the loop over rules: with no rule yet there is nothing to iterate, and
+                    // the one way to make the first one would have been missing.
+                    if (!strict) {
+                        SettingsDivider()
+                        SettingBlock {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = {
+                                    editing = TimeRule(id = nowMillis(), startMinute = 6 * 60, endMinute = 9 * 60)
+                                    editingIsNew = true
+                                }) { Text(s.addRule) }
+                                if (app.rules.isNotEmpty()) {
+                                    TextButton(onClick = { store.upsertApp(app.copy(rules = emptyList())) }) { Text(s.resetRules, color = MaterialTheme.colorScheme.error) }
+                                }
                             }
                         }
                     }

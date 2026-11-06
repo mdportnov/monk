@@ -133,11 +133,67 @@ class StateConsistencyTest {
     }
 
     @Test
+    fun switchingOffAlwaysComesBackOnByItself() {
+        val store = MonkStore(InMemoryStore()).apply { upsertApp(insta) }
+        val t0 = nowMillis()
+        assertTrue(store.switchOff(t0 + 60 * min))
+        val c = store.config.value
+        assertTrue(c.isOff(t0 + 30 * min))
+        assertEquals(ProtectionState.OFF, c.state(t0 + 30 * min, 3, 12 * 60))
+        assertEquals(Decision.Allow, BlockPolicy.decide(c, insta.packageName, t0 + 30 * min, 3, 12 * 60, emptyMap()))
+        // Past the end the stored config still says off, and the gate must not believe it.
+        assertFalse(c.isOff(t0 + 61 * min))
+        assertEquals(ProtectionState.ON, c.state(t0 + 61 * min, 3, 12 * 60))
+        assertTrue(BlockPolicy.decide(c, insta.packageName, t0 + 61 * min, 3, 12 * 60, emptyMap()) != Decision.Allow)
+        // The service must wake when the off runs out, with the app still in front.
+        val wake = BlockPolicy.millisToNextChange(c, c.app(insta.packageName)!!, 3, 12 * 60, 0, t0)
+        assertTrue(wake != null && wake in 1..60 * min)
+        store.settleSwitch(t0 + 61 * min)
+        assertTrue(store.config.value.enabled)
+        assertEquals(0L, store.config.value.offUntil)
+    }
+
+    @Test
+    fun anOffThatHasRunOutIsStoredAsOnWhenLoaded() {
+        val t0 = nowMillis()
+        val stale = MonkConfig(enabled = false, offUntil = t0 - min).normalized(t0)
+        assertTrue(stale.enabled)
+        assertEquals(0L, stale.offUntil)
+    }
+
+    @Test
+    fun anOffWithoutAnEndFromAnOlderBuildGetsOne() {
+        val kv = InMemoryStore()
+        MonkStore(kv).apply { upsertApp(insta); updateConfig { it.copy(enabled = false, offUntil = 0) } }
+        val reloaded = MonkStore(kv).config.value
+        assertFalse(reloaded.enabled)
+        assertTrue(reloaded.offUntil > nowMillis())
+    }
+
+    @Test
+    fun switchingOffRefusesAMomentInThePast() {
+        val store = MonkStore(InMemoryStore()).apply { upsertApp(insta) }
+        assertFalse(store.switchOff(nowMillis() - 1))
+        assertTrue(store.config.value.enabled)
+    }
+
+    @Test
+    fun aShorterStrictPickNeverCutsTheRunningOneShort() {
+        val store = MonkStore(InMemoryStore()).apply { upsertApp(insta) }
+        val t0 = nowMillis()
+        store.enableStrict(t0 + 120 * min)
+        store.enableStrict(t0 + 60 * min)
+        assertEquals(t0 + 120 * min, store.config.value.strictUntil)
+        store.enableStrict(t0 + 180 * min)
+        assertEquals(t0 + 180 * min, store.config.value.strictUntil)
+    }
+
+    @Test
     fun switchingOffDuringABreakEndsItByHand() {
         val store = MonkStore(InMemoryStore()).apply { upsertApp(insta) }
         val t0 = nowMillis()
         assertTrue(store.pauseProtection(t0 + 30 * min))
-        assertTrue(store.switchOff())
+        assertTrue(store.switchOff(nowMillis() + 60 * 60_000L))
         val c = store.config.value
         assertFalse(c.enabled)
         assertEquals(0L, c.pausedUntil)
@@ -150,7 +206,7 @@ class StateConsistencyTest {
 
     @Test
     fun startingARoutineWhileOffTurnsProtectionOnToStay() {
-        val store = MonkStore(InMemoryStore()).apply { upsertApp(insta); switchOff() }
+        val store = MonkStore(InMemoryStore()).apply { upsertApp(insta); switchOff(nowMillis() + 60 * 60_000L) }
         val t0 = nowMillis()
         assertTrue(store.startRoutine(BuiltInRoutines.FOCUS, t0 + 15 * min))
         assertTrue(store.config.value.enabled)

@@ -51,7 +51,10 @@ class MonkStore(
     // Normalised on the way in, once: the built-in routines are seeded or topped up, hand-edited
     // values are repaired, and a focus session written by a build before routines becomes a run.
     // Everything downstream may assume the result.
-    private val _config = MutableStateFlow(loadedConfig.normalized(nowMillis()))
+    // An off saved by a build where off had no end gets one: it comes back at the next midnight.
+    private val _config = MutableStateFlow(
+        loadedConfig.normalized(nowMillis()).let { if (!it.enabled && it.offUntil == 0L) it.copy(offUntil = nextMidnightMillis()) else it },
+    )
     val config: StateFlow<MonkConfig> = _config
 
     private val _stats = MutableStateFlow(loadStats() ?: Stats())
@@ -188,7 +191,8 @@ class MonkStore(
         val now = at.toEpochMilliseconds()
         val breakEnd = if (config.isPaused(now)) config.pausedUntil - now else null
         val sessionEnd = config.activeRun(now)?.let { it.until - now }
-        return listOfNotNull(boundary, breakEnd, sessionEnd).minOrNull()
+        val offEnd = if (config.isOff(now) && config.offUntil > 0) config.offUntil - now else null
+        return listOfNotNull(boundary, breakEnd, sessionEnd, offEnd).minOrNull()
     }
 
     /**
@@ -232,16 +236,26 @@ class MonkStore(
 
     fun resumeProtection() = updateConfig { it.endingBreak(nowMillis()) }
 
-    /** The master switch, off. Strict mode and a running routine keep it on; locked apps ignore it anyway. */
-    fun switchOff(): Boolean {
+    /**
+     * The master switch, off until [untilMillis], when it comes back on by itself. Strict mode and
+     * a running routine keep it on; locked apps ignore it anyway.
+     */
+    fun switchOff(untilMillis: Long): Boolean {
         val now = nowMillis()
+        if (untilMillis <= now) return false
         if (_config.value.isStrict(now) || _config.value.activeRun(now) != null) return false
-        updateConfig { it.endingBreak(now).copy(enabled = false) }
+        updateConfig { it.endingBreak(now).copy(enabled = false, offUntil = untilMillis) }
         return true
     }
 
     /** The master switch, on. A break, if one was somehow running, ends here too. */
-    fun switchOn() = updateConfig { it.endingBreak(nowMillis()).copy(enabled = true) }
+    fun switchOn() = updateConfig { it.endingBreak(nowMillis()).copy(enabled = true, offUntil = 0) }
+
+    /** An off that has run out is written back as on, so storage says what the policy already does. */
+    fun settleSwitch(now: Long = nowMillis()) {
+        val c = _config.value
+        if (!c.enabled && c.offUntil in 1..now) updateConfig { it.copy(enabled = true, offUntil = 0) }
+    }
 
     /** The wall clock jumped by [deltaMillis]: every deadline follows it, allowances included. */
     fun shiftTimers(deltaMillis: Long) {
@@ -330,7 +344,7 @@ class MonkStore(
         val live = current.activeRun(now)
         if (live != null && (live.routineId != id || untilMillis <= live.until)) return false
         val run = RoutineRun(id, live?.startedAt ?: now, untilMillis)
-        updateConfig { it.endingBreak(now).copy(run = run, enabled = true) }
+        updateConfig { it.endingBreak(now).copy(run = run, enabled = true, offUntil = 0) }
         revokeAllowancesFor(routine)
         return true
     }
@@ -387,7 +401,8 @@ class MonkStore(
         val now = nowMillis()
         // Already over: nothing to hold, and ending the user's break for it would be all it did.
         if (untilMillis <= now) return
-        updateConfig { it.endingBreak(now).copy(strictUntil = untilMillis, enabled = true) }
+        // Strict mode only ever lengthens: a second, shorter pick must not cut the promise short.
+        updateConfig { it.endingBreak(now).copy(strictUntil = maxOf(it.strictUntil, untilMillis), enabled = true, offUntil = 0) }
     }
 
     fun grantAllowance(packageName: String, minutes: Int, now: Long = nowMillis()) {

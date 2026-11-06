@@ -72,6 +72,7 @@ import androidx.compose.material3.Surface
 import com.mdportnov.monk.shared.ui.components.HowItWorksSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -142,7 +143,8 @@ fun HomeScreen(
     val permissions by platform.permissions.collectAsStateWithLifecycle()
     // Pause / strict / allowance countdowns and the schedule flip on their own; timers also move
     // when the wall clock is set by hand (the service shifts them), so those re-read the clock.
-    val now = rememberNow(listOf(config.run?.until, config.strictUntil, config.pausedUntil) + allowances.values)
+    val now = rememberNow(listOf(config.run?.until, config.strictUntil, config.pausedUntil, config.offUntil) + allowances.values)
+    LaunchedEffect(now) { store.settleSwitch(now) }
     LifecycleResumeEffect(Unit) {
         platform.refreshPermissions()
         onPauseOrDispose { }
@@ -185,19 +187,31 @@ fun HomeScreen(
                 platform.updater?.let { u -> item(key = "update") { Box(itemMotion()) { UpdateCard(u, compact = true) } } }
                 if (permissions.accessibilityEnabled) {
                     item(key = "status") { Box(itemMotion()) { StatusCard(store, config, permissions, now, showControls = apps.isNotEmpty()) } }
-                    // Second on the page, right under the state it changes: routines are the one
-                    // thing here a person comes back to set, and a row in Settings hid them.
+                }
+                // Everything that stands between the phone and protection, in one card and in
+                // order of harm: a dead service first, a service the system may kill next, and a
+                // missing warning last. Three cards in the same clothes read as noise.
+                val issues = buildList {
+                    if (!permissions.accessibilityEnabled) add(Issue.Setup)
+                    else if (permissions.backgroundNeedsAttention) add(Issue.KeepAlive)
+                    if (apps.isNotEmpty() && config.notifyWhenOff && !permissions.notificationsGranted && !config.notifyPromptDismissed) add(Issue.Notify)
+                }
+                if (issues.isNotEmpty()) {
+                    item(key = "attention") {
+                        Box(itemMotion()) {
+                            AttentionCard(issues, permissions, platform, onDismissNotify = { store.updateConfig { it.copy(notifyPromptDismissed = true) } })
+                        }
+                    }
+                }
+                if (permissions.accessibilityEnabled) {
+                    // Right under the state it changes: routines are the one thing here a person
+                    // comes back to set, and a row in Settings hid them.
                     if (apps.isNotEmpty()) {
                         item(key = "routines") { Box(itemMotion()) { RoutinesCard(store, config, now, onStart = { startingRoutine = it }) } }
                     }
-                    if (permissions.backgroundNeedsAttention) item(key = "keepalive") { Box(itemMotion()) { KeepAliveCard(permissions, platform) } }
-                    if (apps.isNotEmpty() && config.notifyWhenOff && !permissions.notificationsGranted && !config.notifyPromptDismissed) {
-                        item(key = "notify") { Box(itemMotion()) { NotifyCard(onDismiss = { store.updateConfig { it.copy(notifyPromptDismissed = true) } }) } }
+                    if (apps.isNotEmpty() || stats.days.isNotEmpty() || screenTime?.available == true) {
+                        item(key = "digest") { Box(itemMotion()) { DigestCard(config, stats, screenTime, today, onOpenStats) } }
                     }
-                    if (apps.isNotEmpty()) item(key = "today") { Box(itemMotion()) { TodayCard(config, stats, now, today, onOpenStats) } }
-                    if (stats.days.isNotEmpty() || screenTime?.available == true) item(key = "week") { Box(itemMotion()) { WeekCard(stats, screenTime, onOpenStats) } }
-                } else {
-                    item(key = "setup") { Box(itemMotion()) { SetupCard(platform) } }
                 }
             }
             if (!config.helpDismissed && apps.isEmpty()) {
@@ -395,55 +409,15 @@ fun MonkMark(size: Dp) {
  * The day at a glance: today's counters, a live countdown when a focus session or a pause is
  * running, and one line to keep the reason in view.
  */
+/**
+ * Today and the week in one card that leads to Stats. The running break or routine is not
+ * repeated here: the status card above already says what is on and until when.
+ */
 @Composable
-private fun TodayCard(config: MonkConfig, stats: Stats, now: Long, today: String, onOpenStats: () -> Unit) {
+private fun DigestCard(config: MonkConfig, stats: Stats, screenTime: ScreenTimeReport?, today: String, onOpenStats: () -> Unit) {
     val s = strings
     val day = stats.day(today)
     val quote = remember(today, config.language) { Quotes.of(config.language, localMoment().dayOfYear) }
-    val moment = localMoment()
-    // Only a countdown belongs here: a routine open on its own hours has no timer to repeat.
-    val run = config.activeRun(now)
-    val running: Pair<String, Long>? = when {
-        run != null -> (config.runningRoutine(now)?.let { s.routineName(it) } ?: s.routineEyebrow) to run.until
-        config.state(now, moment.dayIso, moment.minuteOfDay) == ProtectionState.BREAK -> s.pauseFor to config.pausedUntil
-        else -> null
-    }
-    MonkCard(onClick = onOpenStats) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(s.statsToday, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            if (running != null) {
-                // The hero already counts minutes down; here the end time, so the two never repeat.
-                val isBreak = run == null
-                Pill(
-                    if (isBreak) s.pausedUntil(formatClock(running.second)) else "${running.first} · ${s.until(formatClock(running.second))}",
-                    if (isBreak) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
-                )
-            }
-            Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Counter(day.intercepted, s.intercepted)
-            Counter(day.turnedAway, s.turnedAway, MaterialTheme.colorScheme.tertiary)
-            Counter(day.opened, s.opened, MaterialTheme.colorScheme.primary)
-        }
-        // The counters only add up once every pause has ended; say so while they do not.
-        val pending = day.intercepted - day.turnedAway - day.opened
-        if (pending > 0) Hint(s.pendingCount(pending))
-        // A pull-quote: set a size up in italics, no rule and no quote marks — the type carries it.
-        Text(
-            quote,
-            style = MaterialTheme.typography.titleMedium.copy(fontStyle = FontStyle.Italic, fontWeight = FontWeight.Medium, lineHeight = 22.sp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-        )
-    }
-}
-
-/** The week in one card; the whole card leads to the Stats tab. Screen time appears once usage access is granted. */
-@Composable
-private fun WeekCard(stats: Stats, screenTime: ScreenTimeReport?, onOpenStats: () -> Unit) {
-    val s = strings
-    val today = localMoment().dateIso
     val dates = remember(today) { lastDates(7) }
     val days = remember(stats, dates) { dates.map { stats.day(it) } }
     val paused = days.sumOf { it.intercepted }
@@ -452,12 +426,29 @@ private fun WeekCard(stats: Stats, screenTime: ScreenTimeReport?, onOpenStats: (
     MonkCard(onClick = onOpenStats) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(s.thisWeek, style = MaterialTheme.typography.titleMedium)
-                if (paused == 0) Hint(s.noWeekData) else Text(s.weekLine(paused, away), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(s.statsToday, style = MaterialTheme.typography.titleMedium)
+                if (paused == 0) Hint(s.noWeekData)
+                else Text("${s.thisWeek}: ${s.weekLine(paused, away)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Sparkline(days.map { it.turnedAway }, days.map { it.opened })
             Spacer(Modifier.width(4.dp))
             Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (config.apps.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Counter(day.intercepted, s.intercepted)
+                Counter(day.turnedAway, s.turnedAway, MaterialTheme.colorScheme.tertiary)
+                Counter(day.opened, s.opened, MaterialTheme.colorScheme.primary)
+            }
+            // The counters only add up once every pause has ended; say so while they do not.
+            val pending = day.intercepted - day.turnedAway - day.opened
+            if (pending > 0) Hint(s.pendingCount(pending))
+        }
+        if (paused > 0) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Pill(s.successRate(away * 100 / paused), MaterialTheme.colorScheme.tertiary)
+                if (streak > 0) Pill(s.streak(streak), MaterialTheme.colorScheme.primary)
+            }
         }
         if (screenTime?.available == true) {
             // Its own tap target inside the card: the line leads to the full screen-time page, the card to Stats.
@@ -475,13 +466,13 @@ private fun WeekCard(stats: Stats, screenTime: ScreenTimeReport?, onOpenStats: (
                 Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
             }
         }
-        if (paused > 0) {
-            // Two sentences now, not two numbers: let them wrap on a narrow screen.
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Pill(s.successRate(away * 100 / paused), MaterialTheme.colorScheme.tertiary)
-                if (streak > 0) Pill(s.streak(streak), MaterialTheme.colorScheme.primary)
-            }
-        }
+        // A pull-quote: set a size up in italics, no rule and no quote marks — the type carries it.
+        Text(
+            quote,
+            style = MaterialTheme.typography.titleMedium.copy(fontStyle = FontStyle.Italic, fontWeight = FontWeight.Medium, lineHeight = 22.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        )
     }
 }
 
@@ -508,11 +499,54 @@ private fun Sparkline(away: List<Int>, opened: List<Int>) {
     }
 }
 
-/** Replaces the status card while the service is off: one job, one button, the exact path. */
+private enum class Issue { Setup, KeepAlive, Notify }
+
+/**
+ * One card for whatever is in the way: the gravest problem in full with its one action, the rest
+ * behind "show N more". While the service is off this card stands where the status card would.
+ */
 @Composable
-private fun SetupCard(platform: MonkPlatform) {
+private fun AttentionCard(issues: List<Issue>, permissions: PermissionStatus, platform: MonkPlatform, onDismissNotify: () -> Unit) {
     val s = strings
+    var expanded by rememberSaveable { mutableStateOf(false) }
     MonkCard {
+        // The setup body names its own job; the umbrella title is for the cases it would not.
+        if (issues.size > 1 || issues.first() != Issue.Setup) {
+            Text(s.attentionTitle.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+        }
+        IssueBody(issues.first(), permissions, platform, onDismissNotify)
+        if (issues.size > 1) {
+            AnimatedVisibility(visible = expanded, enter = Motion.reveal(), exit = Motion.conceal()) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    issues.drop(1).forEach { issue ->
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        IssueBody(issue, permissions, platform, onDismissNotify)
+                    }
+                }
+            }
+            TextButton(onClick = { expanded = !expanded }) {
+                Text(if (expanded) s.attentionLess else s.attentionMore(issues.size - 1))
+            }
+        }
+    }
+}
+
+@Composable
+private fun IssueBody(issue: Issue, permissions: PermissionStatus, platform: MonkPlatform, onDismissNotify: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        when (issue) {
+            Issue.Setup -> SetupBody(platform)
+            Issue.KeepAlive -> KeepAliveBody(permissions, platform)
+            Issue.Notify -> NotifyBody(onDismissNotify)
+        }
+    }
+}
+
+/** While the service is off: one job, one button, the exact path. */
+@Composable
+private fun SetupBody(platform: MonkPlatform) {
+    val s = strings
+    run {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
                 Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
@@ -539,10 +573,10 @@ private fun SetupCard(platform: MonkPlatform) {
  * Shown once there is something to watch; "Not now" hides it for good, Settings keeps the switch.
  */
 @Composable
-private fun NotifyCard(onDismiss: () -> Unit) {
+private fun NotifyBody(onDismiss: () -> Unit) {
     val s = strings
     val host = LocalHostActions.current
-    MonkCard {
+    run {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
                 Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
@@ -562,14 +596,13 @@ private fun NotifyCard(onDismiss: () -> Unit) {
 }
 
 /**
- * The OS side of "the service must not die": shown under the status card only while a switch
- * still points the wrong way, in the setup card's clothes. Each row is a live check with the
- * one deep link that flips it.
+ * The OS side of "the service must not die": shown only while a switch still points the wrong
+ * way. Each row is a live check with the one deep link that flips it.
  */
 @Composable
-private fun KeepAliveCard(permissions: PermissionStatus, platform: MonkPlatform) {
+private fun KeepAliveBody(permissions: PermissionStatus, platform: MonkPlatform) {
     val s = strings
-    MonkCard {
+    run {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
                 Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),

@@ -370,7 +370,7 @@ class RoutineTest {
         assertFalse(store.startRoutine(empty.id, nowMillis() + 30 * min))
         store.updateConfig { it.copy(run = RoutineRun(empty.id, nowMillis(), nowMillis() + 30 * min)) }
         assertNull(store.config.value.activeRun(nowMillis()))
-        assertTrue(store.switchOff())
+        assertTrue(store.switchOff(nowMillis() + 60 * 60_000L))
     }
 
     @Test
@@ -524,7 +524,7 @@ class RoutineTest {
         assertTrue(store.startRoutine(BuiltInRoutines.FOCUS, t0 + 30 * min))
         assertFalse(store.canStartBreak())
         assertFalse(store.pauseProtection(t0 + 5 * min))
-        assertFalse(store.switchOff())
+        assertFalse(store.switchOff(nowMillis() + 60 * 60_000L))
         assertTrue(store.config.value.enabled)
     }
 

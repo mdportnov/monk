@@ -74,17 +74,17 @@ class ProtectionFrictionTest {
     fun strictAndARunningRoutineRefuseBreaksAndOffAtTheStore() {
         val strict = MonkStore(InMemoryStore()).apply { upsertApp(insta); enableStrict(nowMillis() + 60 * min) }
         assertFalse(strict.pauseProtection(nowMillis() + 5 * min))
-        assertFalse(strict.switchOff())
+        assertFalse(strict.switchOff(nowMillis() + 60 * 60_000L))
         assertTrue(strict.config.value.enabled)
         assertEquals(0L, strict.config.value.pausedUntil)
 
         val focus = MonkStore(InMemoryStore()).apply { upsertApp(insta); startRoutine(BuiltInRoutines.FOCUS, nowMillis() + 30 * min) }
         assertFalse(focus.pauseProtection(nowMillis() + 5 * min))
-        assertFalse(focus.switchOff())
+        assertFalse(focus.switchOff(nowMillis() + 60 * 60_000L))
         assertTrue(focus.config.value.enabled)
 
         val plain = MonkStore(InMemoryStore()).apply { upsertApp(insta) }
-        assertTrue(plain.switchOff())
+        assertTrue(plain.switchOff(nowMillis() + 60 * 60_000L))
         assertFalse(plain.config.value.enabled)
     }
 

@@ -18,7 +18,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
@@ -129,7 +129,7 @@ fun MainScreen(
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val tabs = listOf(
-        DockTab(Icons.Outlined.Apps, s.tabHome),
+        DockTab(Icons.Outlined.Home, s.tabHome),
         DockTab(Icons.Outlined.Insights, s.tabStats),
         DockTab(Icons.Outlined.Tune, s.tabSettings),
     )

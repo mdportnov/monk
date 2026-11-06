@@ -130,7 +130,13 @@ fun RoutinesScreen(
                         if (!store.setSchedule(next)) notice = s.routineStrictRefused
                     }
                     SettingsGroup {
-                        SettingRow(title = s.routineBaseHours, subtitle = s.routineBaseHoursHint, icon = Icons.Outlined.CalendarMonth) {
+                        SettingRow(
+                            title = s.routineBaseHours,
+                            subtitle = s.protectionHoursSummary(config.schedule),
+                            icon = Icons.Outlined.CalendarMonth,
+                        )
+                        SettingsDivider()
+                        SettingRow(title = s.protectionHoursLimit, subtitle = s.routineBaseHoursHint) {
                             HapticSwitch(
                                 checked = config.schedule.enabled,
                                 onCheckedChange = { on -> schedule(config.schedule.copy(enabled = on)) },

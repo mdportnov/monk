@@ -103,7 +103,11 @@ import com.mdportnov.monk.shared.ui.routines.RoutineStartSheet
 import com.mdportnov.monk.shared.platform.PermissionStatus
 import com.mdportnov.monk.shared.ui.Motion
 import com.mdportnov.monk.shared.ui.rememberFrameClock
-import com.mdportnov.monk.shared.ui.components.CountdownConfirm
+import com.mdportnov.monk.shared.ui.components.COUNTDOWN_CONFIRM_SECONDS
+import com.mdportnov.monk.shared.ui.components.SoftenOption
+import com.mdportnov.monk.shared.ui.components.SoftenSheet
+import com.mdportnov.monk.shared.ui.components.StrictModeFlow
+import com.mdportnov.monk.shared.ui.components.StrictPick
 import com.mdportnov.monk.shared.ui.components.rememberHaptics
 import com.mdportnov.monk.shared.ui.theme.MonkColors
 import kotlinx.coroutines.delay
@@ -146,7 +150,8 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
     // The chosen length, not an end time: the end is worked out when the breath is over, so a
     // dialog left open (or restored after the app was away) never starts a shorter break.
     var breakCandidate by rememberSaveable { mutableStateOf<Int?>(null) }
-    var confirmOff by rememberSaveable { mutableStateOf(false) }
+    var confirmOff by rememberSaveable { mutableStateOf(OFF_CLOSED) }
+    var strictPick by rememberSaveable { mutableStateOf<StrictPick?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(notice) { if (notice != null) { delay(2600); notice = null } }
     val haptics = rememberHaptics()
@@ -195,7 +200,7 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
                     Box(handedOver) {
                         StateControl(
                             locked = strict || running,
-                            enabled = config.enabled,
+                            enabled = !config.isOff(now),
                             palette = palette,
                             onLockedTap = {
                                 haptics.reject()
@@ -213,8 +218,8 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
                                     on -> store.switchOn()
                                     // The breath is skipped only when there is genuinely nothing
                                     // to soften: no routine in force, no session, no break.
-                                    config.state(now, moment.dayIso, moment.minuteOfDay) == ProtectionState.SCHEDULED_OFF -> store.switchOff()
-                                    else -> confirmOff = true
+                                    config.state(now, moment.dayIso, moment.minuteOfDay) == ProtectionState.SCHEDULED_OFF -> confirmOff = OFF_NO_BREATH
+                                    else -> confirmOff = OFF_WITH_BREATH
                                 }
                             },
                         )
@@ -235,8 +240,8 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
                         if (lockedCount > 0) Tag(Icons.Outlined.Lock, s.lockedCount(lockedCount), palette)
                     }
                 }
-                if (!config.enabled && lockedCount > 0) Text(s.lockedStayOn, style = MaterialTheme.typography.bodySmall, color = palette.muted)
-                if (look.mood == Mood.Scheduled && config.enabled) Text(s.scheduleSwitchWarning, style = MaterialTheme.typography.bodySmall, color = palette.muted)
+                if (config.isOff(now) && lockedCount > 0) Text(s.lockedStayOn, style = MaterialTheme.typography.bodySmall, color = palette.muted)
+                if (look.mood == Mood.Scheduled && !config.isOff(now)) Text(s.scheduleSwitchWarning, style = MaterialTheme.typography.bodySmall, color = palette.muted)
                 AnimatedVisibility(visible = notice != null, enter = Motion.reveal(), exit = Motion.conceal()) {
                     Row(
                         Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).background(palette.content.copy(alpha = 0.10f)).padding(horizontal = 12.dp, vertical = 8.dp),
@@ -247,67 +252,115 @@ internal fun StatusCard(store: MonkStore, config: MonkConfig, permissions: Permi
                         Text(notice.orEmpty(), style = MaterialTheme.typography.bodySmall, color = palette.content)
                     }
                 }
-                // Only the break lives on the card now. Routines have their own card under this
-                // one: a strip of chips could not say which of them is on, what it covers or when
-                // it ends, and those are the three things anyone looks for.
-                if (showControls && config.enabled && permissions.accessibilityEnabled && !running) {
-                    if (paused) {
-                        AuroraChip(s.resume, palette, icon = Icons.Outlined.Shield, modifier = Modifier.fillMaxWidth()) { store.resumeProtection() }
-                    } else if (!strict && config.canStartBreak(now, moment.dayIso, moment.minuteOfDay)) {
+                // The break and strict mode live on the card; routines have their own card under
+                // this one, since a strip of chips could not say which is on, what it covers or
+                // when it ends.
+                if (showControls && !config.isOff(now) && permissions.accessibilityEnabled) {
+                    if (!running) {
+                        if (paused) {
+                            AuroraChip(s.resume, palette, icon = Icons.Outlined.Shield, modifier = Modifier.fillMaxWidth()) { store.resumeProtection() }
+                        } else if (!strict && config.canStartBreak(now, moment.dayIso, moment.minuteOfDay)) {
+                            ActionStrip(
+                                Icons.Outlined.Coffee, s.pauseFor, s.breakWhat, palette,
+                                listOf(
+                                    ChipAction(s.pause5) { breakCandidate = 5 },
+                                    ChipAction(s.pause15) { breakCandidate = 15 },
+                                    ChipAction(s.pause60) { breakCandidate = 60 },
+                                    ChipAction(s.pauseDay) { breakCandidate = BREAK_UNTIL_MIDNIGHT },
+                                ),
+                            )
+                        } else if (!strict && scheduleActive && !paused) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Outlined.Coffee, null, tint = palette.muted, modifier = Modifier.size(16.dp))
+                                Text(s.breakCooldown(formatClock(config.nextBreakAt(now))), style = MaterialTheme.typography.bodySmall, color = palette.muted)
+                            }
+                        }
+                    }
+                    // Strict sits next to the break on purpose: one softens, the other promises
+                    // not to, and both are decided in the moment rather than in Settings.
+                    if (!strict) {
                         ActionStrip(
-                            Icons.Outlined.Coffee, s.pauseFor, s.breakWhat, palette,
+                            Icons.Outlined.Lock, s.strictTitle, s.strictHint, palette,
                             listOf(
-                                ChipAction(s.pause5) { breakCandidate = 5 },
-                                ChipAction(s.pause15) { breakCandidate = 15 },
-                                ChipAction(s.pause60) { breakCandidate = 60 },
-                                ChipAction(s.pauseDay) { breakCandidate = BREAK_UNTIL_MIDNIGHT },
+                                ChipAction(s.strictUntilMidnight) { strictPick = StrictPick.Midnight },
+                                ChipAction(s.strict1h) { strictPick = StrictPick.Hour },
+                                ChipAction(s.strictCustom) { strictPick = StrictPick.Custom },
                             ),
                         )
-                    } else if (!strict && scheduleActive && !paused) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Outlined.Coffee, null, tint = palette.muted, modifier = Modifier.size(16.dp))
-                            Text(s.breakCooldown(formatClock(config.nextBreakAt(now))), style = MaterialTheme.typography.bodySmall, color = palette.muted)
-                        }
                     }
                 }
             }
         }
     }
     breakCandidate?.let { minutes ->
-        fun until() = if (minutes == BREAK_UNTIL_MIDNIGHT) nextMidnightMillis() else nowMillis() + minutes * 60_000L
         // A routine started from a tile, or the cooldown, can take the break away mid-breath.
         val canBreak = config.canStartBreak(now, moment.dayIso, moment.minuteOfDay)
         LaunchedEffect(canBreak) { if (!canBreak) breakCandidate = null }
         // A break weakens protection for the whole list, so it costs the same breath as "off".
         // Routines that hold through one are named before the breath, not discovered after it.
         val holds = config.routinesThroughBreak(now, moment.dayIso, moment.minuteOfDay)
-        CountdownConfirm(
+        SoftenSheet(
             title = s.breakConfirmTitle,
-            body = s.breakConfirmBody(formatClock(until())),
+            body = s.breakSheetBody,
+            options = listOf(5, 15, 60, BREAK_UNTIL_MIDNIGHT).map { m -> SoftenOption(m, breakLabel(m)) { t -> breakUntil(m, t) } },
+            initial = minutes,
             confirmText = s.startBreak,
-            note = listOfNotNull(
+            notes = listOfNotNull(
                 s.lockedStayOn.takeIf { lockedCount > 0 },
                 holds.firstOrNull()?.let { s.breakKeepsRoutine(s.routineName(it)) },
-            ).joinToString(" ").ifBlank { null },
-            onConfirm = { store.pauseProtection(until()); breakCandidate = null },
+            ),
+            onConfirm = { until -> store.pauseProtection(until) },
             onDismiss = { breakCandidate = null },
         )
     }
-    if (confirmOff) {
-        CountdownConfirm(
-            title = s.offConfirmTitle,
-            body = s.offConfirmBody,
-            confirmText = s.switchOff,
-            note = s.lockedStayOn.takeIf { lockedCount > 0 },
-            onConfirm = { store.switchOff(); confirmOff = false },
-            onDismiss = { confirmOff = false },
-        )
+    strictPick?.let { pick -> StrictModeFlow(store, config, now, pick, onDone = { strictPick = null }) }
+    if (confirmOff != OFF_CLOSED) {
+        SwitchOffSheet(lockedCount, breath = confirmOff == OFF_WITH_BREATH, onSwitchOff = { store.switchOff(it) }, onDone = { confirmOff = OFF_CLOSED })
     }
 }
 
 private const val COUNTDOWN = " countdown"
 
 private const val BREAK_UNTIL_MIDNIGHT = -1
+
+private const val OFF_CLOSED = 0
+private const val OFF_WITH_BREATH = 1
+/** Outside protection hours nothing on the list is being held, so the switch costs no breath. */
+private const val OFF_NO_BREATH = 2
+
+private fun breakUntil(minutes: Int, now: Long) = if (minutes == BREAK_UNTIL_MIDNIGHT) nextMidnightMillis() else now + minutes * 60_000L
+
+@Composable
+private fun breakLabel(minutes: Int): String {
+    val s = strings
+    return when (minutes) {
+        5 -> s.pause5
+        15 -> s.pause15
+        60 -> s.pause60
+        else -> s.pauseDay
+    }
+}
+
+/** The switch off always names its end: an hour, three, or until midnight, and then it is back on. */
+@Composable
+private fun SwitchOffSheet(lockedCount: Int, breath: Boolean, onSwitchOff: (Long) -> Unit, onDone: () -> Unit) {
+    val s = strings
+    SoftenSheet(
+        title = s.offConfirmTitle,
+        body = if (breath) s.offConfirmBody else s.offNoBreathBody,
+        options = listOf(
+            SoftenOption(60, s.pause60) { t -> t + 60 * 60_000L },
+            SoftenOption(180, s.pause3h) { t -> t + 180 * 60_000L },
+            SoftenOption(BREAK_UNTIL_MIDNIGHT, s.pauseDay) { nextMidnightMillis() },
+        ),
+        initial = 60,
+        confirmText = s.switchOff,
+        notes = listOfNotNull(s.lockedStayOn.takeIf { lockedCount > 0 }),
+        seconds = if (breath) COUNTDOWN_CONFIRM_SECONDS else 0,
+        onConfirm = onSwitchOff,
+        onDismiss = onDone,
+    )
+}
 
 private enum class Mood { On, Strict, Routine, Break, Off, Scheduled }
 
@@ -333,7 +386,10 @@ private fun lookFor(config: MonkConfig, now: Long): Look {
     val s = strings
     val moment = localMoment()
     return when (config.state(now, moment.dayIso, moment.minuteOfDay)) {
-        ProtectionState.OFF -> Look(Mood.Off, Icons.Outlined.PowerSettingsNew, s.protection, s.protectionOff, s.offNudge)
+        ProtectionState.OFF -> Look(
+            Mood.Off, Icons.Outlined.PowerSettingsNew, s.protection, s.protectionOff,
+            if (config.offUntil > now) s.offUntilNudge(formatClock(config.offUntil)) else s.offNudge,
+        )
         ProtectionState.ROUTINE -> routineLook(config, now, moment.dayIso, moment.minuteOfDay)
         ProtectionState.BREAK -> Look(Mood.Break, Icons.Outlined.Coffee, s.pauseFor, null, "${s.until(formatClock(config.pausedUntil))} · ${s.comesBackItself}", config.pausedUntil, config.pauseStartedAt.takeIf { it > 0 }?.let { config.pausedUntil - it })
         ProtectionState.SCHEDULED_OFF -> Look(
@@ -341,8 +397,14 @@ private fun lookFor(config: MonkConfig, now: Long): Look {
             config.schedule.minutesToNextChange(moment.dayIso, moment.minuteOfDay)
                 ?.let { s.scheduleBackAt(formatClock(clockAfterWallMinutes(it))) } ?: s.scheduleOffNudge,
         )
-        ProtectionState.STRICT -> Look(Mood.Strict, Icons.Outlined.Lock, s.protection, s.protectionOn, s.strictUntil(formatClock(config.strictUntil)))
-        ProtectionState.ON -> Look(Mood.On, Icons.Outlined.Shield, s.protection, s.protectionOn, if (config.apps.isEmpty()) null else s.appsWatched(config.apps.size))
+        // Strict says what it costs, not only when it ends: nothing can be softened till then.
+        ProtectionState.STRICT -> Look(Mood.Strict, Icons.Outlined.Lock, s.protection, s.protectionOn, s.strictNoChange(formatClock(config.strictUntil)))
+        ProtectionState.ON -> {
+            // "Until when" belongs to every state: with base hours on, On ends when they do.
+            val endsAt = if (config.schedule.enabled) config.schedule.minutesToNextChange(moment.dayIso, moment.minuteOfDay)?.let { formatClock(clockAfterWallMinutes(it)) } else null
+            val watched = if (config.apps.isEmpty()) null else s.appsWatched(config.apps.size)
+            Look(Mood.On, Icons.Outlined.Shield, s.protection, s.protectionOn, if (watched != null && endsAt != null) s.compactUntil(watched, endsAt) else watched)
+        }
     }
 }
 
@@ -412,7 +474,7 @@ internal fun CompactStatus(store: MonkStore, anchor: HeaderAnchor) {
         return
     }
     val config by store.config.collectAsStateWithLifecycle()
-    val now = rememberNow(listOf(config.run?.until, config.strictUntil, config.pausedUntil))
+    val now = rememberNow(listOf(config.run?.until, config.strictUntil, config.pausedUntil, config.offUntil))
     val look = lookFor(config, now)
     val state = remember(config, now) { localMoment().let { config.state(now, it.dayIso, it.minuteOfDay) } }
     val palette = paletteFor(look.mood)
@@ -421,7 +483,7 @@ internal fun CompactStatus(store: MonkStore, anchor: HeaderAnchor) {
     val tick = rememberTicker(active = look.until != null)
     val locked = config.isStrict(now) || config.activeRun(now) != null
     val haptics = rememberHaptics()
-    var confirmOff by remember { mutableStateOf(false) }
+    var confirmOff by remember { mutableStateOf(OFF_CLOSED) }
     val lockedCount = config.apps.count { it.locked }
     val s = strings
     val timed = look.title == null && look.until != null
@@ -430,7 +492,7 @@ internal fun CompactStatus(store: MonkStore, anchor: HeaderAnchor) {
     val leading = config.leadingRoutine(now, moment.dayIso, moment.minuteOfDay)
     val compactTitle = when (look.mood) {
         Mood.On -> s.compactOn
-        Mood.Off -> s.compactOff
+        Mood.Off -> if (config.offUntil > now) s.compactUntil(s.compactOff, formatClock(config.offUntil)) else s.compactOff
         Mood.Scheduled -> s.compactBySchedule
         Mood.Strict -> s.compactUntil(s.strictShort, formatClock(config.strictUntil))
         Mood.Routine -> {
@@ -482,7 +544,7 @@ internal fun CompactStatus(store: MonkStore, anchor: HeaderAnchor) {
         control = {
             StateControl(
                 locked = locked,
-                enabled = config.enabled,
+                enabled = !config.isOff(now),
                 palette = palette,
                 onLockedTap = { haptics.reject() },
                 onToggle = { on ->
@@ -490,22 +552,15 @@ internal fun CompactStatus(store: MonkStore, anchor: HeaderAnchor) {
                     when {
                         on -> store.switchOn()
                         // Same rule as the card: the breath is skipped only when nothing is in force.
-                        state == ProtectionState.SCHEDULED_OFF -> store.switchOff()
-                        else -> confirmOff = true
+                        state == ProtectionState.SCHEDULED_OFF -> confirmOff = OFF_NO_BREATH
+                        else -> confirmOff = OFF_WITH_BREATH
                     }
                 },
             )
         },
     )
-    if (confirmOff) {
-        CountdownConfirm(
-            title = s.offConfirmTitle,
-            body = s.offConfirmBody,
-            confirmText = s.switchOff,
-            note = s.lockedStayOn.takeIf { lockedCount > 0 },
-            onConfirm = { store.switchOff(); confirmOff = false },
-            onDismiss = { confirmOff = false },
-        )
+    if (confirmOff != OFF_CLOSED) {
+        SwitchOffSheet(lockedCount, breath = confirmOff == OFF_WITH_BREATH, onSwitchOff = { store.switchOff(it) }, onDone = { confirmOff = OFF_CLOSED })
     }
 }
 

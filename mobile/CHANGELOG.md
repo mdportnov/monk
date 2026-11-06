@@ -3,6 +3,15 @@
 Sections are keyed by version; `mobile-release.yml` publishes the matching section as the
 release notes, and the app shows them in the update card. Keep entries short and user-facing.
 
+## 1.10.0
+
+- Switching protection off always has an end: an hour, three hours or until midnight, and then it comes back by itself. An "off" left over from before this version comes back at the next midnight.
+- A new sheet before a break or switching off: one ten-second breath around a ring, and in plain clock time when protection returns. Staying protected is the big button; the other one waits.
+- Home is simpler: one card for whatever stands in the way of protection, one card for today and the week, and strict mode right on the status card next to the break.
+- An app's settings show its mode and a one-line summary; pause length, growth, open time, daily limit and time rules sit under "Fine-tuning".
+- Protection hours read positively ("Around the clock" or "09:00–18:00 · Mon–Fri") and live in Routines.
+- Strict mode can only be lengthened: picking a shorter time no longer cuts it short.
+
 ## 1.9.0
 
 - A pause that grows: in an app's settings, each time you open it today can add a few seconds to the next pause, up to five minutes. Back to normal at midnight.
